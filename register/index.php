@@ -562,15 +562,19 @@ function showHelp() {
                 <p>- อัพโหลดหลักฐานในระบบ</p>
                 
                 <h5 class="mt-4">ติดต่อสอบถาม</h5>
-                <p>โทร: 02-XXX-XXXX</p>
-                <p>อีเมล: seminar@example.com</p>
+                <p>คุณชนิดาภา บุญเตี้ย (คุณนาว): 095-5439933</p>
+                <p class="mt-3">
+                    <a href="https://line.me/ti/g2/MVMMDL4KM05ML2EUDiuipEJaH6LtU6_6x-pfKw?utm_source=invitation&utm_medium=QR_code&utm_campaign=default" 
+                       target="_blank" class="btn btn-success">
+                        <i class="fab fa-line me-2"></i>เข้าร่วมกลุ่ม Line Open Chat
+                    </a>
+                </p>
             </div>
         `,
         icon: 'info',
         confirmButtonText: 'เข้าใจแล้ว'
     });
 }
-
 // จัดการการเลือกคำนำหน้าชื่อ
 document.querySelector('select[name="title"]').addEventListener('change', function() {
     const titleOtherContainer = document.querySelector('.title-other-container');
