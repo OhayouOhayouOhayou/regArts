@@ -561,3 +561,31 @@ Stack trace:
     [registration_id] => 10
 )
 
+[03-Mar-2025 10:24:18 UTC] Request received: {"phone":"0994942202"}
+[03-Mar-2025 10:24:18 UTC] Decoded data: Array
+(
+    [phone] => 0994942202
+)
+
+[03-Mar-2025 10:24:18 UTC] Checking phone number: 0994942202
+[03-Mar-2025 10:24:18 UTC] Query result: Array
+(
+    [id] => 4
+    [title] => นาย
+    [title_other] => 
+    [fullname] => วัชระ อนันต์พิทักษ์กูล
+    [organization] => ทดสอบ
+    [phone] => 0994942202
+    [email] => tcwatchara@rnn.ac.th
+    [line_id] => 0hayou
+    [created_at] => 2025-02-24 10:10:43
+    [updated_at] => 2025-02-24 10:10:43
+    [payment_status] => paid
+    [payment_updated_at] => 2025-02-24 10:10:43
+    [is_approved] => 0
+    [approved_at] => 
+    [approved_by] => 
+    [payment_slip_id] => 2
+)
+
+[03-Mar-2025 10:24:18 UTC] Sending response: {"success":true,"status":"pending_approval","message":"เบอร์โทรศัพท์นี้ได้ลงทะเบียนแล้ว","data":{"registration_id":4,"payment_status":"paid","is_approved":0}}
