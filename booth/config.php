@@ -1,0 +1,267 @@
+<?php
+// Database configuration
+$config = [
+    'db' => [
+       // 'host' => 'localhost',
+       // 'username' => 'root',
+       // 'password' => '',
+       // 'dbname' => 'booth_reservation'
+       // 'host' => '103.132.3.66',
+       // 'username' => 'admin',
+       // 'password' => 'S0lut!0n',
+       // 'dbname' => 'db_books'
+        'host' => 'mysql',  
+        'username' => 'dbuser',  
+        'password' => 'dbpassword',  
+        'dbname' => 'shared_db' 
+    ],
+    'app' => [
+        'name' => 'ระบบจองบูธขายสินค้า',
+        'url' => 'http://localhost:8001/booth',
+        'version' => '1.0.0',
+        'admin_email' => 'คุณจันจิรา ภู่สุวรรณ์ (คุณตูน) Tel : 062-4086398'
+    ],
+    'payment' => [
+        'tax_rate' => 7, // VAT 7%
+        'methods' => [
+            'bank_transfer' => 'โอนเงิน',
+            'credit_card' => 'บัตรเครดิต',
+            'qr_payment' => 'QR Payment'
+        ],
+        'bank_accounts' => [
+            'กรุงไทย' => '128-028939-2  มทร.สุวรรณภูมิ เงินรายได้'
+        ]
+    ]
+];
+
+
+// Create connection
+$conn = new mysqli($config['db']['host'], $config['db']['username'], $config['db']['password'], $config['db']['dbname']);
+
+// Check connection
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+
+// Set charset to support Thai language
+$conn->set_charset("utf8");
+
+// Function to get settings from database
+function getSetting($key, $conn, $default = '') {
+    $stmt = $conn->prepare("SELECT setting_value FROM settings WHERE setting_key = ?");
+    $stmt->bind_param("s", $key);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    if ($result->num_rows > 0) {
+        $row = $result->fetch_assoc();
+        return $row['setting_value'];
+    }
+    
+    return $default;
+}
+
+// Function to generate order number
+function generateOrderNumber() {
+    $prefix = 'ORD';
+    $timestamp = date('YmdHis');
+    $random = rand(100, 999);
+    return $prefix . $timestamp . $random;
+}
+
+// Function to format currency
+function formatCurrency($amount) {
+    return number_format($amount, 0, '.', ',') . ' บาท';
+}
+
+// Function to get booth details
+function getBoothDetails($boothId, $conn) {
+    $stmt = $conn->prepare("SELECT * FROM booths WHERE id = ?");
+    $stmt->bind_param("i", $boothId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    if ($result->num_rows > 0) {
+        return $result->fetch_assoc();
+    }
+    
+    return null;
+}
+
+// Function to check if a booth is available
+function isBoothAvailable($boothId, $conn) {
+    $stmt = $conn->prepare("SELECT status FROM booths WHERE id = ?");
+    $stmt->bind_param("i", $boothId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    if ($result->num_rows > 0) {
+        $row = $result->fetch_assoc();
+        return $row['status'] === 'available';
+    }
+    
+    return false;
+}
+/**
+ * ฟังก์ชันสำหรับจองบูธและบันทึกข้อมูลลงในฐานข้อมูล
+ * @param int $boothId รหัสบูธที่ต้องการจอง
+ * @param string $customerName ชื่อลูกค้า
+ * @param string $customerEmail อีเมลลูกค้า
+ * @param string $customerPhone เบอร์โทรศัพท์ลูกค้า
+ * @param string $customerCompany ชื่อบริษัท/ร้านค้า (ถ้ามี)
+ * @param mysqli $conn การเชื่อมต่อฐานข้อมูล
+ * @param string $customerAddress ที่อยู่ลูกค้า
+ * @param string $customerLineId Line ID ลูกค้า (ถ้ามี)
+ * @return array ผลลัพธ์การจอง
+ */
+function reserveBooth($boothId, $customerName, $customerEmail, $customerPhone, $customerCompany, $conn, $customerAddress, $customerLineId = '') {
+    try {
+        // บันทึกลอกเพื่อตรวจสอบค่าที่ส่งเข้ามา
+        writeLog("RESERVE BOOTH FUNCTION CALLED:");
+        writeLog("Booth ID: $boothId");
+        writeLog("Customer Name: $customerName");
+        writeLog("Customer Email: $customerEmail");
+        writeLog("Customer Phone: $customerPhone");
+        writeLog("Customer Company: $customerCompany");
+        writeLog("Customer Address: $customerAddress");
+        writeLog("Customer Line ID: $customerLineId");
+        
+        $checkBooth = $conn->prepare("SELECT status, price FROM booths WHERE id = ?");
+        $checkBooth->bind_param("i", $boothId);
+        $checkBooth->execute();
+        $result = $checkBooth->get_result();
+        
+        if ($result->num_rows == 0) {
+            writeLog("ERROR: Booth not found");
+            return ["success" => false, "message" => "ไม่พบข้อมูลบูธ"];
+        }
+        
+        $booth = $result->fetch_assoc();
+        writeLog("Booth data: " . json_encode($booth));
+        
+        if ($booth['status'] != 'available') {
+            writeLog("ERROR: Booth not available");
+            return ["success" => false, "message" => "บูธนี้ถูกจองไปแล้ว"];
+        }
+        
+        // เริ่ม transaction
+        $conn->begin_transaction();
+        writeLog("Started transaction");
+        
+        // สร้างรหัสคำสั่งซื้อ (order number)
+        $orderNumber = generateOrderNumber($conn);
+        writeLog("Generated order number: $orderNumber");
+        
+        // บันทึกข้อมูล order - ตรวจสอบ SQL query
+        $sql = "INSERT INTO orders (order_number, customer_name, customer_email, customer_phone, customer_company, customer_address, customer_line_id, total_amount, payment_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'unpaid')";
+        writeLog("SQL Query: $sql");
+        
+        $insertOrder = $conn->prepare($sql);
+        if (!$insertOrder) {
+            writeLog("ERROR preparing SQL: " . $conn->error);
+            throw new Exception("SQL Prepare Error: " . $conn->error);
+        }
+        
+        writeLog("Binding parameters...");
+        $bindResult = $insertOrder->bind_param("sssssssd", $orderNumber, $customerName, $customerEmail, $customerPhone, $customerCompany, $customerAddress, $customerLineId, $booth['price']);
+        if (!$bindResult) {
+            writeLog("ERROR binding parameters: " . $insertOrder->error);
+            throw new Exception("Binding Error: " . $insertOrder->error);
+        }
+        
+        writeLog("Executing order insert...");
+        $executeResult = $insertOrder->execute();
+        if (!$executeResult) {
+            writeLog("ERROR executing SQL: " . $insertOrder->error);
+            throw new Exception("Execute Error: " . $insertOrder->error);
+        }
+        
+        $orderId = $conn->insert_id;
+        writeLog("Order inserted with ID: $orderId");
+        
+        // บันทึกข้อมูล order item
+        $insertItem = $conn->prepare("INSERT INTO order_items (order_id, booth_id, price) VALUES (?, ?, ?)");
+        $insertItem->bind_param("iid", $orderId, $boothId, $booth['price']);
+        $insertItem->execute();
+        writeLog("Order item inserted");
+        
+        // อัพเดตสถานะบูธเป็น reserved
+        $updateBooth = $conn->prepare("UPDATE booths SET status = 'pending_payment' WHERE id = ?");
+        $updateBooth->bind_param("i", $boothId);
+        $updateBooth->execute();
+        writeLog("Booth status updated");
+        
+        // ยืนยัน transaction
+        $conn->commit();
+        writeLog("Transaction committed successfully");
+        
+        return [
+            "success" => true, 
+            "message" => "จองบูธสำเร็จ", 
+            "order_id" => $orderId,
+            "order_number" => $orderNumber
+        ];
+        
+    } catch (Exception $e) {
+        // ยกเลิก transaction หากเกิดข้อผิดพลาด
+        $conn->rollback();
+        
+        // บันทึก error log
+        writeLog("RESERVATION ERROR: " . $e->getMessage());
+        writeLog("Stack trace: " . $e->getTraceAsString());
+        
+        return ["success" => false, "message" => "เกิดข้อผิดพลาดในการจองบูธ: " . $e->getMessage()];
+    }
+}
+
+// Function to process payment (updated to support file upload)
+function processPayment($orderId, $paymentMethod, $reference, $amount, $conn) {
+    // Verify order exists
+    $stmt = $conn->prepare("SELECT * FROM booths WHERE id = ?");
+    $stmt->bind_param("i", $orderId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    if ($result->num_rows === 0) {
+        return ["success" => false, "message" => "ไม่พบข้อมูลการจอง"];
+    }
+    
+    $booth = $result->fetch_assoc();
+    
+    // Update order with payment info
+    $updateStmt = $conn->prepare("UPDATE booths SET payment_status = 'pending', payment_method = ?, payment_reference = ?, payment_date = NOW() WHERE id = ?");
+    $updateStmt->bind_param("ssi", $paymentMethod, $reference, $orderId);
+    
+    if ($updateStmt->execute()) {
+        return ["success" => true, "message" => "บันทึกข้อมูลการชำระเงินเรียบร้อยแล้ว"];
+    } else {
+        return ["success" => false, "message" => "เกิดข้อผิดพลาด: " . $conn->error];
+    }
+}
+
+// Function to confirm payment
+function confirmPayment($orderId, $conn) {
+    // Update order status
+    $updateStmt = $conn->prepare("UPDATE orders SET payment_status = 'paid' WHERE id = ?");
+    $updateStmt->bind_param("i", $orderId);
+    
+    if ($updateStmt->execute()) {
+        // Get all booths in this order
+        $boothStmt = $conn->prepare("SELECT booth_id FROM order_items WHERE order_id = ?");
+        $boothStmt->bind_param("i", $orderId);
+        $boothStmt->execute();
+        $boothResult = $boothStmt->get_result();
+        
+        // Update all booths status
+        while ($row = $boothResult->fetch_assoc()) {
+            $updateBoothStmt = $conn->prepare("UPDATE booths SET status = 'pending_payment', payment_status = 'paid' WHERE id = ?");
+            $updateBoothStmt->bind_param("i", $row['booth_id']);
+            $updateBoothStmt->execute();
+        }
+        
+        return ["success" => true, "message" => "ยืนยันการชำระเงินเรียบร้อยแล้ว"];
+    } else {
+        return ["success" => false, "message" => "เกิดข้อผิดพลาด: " . $conn->error];
+    }
+}
+?>

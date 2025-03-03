@@ -1,0 +1,24 @@
+version: '3'
+services:
+  nginx:
+    build: ./nginx-custom
+    ports:
+      - "80:80"
+    volumes:
+      - "C:/xampp/htdocs:/usr/share/nginx/html"
+    networks:
+      - webnet
+    depends_on:
+      - php
+
+  php:
+    build: ./php
+    expose:
+      - "9000"
+    volumes:
+      - "C:/xampp/htdocs:/usr/share/nginx/html"
+    networks:
+      - webnet
+
+networks:
+  webnet:

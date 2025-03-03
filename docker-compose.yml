@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  # MySQL service (shared between both projects)
+  mysql:
+    image: mysql:8.0
+    container_name: shared-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: shared_db
+      MYSQL_USER: dbuser
+      MYSQL_PASSWORD: dbpassword
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d
+    networks:
+      - app-network
+
+  # PHP Service for booth
+  booth:
+    build:
+      context: ./booth
+    container_name: php-booth
+    volumes:
+      - ./booth:/var/www/html
+    ports:
+      - "8001:80"
+    depends_on:
+      - mysql
+    networks:
+      - app-network
+
+  # PHP Service for register
+  register:
+    build:
+      context: ./register
+    container_name: php-register
+    volumes:
+      - ./register:/var/www/html
+    ports:
+      - "8002:80"
+    depends_on:
+      - mysql
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  mysql_data:

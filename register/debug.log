@@ -1,0 +1,563 @@
+[24-Feb-2025 10:58:42 Europe/Berlin] ข้อมูลที่ได้รับจากฟอร์ม: Array
+(
+    [title] => นาย
+    [title_other] => 
+    [fullname] => วัชระ อนันต์พิทักษ์กูล
+    [organization] => ทดสอบ
+    [phone] => 0994942202
+    [email] => tcwatchara@rnn.ac.th
+    [line_id] => 0hayou
+    [invoiceAddress_address] => 12
+    [invoiceAddress_province] => 3
+    [invoiceAddress_district] => 60
+    [invoiceAddress_subdistrict] => 237
+    [invoiceAddress_zipcode] => 11110
+    [houseAddress_address] => 1123
+    [houseAddress_province] => 3
+    [houseAddress_district] => 60
+    [houseAddress_subdistrict] => 237
+    [houseAddress_zipcode] => 11110
+    [currentAddress_address] => 123
+    [currentAddress_province] => 3
+    [currentAddress_district] => 60
+    [currentAddress_subdistrict] => 237
+    [currentAddress_zipcode] => 11110
+)
+
+[24-Feb-2025 10:58:42 Europe/Berlin] ไฟล์ที่อัพโหลด: Array
+(
+    [payment_slip] => Array
+        (
+            [name] => ภาพถ่ายหน้าจอ 2568-02-24 เวลา 15.31.18.png
+            [full_path] => ภาพถ่ายหน้าจอ 2568-02-24 เวลา 15.31.18.png
+            [type] => image/png
+            [tmp_name] => D:\xampp1010\tmp\php388D.tmp
+            [error] => 0
+            [size] => 411180
+        )
+
+)
+
+[24-Feb-2025 10:58:42 Europe/Berlin] PHP Warning:  Undefined array key "invoice_address" in D:\xampp1010\htdocs\regaob\process_registration.php on line 106
+[24-Feb-2025 10:58:42 Europe/Berlin] PHP Warning:  Undefined array key "invoice_province" in D:\xampp1010\htdocs\regaob\process_registration.php on line 107
+[24-Feb-2025 10:58:42 Europe/Berlin] PHP Warning:  Undefined array key "invoice_district" in D:\xampp1010\htdocs\regaob\process_registration.php on line 108
+[24-Feb-2025 10:58:42 Europe/Berlin] PHP Warning:  Undefined array key "invoice_subdistrict" in D:\xampp1010\htdocs\regaob\process_registration.php on line 109
+[24-Feb-2025 10:58:42 Europe/Berlin] PHP Warning:  Undefined array key "invoice_zipcode" in D:\xampp1010\htdocs\regaob\process_registration.php on line 110
+[24-Feb-2025 10:58:42 Europe/Berlin] เกิดข้อผิดพลาด: SQLSTATE[23000]: Integrity constraint violation: 1048 Column 'address' cannot be null
+[24-Feb-2025 11:07:16 Europe/Berlin] ข้อมูลที่ได้รับจากฟอร์ม: Array
+(
+    [title] => นาย
+    [title_other] => 
+    [fullname] => วัชระ อนันต์พิทักษ์กูล
+    [organization] => ทดสอบ
+    [phone] => 0994942202
+    [email] => tcwatchara@rnn.ac.th
+    [line_id] => 0hayou
+    [invoiceAddress_address] => 122
+    [invoiceAddress_province] => 3
+    [invoiceAddress_district] => 60
+    [invoiceAddress_subdistrict] => 237
+    [invoiceAddress_zipcode] => 11110
+    [houseAddress_address] => 122
+    [houseAddress_province] => 3
+    [houseAddress_district] => 60
+    [houseAddress_subdistrict] => 237
+    [houseAddress_zipcode] => 11110
+    [currentAddress_address] => 122
+    [currentAddress_province] => 3
+    [currentAddress_district] => 60
+    [currentAddress_subdistrict] => 237
+    [currentAddress_zipcode] => 11110
+)
+
+[24-Feb-2025 11:07:16 Europe/Berlin] ไฟล์ที่อัพโหลด: Array
+(
+    [payment_slip] => Array
+        (
+            [name] => ภาพถ่ายหน้าจอ 2568-02-24 เวลา 15.31.18.png
+            [full_path] => ภาพถ่ายหน้าจอ 2568-02-24 เวลา 15.31.18.png
+            [type] => image/png
+            [tmp_name] => D:\xampp1010\tmp\php102F.tmp
+            [error] => 0
+            [size] => 411180
+        )
+
+)
+
+[24-Feb-2025 11:07:16 Europe/Berlin] PHP Warning:  Undefined array key "invoice_address" in D:\xampp1010\htdocs\regaob\process_registration.php on line 106
+[24-Feb-2025 11:07:16 Europe/Berlin] PHP Warning:  Undefined array key "invoice_province" in D:\xampp1010\htdocs\regaob\process_registration.php on line 107
+[24-Feb-2025 11:07:16 Europe/Berlin] PHP Warning:  Undefined array key "invoice_district" in D:\xampp1010\htdocs\regaob\process_registration.php on line 108
+[24-Feb-2025 11:07:16 Europe/Berlin] PHP Warning:  Undefined array key "invoice_subdistrict" in D:\xampp1010\htdocs\regaob\process_registration.php on line 109
+[24-Feb-2025 11:07:16 Europe/Berlin] PHP Warning:  Undefined array key "invoice_zipcode" in D:\xampp1010\htdocs\regaob\process_registration.php on line 110
+[24-Feb-2025 11:07:16 Europe/Berlin] เกิดข้อผิดพลาด: SQLSTATE[23000]: Integrity constraint violation: 1048 Column 'address' cannot be null
+[24-Feb-2025 11:09:36 Europe/Berlin] ข้อมูลที่ได้รับจากฟอร์ม: Array
+(
+    [title] => นาย
+    [title_other] => 
+    [fullname] => วัชระ อนันต์พิทักษ์กูล
+    [organization] => ทดสอบ
+    [phone] => 0994942202
+    [email] => tcwatchara@rnn.ac.th
+    [line_id] => 0hayou
+    [invoiceAddress_address] => 111
+    [invoiceAddress_province] => 3
+    [invoiceAddress_district] => 60
+    [invoiceAddress_subdistrict] => 237
+    [invoiceAddress_zipcode] => 11110
+    [houseAddress_address] => 111
+    [houseAddress_province] => 3
+    [houseAddress_district] => 60
+    [houseAddress_subdistrict] => 237
+    [houseAddress_zipcode] => 11110
+    [currentAddress_address] => 111
+    [currentAddress_province] => 3
+    [currentAddress_district] => 60
+    [currentAddress_subdistrict] => 237
+    [currentAddress_zipcode] => 11110
+)
+
+[24-Feb-2025 11:09:36 Europe/Berlin] ไฟล์ที่อัพโหลด: Array
+(
+    [payment_slip] => Array
+        (
+            [name] => ภาพถ่ายหน้าจอ 2568-02-24 เวลา 15.31.18.png
+            [full_path] => ภาพถ่ายหน้าจอ 2568-02-24 เวลา 15.31.18.png
+            [type] => image/png
+            [tmp_name] => D:\xampp1010\tmp\php32B2.tmp
+            [error] => 0
+            [size] => 411180
+        )
+
+)
+
+[24-Feb-2025 11:09:36 Europe/Berlin] เกิดข้อผิดพลาด: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'payment_updated_at' in 'field list'
+[24-Feb-2025 11:10:43 Europe/Berlin] ข้อมูลที่ได้รับจากฟอร์ม: Array
+(
+    [title] => นาย
+    [title_other] => 
+    [fullname] => วัชระ อนันต์พิทักษ์กูล
+    [organization] => ทดสอบ
+    [phone] => 0994942202
+    [email] => tcwatchara@rnn.ac.th
+    [line_id] => 0hayou
+    [invoiceAddress_address] => 111
+    [invoiceAddress_province] => 3
+    [invoiceAddress_district] => 60
+    [invoiceAddress_subdistrict] => 237
+    [invoiceAddress_zipcode] => 11110
+    [houseAddress_address] => 111
+    [houseAddress_province] => 3
+    [houseAddress_district] => 60
+    [houseAddress_subdistrict] => 237
+    [houseAddress_zipcode] => 11110
+    [currentAddress_address] => 111
+    [currentAddress_province] => 3
+    [currentAddress_district] => 60
+    [currentAddress_subdistrict] => 237
+    [currentAddress_zipcode] => 11110
+)
+
+[24-Feb-2025 11:10:43 Europe/Berlin] ไฟล์ที่อัพโหลด: Array
+(
+    [payment_slip] => Array
+        (
+            [name] => ภาพถ่ายหน้าจอ 2568-02-24 เวลา 15.31.18.png
+            [full_path] => ภาพถ่ายหน้าจอ 2568-02-24 เวลา 15.31.18.png
+            [type] => image/png
+            [tmp_name] => D:\xampp1010\tmp\php3639.tmp
+            [error] => 0
+            [size] => 411180
+        )
+
+)
+
+[24-Feb-2025 11:10:43 Europe/Berlin] ผลการประมวลผล: Array
+(
+    [success] => 1
+    [message] => บันทึกข้อมูลเรียบร้อยแล้ว
+    [registration_id] => 4
+)
+
+[24-Feb-2025 13:07:03 Europe/Berlin] Request received: {"phone":"0994942202"}
+[24-Feb-2025 13:07:03 Europe/Berlin] Decoded data: Array
+(
+    [phone] => 0994942202
+)
+
+[24-Feb-2025 13:07:03 Europe/Berlin] Checking phone number: 0994942202
+[24-Feb-2025 13:07:03 Europe/Berlin] Query result: Array
+(
+    [id] => 4
+    [title] => นาย
+    [title_other] => 
+    [fullname] => วัชระ อนันต์พิทักษ์กูล
+    [organization] => ทดสอบ
+    [phone] => 0994942202
+    [email] => tcwatchara@rnn.ac.th
+    [line_id] => 0hayou
+    [created_at] => 2025-02-24 17:10:43
+    [updated_at] => 2025-02-24 17:10:43
+    [payment_status] => paid
+    [payment_updated_at] => 2025-02-24 17:10:43
+    [payment_slip_id] => 2
+)
+
+[24-Feb-2025 13:07:03 Europe/Berlin] PHP Warning:  Undefined array key "is_approved" in D:\xampp1010\htdocs\regaob\check_registration.php on line 47
+[24-Feb-2025 13:07:03 Europe/Berlin] PHP Warning:  Undefined array key "is_approved" in D:\xampp1010\htdocs\regaob\check_registration.php on line 56
+[24-Feb-2025 13:07:03 Europe/Berlin] Sending response: {"success":true,"status":"pending_approval","message":"เบอร์โทรศัพท์นี้ได้ลงทะเบียนแล้ว","data":{"registration_id":4,"payment_status":"paid","is_approved":null}}
+[24-Feb-2025 13:09:43 Europe/Berlin] Request received: {"phone":"0994942202"}
+[24-Feb-2025 13:09:43 Europe/Berlin] Decoded data: Array
+(
+    [phone] => 0994942202
+)
+
+[24-Feb-2025 13:09:43 Europe/Berlin] Checking phone number: 0994942202
+[24-Feb-2025 13:09:43 Europe/Berlin] Query result: Array
+(
+    [id] => 4
+    [title] => นาย
+    [title_other] => 
+    [fullname] => วัชระ อนันต์พิทักษ์กูล
+    [organization] => ทดสอบ
+    [phone] => 0994942202
+    [email] => tcwatchara@rnn.ac.th
+    [line_id] => 0hayou
+    [created_at] => 2025-02-24 17:10:43
+    [updated_at] => 2025-02-24 17:10:43
+    [payment_status] => paid
+    [payment_updated_at] => 2025-02-24 17:10:43
+    [payment_slip_id] => 2
+)
+
+[24-Feb-2025 13:09:43 Europe/Berlin] PHP Warning:  Undefined array key "is_approved" in D:\xampp1010\htdocs\regaob\check_registration.php on line 47
+[24-Feb-2025 13:09:43 Europe/Berlin] PHP Warning:  Undefined array key "is_approved" in D:\xampp1010\htdocs\regaob\check_registration.php on line 56
+[24-Feb-2025 13:09:43 Europe/Berlin] Sending response: {"success":true,"status":"pending_approval","message":"เบอร์โทรศัพท์นี้ได้ลงทะเบียนแล้ว","data":{"registration_id":4,"payment_status":"paid","is_approved":null}}
+[24-Feb-2025 13:55:39 Europe/Berlin] Request received: {"phone":"0994942202"}
+[24-Feb-2025 13:55:39 Europe/Berlin] Decoded data: Array
+(
+    [phone] => 0994942202
+)
+
+[24-Feb-2025 13:55:39 Europe/Berlin] Checking phone number: 0994942202
+[24-Feb-2025 13:55:39 Europe/Berlin] Query result: Array
+(
+    [id] => 4
+    [title] => นาย
+    [title_other] => 
+    [fullname] => วัชระ อนันต์พิทักษ์กูล
+    [organization] => ทดสอบ
+    [phone] => 0994942202
+    [email] => tcwatchara@rnn.ac.th
+    [line_id] => 0hayou
+    [created_at] => 2025-02-24 17:10:43
+    [updated_at] => 2025-02-24 19:55:28
+    [payment_status] => paid
+    [payment_updated_at] => 2025-02-24 17:10:43
+    [is_approved] => 1
+    [approved_at] => 2025-02-24 19:55:28
+    [approved_by] => 1
+    [payment_slip_id] => 2
+)
+
+[24-Feb-2025 13:55:39 Europe/Berlin] Sending response: {"success":true,"status":"registration_complete","message":"เบอร์โทรศัพท์นี้ได้ลงทะเบียนแล้ว","data":{"registration_id":4,"payment_status":"paid","is_approved":1}}
+[24-Feb-2025 13:55:43 Europe/Berlin] Request received: {"phone":"0994942202"}
+[24-Feb-2025 13:55:43 Europe/Berlin] Decoded data: Array
+(
+    [phone] => 0994942202
+)
+
+[24-Feb-2025 13:55:43 Europe/Berlin] Checking phone number: 0994942202
+[24-Feb-2025 13:55:43 Europe/Berlin] Query result: Array
+(
+    [id] => 4
+    [title] => นาย
+    [title_other] => 
+    [fullname] => วัชระ อนันต์พิทักษ์กูล
+    [organization] => ทดสอบ
+    [phone] => 0994942202
+    [email] => tcwatchara@rnn.ac.th
+    [line_id] => 0hayou
+    [created_at] => 2025-02-24 17:10:43
+    [updated_at] => 2025-02-24 19:55:28
+    [payment_status] => paid
+    [payment_updated_at] => 2025-02-24 17:10:43
+    [is_approved] => 1
+    [approved_at] => 2025-02-24 19:55:28
+    [approved_by] => 1
+    [payment_slip_id] => 2
+)
+
+[24-Feb-2025 13:55:43 Europe/Berlin] Sending response: {"success":true,"status":"registration_complete","message":"เบอร์โทรศัพท์นี้ได้ลงทะเบียนแล้ว","data":{"registration_id":4,"payment_status":"paid","is_approved":1}}
+[24-Feb-2025 14:03:29 Europe/Berlin] Request received: {"phone":"0994942202"}
+[24-Feb-2025 14:03:29 Europe/Berlin] Decoded data: Array
+(
+    [phone] => 0994942202
+)
+
+[24-Feb-2025 14:03:29 Europe/Berlin] Checking phone number: 0994942202
+[24-Feb-2025 14:03:29 Europe/Berlin] Query result: Array
+(
+    [id] => 4
+    [title] => นาย
+    [title_other] => 
+    [fullname] => วัชระ อนันต์พิทักษ์กูล
+    [organization] => ทดสอบ
+    [phone] => 0994942202
+    [email] => tcwatchara@rnn.ac.th
+    [line_id] => 0hayou
+    [created_at] => 2025-02-24 17:10:43
+    [updated_at] => 2025-02-24 19:55:28
+    [payment_status] => paid
+    [payment_updated_at] => 2025-02-24 17:10:43
+    [is_approved] => 1
+    [approved_at] => 2025-02-24 19:55:28
+    [approved_by] => 1
+    [payment_slip_id] => 2
+)
+
+[24-Feb-2025 14:03:29 Europe/Berlin] Sending response: {"success":true,"status":"registration_complete","message":"เบอร์โทรศัพท์นี้ได้ลงทะเบียนแล้ว","data":{"registration_id":4,"payment_status":"paid","is_approved":1}}
+[24-Feb-2025 14:04:07 Europe/Berlin] Request received: {"phone":"0994942202"}
+[24-Feb-2025 14:04:07 Europe/Berlin] Decoded data: Array
+(
+    [phone] => 0994942202
+)
+
+[24-Feb-2025 14:04:08 Europe/Berlin] Request received: {"phone":"0994942202"}
+[24-Feb-2025 14:04:08 Europe/Berlin] Decoded data: Array
+(
+    [phone] => 0994942202
+)
+
+[24-Feb-2025 14:04:28 Europe/Berlin] PHP Fatal error:  Uncaught Error: Call to a member function prepare() on null in D:\xampp1010\htdocs\regaob\check_registration.php:25
+Stack trace:
+#0 {main}
+  thrown in D:\xampp1010\htdocs\regaob\check_registration.php on line 25
+[24-Feb-2025 14:04:29 Europe/Berlin] PHP Fatal error:  Uncaught Error: Call to a member function prepare() on null in D:\xampp1010\htdocs\regaob\check_registration.php:25
+Stack trace:
+#0 {main}
+  thrown in D:\xampp1010\htdocs\regaob\check_registration.php on line 25
+[02-Mar-2025 16:56:27 UTC] Request received: {"phone":"0994942202"}
+[02-Mar-2025 16:56:27 UTC] Decoded data: Array
+(
+    [phone] => 0994942202
+)
+
+[02-Mar-2025 16:56:27 UTC] Request received: {"phone":"0994942202"}
+[02-Mar-2025 16:56:27 UTC] Decoded data: Array
+(
+    [phone] => 0994942202
+)
+
+[02-Mar-2025 16:56:28 UTC] Request received: {"phone":"0994942202"}
+[02-Mar-2025 16:56:28 UTC] Decoded data: Array
+(
+    [phone] => 0994942202
+)
+
+[02-Mar-2025 16:56:28 UTC] Request received: {"phone":"0994942202"}
+[02-Mar-2025 16:56:28 UTC] Decoded data: Array
+(
+    [phone] => 0994942202
+)
+
+[02-Mar-2025 16:56:29 UTC] Request received: {"phone":"0994942202"}
+[02-Mar-2025 16:56:29 UTC] Decoded data: Array
+(
+    [phone] => 0994942202
+)
+
+[02-Mar-2025 16:56:48 UTC] PHP Fatal error:  Uncaught Error: Call to a member function prepare() on null in /var/www/html/check_registration.php:25
+Stack trace:
+#0 {main}
+  thrown in /var/www/html/check_registration.php on line 25
+[02-Mar-2025 16:56:48 UTC] PHP Fatal error:  Uncaught Error: Call to a member function prepare() on null in /var/www/html/check_registration.php:25
+Stack trace:
+#0 {main}
+  thrown in /var/www/html/check_registration.php on line 25
+[02-Mar-2025 16:56:49 UTC] PHP Fatal error:  Uncaught Error: Call to a member function prepare() on null in /var/www/html/check_registration.php:25
+Stack trace:
+#0 {main}
+  thrown in /var/www/html/check_registration.php on line 25
+[02-Mar-2025 16:56:49 UTC] PHP Fatal error:  Uncaught Error: Call to a member function prepare() on null in /var/www/html/check_registration.php:25
+Stack trace:
+#0 {main}
+  thrown in /var/www/html/check_registration.php on line 25
+[02-Mar-2025 16:56:50 UTC] PHP Fatal error:  Uncaught Error: Call to a member function prepare() on null in /var/www/html/check_registration.php:25
+Stack trace:
+#0 {main}
+  thrown in /var/www/html/check_registration.php on line 25
+[02-Mar-2025 16:57:09 UTC] Request received: {"phone":"0994942202"}
+[02-Mar-2025 16:57:09 UTC] Decoded data: Array
+(
+    [phone] => 0994942202
+)
+
+[02-Mar-2025 16:57:09 UTC] Checking phone number: 0994942202
+[02-Mar-2025 16:57:09 UTC] Query result: Array
+(
+    [id] => 4
+    [title] => นาย
+    [title_other] => 
+    [fullname] => วัชระ อนันต์พิทักษ์กูล
+    [organization] => ทดสอบ
+    [phone] => 0994942202
+    [email] => tcwatchara@rnn.ac.th
+    [line_id] => 0hayou
+    [created_at] => 2025-02-24 10:10:43
+    [updated_at] => 2025-02-24 10:10:43
+    [payment_status] => paid
+    [payment_updated_at] => 2025-02-24 10:10:43
+    [is_approved] => 0
+    [approved_at] => 
+    [approved_by] => 
+    [payment_slip_id] => 2
+)
+
+[02-Mar-2025 16:57:09 UTC] Sending response: {"success":true,"status":"pending_approval","message":"เบอร์โทรศัพท์นี้ได้ลงทะเบียนแล้ว","data":{"registration_id":4,"payment_status":"paid","is_approved":0}}
+[02-Mar-2025 16:57:35 UTC] Request received: {"phone":"0994942202"}
+[02-Mar-2025 16:57:35 UTC] Decoded data: Array
+(
+    [phone] => 0994942202
+)
+
+[02-Mar-2025 16:57:35 UTC] Checking phone number: 0994942202
+[02-Mar-2025 16:57:35 UTC] Query result: Array
+(
+    [id] => 4
+    [title] => นาย
+    [title_other] => 
+    [fullname] => วัชระ อนันต์พิทักษ์กูล
+    [organization] => ทดสอบ
+    [phone] => 0994942202
+    [email] => tcwatchara@rnn.ac.th
+    [line_id] => 0hayou
+    [created_at] => 2025-02-24 10:10:43
+    [updated_at] => 2025-02-24 10:10:43
+    [payment_status] => paid
+    [payment_updated_at] => 2025-02-24 10:10:43
+    [is_approved] => 0
+    [approved_at] => 
+    [approved_by] => 
+    [payment_slip_id] => 2
+)
+
+[02-Mar-2025 16:57:35 UTC] Sending response: {"success":true,"status":"pending_approval","message":"เบอร์โทรศัพท์นี้ได้ลงทะเบียนแล้ว","data":{"registration_id":4,"payment_status":"paid","is_approved":0}}
+[02-Mar-2025 16:57:39 UTC] Request received: {"phone":"0994942206"}
+[02-Mar-2025 16:57:39 UTC] Decoded data: Array
+(
+    [phone] => 0994942206
+)
+
+[02-Mar-2025 16:57:39 UTC] Checking phone number: 0994942206
+[02-Mar-2025 16:57:39 UTC] Query result: 
+[02-Mar-2025 16:57:39 UTC] Sending response: {"success":true,"status":"not_registered","message":"เบอร์โทรศัพท์นี้ยังไม่เคยลงทะเบียน"}
+[02-Mar-2025 17:05:02 UTC] Request received: {"phone":"0994942201"}
+[02-Mar-2025 17:05:02 UTC] Decoded data: Array
+(
+    [phone] => 0994942201
+)
+
+[02-Mar-2025 17:05:02 UTC] Checking phone number: 0994942201
+[02-Mar-2025 17:05:02 UTC] Query result: 
+[02-Mar-2025 17:05:02 UTC] Sending response: {"success":true,"status":"not_registered","message":"เบอร์โทรศัพท์นี้ยังไม่เคยลงทะเบียน"}
+[02-Mar-2025 17:05:42 UTC] ข้อมูลที่ได้รับจากฟอร์ม: Array
+(
+    [title] => นาย
+    [title_other] => 
+    [fullname] => วัชระ อนันต์พิทักษ์กูล
+    [organization] => ทดสอบ
+    [phone] => 0994942201
+    [email] => tcwatchara@rnn.ac.th
+    [line_id] => 0hayou
+    [invoiceAddress_address] => TEST
+    [invoiceAddress_province] => 3
+    [invoiceAddress_district] => 60
+    [invoiceAddress_subdistrict] => 237
+    [invoiceAddress_zipcode] => 11110
+    [houseAddress_address] => TEST
+    [houseAddress_province] => 3
+    [houseAddress_district] => 60
+    [houseAddress_subdistrict] => 237
+    [houseAddress_zipcode] => 11110
+    [currentAddress_address] => TEST
+    [currentAddress_province] => 3
+    [currentAddress_district] => 60
+    [currentAddress_subdistrict] => 237
+    [currentAddress_zipcode] => 11110
+    [document_type] => Array
+        (
+            [0] => other
+            [1] => identification
+        )
+
+    [document_description] => Array
+        (
+            [0] => 
+            [1] => 
+        )
+
+)
+
+[02-Mar-2025 17:05:42 UTC] ไฟล์ที่อัพโหลด: Array
+(
+    [documents] => Array
+        (
+            [name] => Array
+                (
+                    [0] => Ticket rev1.pdf
+                    [1] => 307965.png
+                )
+
+            [full_path] => Array
+                (
+                    [0] => Ticket rev1.pdf
+                    [1] => 307965.png
+                )
+
+            [type] => Array
+                (
+                    [0] => application/pdf
+                    [1] => image/png
+                )
+
+            [tmp_name] => Array
+                (
+                    [0] => /tmp/phpPJl2K5
+                    [1] => /tmp/phpFGdLis
+                )
+
+            [error] => Array
+                (
+                    [0] => 0
+                    [1] => 0
+                )
+
+            [size] => Array
+                (
+                    [0] => 939551
+                    [1] => 1116846
+                )
+
+        )
+
+    [payment_slip] => Array
+        (
+            [name] => S__58818598.jpg
+            [full_path] => S__58818598.jpg
+            [type] => image/jpeg
+            [tmp_name] => /tmp/phpBsvonR
+            [error] => 0
+            [size] => 261052
+        )
+
+)
+
+[02-Mar-2025 17:05:42 UTC] อัพโหลดเอกสารสำเร็จ: uploads/documents/1740935142_67c48fe61c9b1_Ticket rev1.pdf
+[02-Mar-2025 17:05:42 UTC] อัพโหลดเอกสารสำเร็จ: uploads/documents/1740935142_67c48fe621a35_307965.png
+[02-Mar-2025 17:05:42 UTC] ผลการประมวลผล: Array
+(
+    [success] => 1
+    [message] => บันทึกข้อมูลเรียบร้อยแล้ว
+    [registration_id] => 10
+)
+
