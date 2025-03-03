@@ -248,22 +248,23 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
             box-shadow: 0 0 10px rgba(0,0,0,0.2);
         }
         
-        .booth.reserved, .booth.pending_payment {
-            background-color: #ff9999;
-            color: #333;
+        .booth.reserved{
+            background-color: #9e9e9e; 
+            color: white;
             cursor: not-allowed;
         }
         
         .booth.pending_payment {
-            background-color: #ffc107;
-            color: #333;
-        }
+                background-color: #ffc107; 
+                color: #333;
+                cursor: not-allowed;
+            }
         
-        .booth.paid {
-            background-color: #ff9999;
-            color: #333;
-            cursor: not-allowed;
-        }
+            .booth.paid {
+                background-color: #dc3545; 
+                color: white;
+                cursor: not-allowed;
+            }
         
         .floor {
             margin-bottom: 50px;
@@ -460,6 +461,59 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                 font-size: 14px;
             }
         }
+        
+    .contact-sticky {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+    }
+    
+    .contact-btn {
+        border-radius: 50px;
+        padding: 10px 20px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        transition: all 0.3s ease;
+    }
+    
+    .contact-btn:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
+    }
+    
+    .contact-info {
+        position: absolute;
+        bottom: 60px;
+        right: 0;
+        width: 300px;
+        display: none;
+        transition: all 0.3s ease;
+    }
+    
+    .contact-info .card {
+        border: none;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    
+    .contact-info .card-header {
+        position: relative;
+        padding: 15px;
+    }
+    
+    .contact-info.active {
+        display: block;
+        animation: fadeIn 0.3s;
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
     </style>
 </head>
 <body>
@@ -527,12 +581,16 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                 <span>โซน C</span>
             </div>
             <div class="legend-item">
-                <div class="legend-color" style="background-color: #ff9999;"></div>
+                <div class="legend-color" style="background-color: #9e9e9e;"></div>
                 <span>บูธถูกจองแล้ว</span>
             </div>
             <div class="legend-item">
                 <div class="legend-color" style="background-color: #ffc107;"></div>
                 <span>รอชำระเงิน</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #dc3545;"></div>
+                <span>ชำระเงินแล้ว</span>
             </div>
         </div>
         <div class="booth-map">
@@ -695,6 +753,8 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
             
             <!-- Zone B (Green) -->
             <div class="floor" id="zone-B">
+            <div class="floor-title">แผนผัง</div>
+            <img src="zone/b.jpg" alt="โซน B" style="width:100%">
                 <div class="floor-title">โซน B</div>
                 
                 <div class="row">
@@ -736,6 +796,50 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                             <?php } ?>
                         </div>
                     </div>
+
+                    <div class="mt-4 mb-2">
+                        <h5 class="text-center">บูธโซน C (C1-C29)</h5>
+                    </div>
+                    <div class="d-flex flex-wrap justify-content-center">
+                        <?php 
+                    
+                        for ($i = 1; $i <= 29; $i++) {
+                            $boothNumber = $i;
+                            $displayBoothNumber = 'C' . $i; 
+                            
+                            $isReserved = false;
+                            $status = 'available';
+                            
+                            foreach ($booths as $booth) {
+                                if ($booth['booth_number'] == $boothNumber && $booth['zone'] == 'C' && $booth['floor'] == 1) {
+                                    $status = $booth['status'];
+                                    if ($status != 'available') {
+                                        $isReserved = true;
+                                    }
+                                    break;
+                                }
+                            }
+                            
+                            $class = ($isReserved) ? "booth $status" : "booth";
+                            $class .= " booth-purple"; 
+                            
+                            $boothId = 0;
+                            $price = 0;
+                            
+                            foreach ($booths as $booth) {
+                                if ($booth['booth_number'] == $boothNumber && $booth['zone'] == 'C' && $booth['floor'] == 1) {
+                                    $boothId = $booth['id'];
+                                    $price = $booth['price'];
+                                    break;
+                                }
+                            }
+                        ?>
+                        <div class="<?php echo $class; ?>" data-id="<?php echo $boothId; ?>" data-number="<?php echo $displayBoothNumber; ?>" data-zone="C" data-floor="1" data-price="<?php echo $price; ?>" onclick="selectBooth(this)">
+                            <?php echo $displayBoothNumber; ?>
+                        </div>
+                        <?php } ?>
+                    </div>
+
                 </div>
                 
                 <div class="text-center mt-4">
@@ -745,16 +849,11 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
             
             <!-- Zone C Floor 1 (Purple) -->
             <div class="floor" id="zone-C1">
+            <div class="floor-title">แผนผัง</div>
+            <img src="zone/c1.jpg" alt="โซน c" style="width:100%">
                 <div class="floor-title">โซน C (ชั้น 1)</div>
                 
-                <div class="row mb-4">
-                    <div class="col-md-8 offset-md-2">
-                        <div class="booth-details">
-                            <p>บริเวณนั่งโซฟา รับประทานอาหาร (จุดที่ 1 ห้องบอร์)</p>
-                        </div>
-                    </div>
-                </div>
-                
+           
                 <div class="row">
                     <div class="col-md-12">
                         <div class="d-flex flex-wrap justify-content-center">
@@ -844,24 +943,10 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
             
             <!-- Zone C Floor 2 -->
             <div class="floor" id="zone-C2">
+            <div class="floor-title">แผนผัง</div>
+            <img src="zone/c2.jpg" alt="โซน c" style="width:100%">
                 <div class="floor-title">โซน C (ชั้น 2)</div>
                 
-                <div class="row">
-                    <div class="col-md-4">
-                        <div class="booth-details">
-                            <p>บริเวณนั่งโซฟา รับประทานอาหาร</p>
-                            <p>(จุดที่ 2 ห้องบอร์)</p>
-                        </div>
-                    </div>
-                    
-                    <div class="col-md-4 offset-md-4">
-                        <div class="booth-details">
-                            <p>ผู้เข้าหาหุ้นกู้</p>
-                            <p>บริเวณนั่งโซฟา รับประทานอาหาร</p>
-                            <p>(จุดที่ 3 ห้องบอร์)</p>
-                        </div>
-                    </div>
-                </div>
                 
                 <div class="text-center my-4">ระเบียงทางเดินชั้น 2</div>
                 
@@ -1146,6 +1231,54 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
             </div>
         </div>
     </div>
+
+
+<div class="contact-sticky">
+    <button class="btn btn-primary contact-btn" onclick="toggleContactInfo()">
+        <i class="bi bi-telephone-fill"></i> ติดต่อเจ้าหน้าที่
+    </button>
+    <div class="contact-info" id="contactInfo">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">สนใจจองบูธติดต่อ</h5>
+                <button type="button" class="btn-close btn-close-white position-absolute top-0 end-0 mt-2 me-2" aria-label="Close" onclick="toggleContactInfo()"></button>
+            </div>
+            <div class="card-body">
+                <p><strong>คุณจันจิรา ภู่สุวรรณ์ (คุณตูน)</strong><br>
+                Tel: 062-4086398<br>
+                Line ID: lunytoon</p>
+                
+                <p><strong>คุณสาลินี ขจรไพร (คุณสา)</strong><br>
+                Tel: 093-2952519<br>
+                Line ID: 0932952519</p>
+                
+                <h6 class="mt-3">ราคาบูธ</h6>
+                <ul class="list-unstyled">
+                    <li>ZONE A: 30,000 บาท</li>
+                    <li>ZONE B: 23,000 บาท</li>
+                    <li>ZONE C: 10,000 บาท</li>
+                </ul>
+                
+                <div class="mt-3 text-center">
+                    <a href="https://line.me/ti/g/PhW4LmGJyZ" target="_blank" class="btn btn-success">
+                        <i class="bi bi-line"></i> ติดต่อผ่าน Line
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+
+<script>
+   
+    function toggleContactInfo() {
+        const contactInfo = document.getElementById('contactInfo');
+        contactInfo.classList.toggle('active');
+    }
+</script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
