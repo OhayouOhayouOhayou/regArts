@@ -545,25 +545,24 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
     <h2 class="text-center mb-4">แผนผังภาพรวมงาน</h2>
     
     <div class="row">
-        <div class="col-md-4 mb-3">
+        <div class="col-md-6 mb-3">
             <div class="card h-100">
-                <img src="zone/overview1.png" alt="ภาพรวมงาน 1" class="card-img-top">
+                <img src="zone/overview1.jpg" alt="ภาพรวมงาน 1" class="card-img-top booth-overview-img" data-bs-toggle="modal" data-bs-target="#overviewModal" data-img="zone/overview1.jpg">
                 <div class="card-body">
                     <h5 class="card-title">มุมมองที่ 1</h5>
-                    <p class="card-text">แผนผังรวมของพื้นที่จัดงานทั้งหมด</p>
+                    <p class="card-text">แผนผังรวมของพื้นที่จัดงานทั้งหมด <small class="text-muted">(คลิกเพื่อดูขนาดใหญ่)</small></p>
                 </div>
             </div>
         </div>
-        <div class="col-md-4 mb-3">
+        <div class="col-md-6 mb-3">
             <div class="card h-100">
-                <img src="zone/overview2.png" alt="ภาพรวมงาน 2" class="card-img-top">
+                <img src="zone/overview2.jpg" alt="ภาพรวมงาน 2" class="card-img-top booth-overview-img" data-bs-toggle="modal" data-bs-target="#overviewModal" data-img="zone/overview2.jpg">
                 <div class="card-body">
                     <h5 class="card-title">มุมมองที่ 2</h5>
-                    <p class="card-text">ภาพรวมพื้นที่จัดแสดงสินค้า</p>
+                    <p class="card-text">ภาพรวมพื้นที่จัดแสดงสินค้า <small class="text-muted">(คลิกเพื่อดูขนาดใหญ่)</small></p>
                 </div>
             </div>
         </div>
-        
     </div>
     
     <div class="alert alert-info mt-3">
@@ -1326,7 +1325,51 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
 </div>
 
 
+<!-- Modal สำหรับแสดงภาพขนาดใหญ่ -->
+<div class="modal fade" id="overviewModal" tabindex="-1" aria-labelledby="overviewModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="overviewModalLabel">แผนผังภาพรวมงาน</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-center">
+        <img src="" id="modalImage" class="img-fluid" alt="ภาพขยาย">
+      </div>
+    </div>
+  </div>
+</div>
 
+<!-- เพิ่ม CSS ในส่วน style -->
+<style>
+    .booth-overview-img {
+        cursor: pointer;
+        transition: transform 0.3s ease;
+    }
+    
+    .booth-overview-img:hover {
+        transform: scale(1.02);
+    }
+</style>
+
+<!-- เพิ่ม JavaScript ท้ายไฟล์ก่อนปิด </body> -->
+<script>
+    // เพิ่มโค้ดนี้ภายใต้ $(document).ready(function() { ... });
+    $(document).ready(function() {
+        // โค้ดที่มีอยู่เดิม...
+        
+        // JavaScript สำหรับ modal ภาพขยาย
+        $('.booth-overview-img').on('click', function() {
+            const imgSrc = $(this).data('img');
+            $('#modalImage').attr('src', imgSrc);
+        });
+        
+        // ตรวจสอบว่ามีรูปภาพอยู่จริงหรือไม่
+        $('.booth-overview-img').on('error', function() {
+            $(this).attr('src', 'https://via.placeholder.com/600x400?text=ภาพตัวอย่าง');
+        });
+    });
+</script>
 
 <script>
    
