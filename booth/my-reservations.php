@@ -326,39 +326,59 @@ while ($row = $result->fetch_assoc()) {
         
         <?php foreach ($reservations as $reservation): ?>
         <div class="reservation-card">
-            <div class="status-badge badge 
-                <?php 
-                if ($reservation['payment_status'] == 'paid') {
-                    echo 'bg-success';
-                } elseif ($reservation['payment_status'] == 'pending') {
-                    echo 'bg-warning';
-                } else {
-                    echo 'bg-danger';
-                }
-                ?>">
-                <?php 
-                if ($reservation['payment_status'] == 'paid') {
-                    echo 'ชำระเงินแล้ว';
-                } elseif ($reservation['payment_status'] == 'pending') {
-                    echo 'รอตรวจสอบ';
-                } else {
-                    echo 'รอชำระเงิน';
-                }
-                ?>
-            </div>
+        <div class="status-badge badge 
+    <?php 
+    if ($reservation['payment_status'] == 'paid') {
+        echo 'bg-success';
+    } elseif ($reservation['payment_status'] == 'pending') {
+        echo 'bg-warning';
+    } elseif ($reservation['payment_status'] == 'cancelled') {
+        echo 'bg-secondary';
+    } else {
+        echo 'bg-danger';
+    }
+    ?>">
+    <?php 
+    if ($reservation['payment_status'] == 'paid') {
+        echo 'ชำระเงินแล้ว';
+    } elseif ($reservation['payment_status'] == 'pending') {
+        echo 'รอตรวจสอบ';
+    } elseif ($reservation['payment_status'] == 'cancelled') {
+        echo 'ยกเลิกแล้ว';
+    } else {
+        echo 'รอชำระเงิน';
+    }
+    ?>
+</div>
             
-            <div class="d-flex align-items-center">
-                <span class="booth-zone zone-<?php echo strtolower($reservation['zone']); ?>"><?php echo $reservation['zone']; ?></span>
-                <span class="booth-number">บูธ #<?php echo $reservation['booth_number']; ?></span>
-                <span class="ms-2 text-muted">(ชั้น <?php echo $reservation['floor']; ?>)</span>
-            </div>
+          <!-- แก้ไขส่วนที่แสดงรายละเอียด Zone -->
+                <div class="d-flex align-items-center">
+                    <span class="booth-zone zone-<?php echo strtolower($reservation['zone']); ?>"><?php echo $reservation['zone']; ?></span>
+                    <span class="booth-number">บูธ #<?php echo $reservation['booth_number']; ?></span>
+                    <span class="ms-2 text-muted">(ชั้น <?php echo $reservation['floor']; ?>)</span>
+                </div>
+                <div class="mt-2">
+                    <p class="mb-1"><strong>โซน:</strong> 
+                        <?php 
+                        if ($reservation['zone'] == 'A') {
+                            echo 'โซน A ';
+                        } elseif ($reservation['zone'] == 'B') {
+                            echo 'โซน B ';
+                        } elseif ($reservation['zone'] == 'C') {
+                            echo 'โซน C ';
+                        } else {
+                            echo 'โซน ' . $reservation['zone'];
+                        }
+                        ?>
+                    </p>
+                    <p class="mb-1"><strong>ตำแหน่ง:</strong> <?php echo $reservation['location']; ?></p>
             <div class="mt-2">
                 <p class="mb-1"><strong>ตำแหน่ง:</strong> <?php echo $reservation['location']; ?></p>
                 <p class="mb-1"><strong>หมายเลขคำสั่งซื้อ:</strong> <?php echo $reservation['order_number']; ?></p>
                 <p class="mb-1"><strong>ราคา:</strong> <span class="price-tag"><?php echo formatCurrency($reservation['total_amount']); ?></span></p>
                 <p class="mb-1"><strong>วันที่จอง:</strong> <?php echo date('d/m/Y H:i', strtotime($reservation['created_at'])); ?></p>
                 
-                <?php if ($reservation['payment_status'] == 'unpaid'): ?>
+                <?php if ($reservation['payment_status'] == 'unpaid' && $reservation['is_cancelled'] != 1): ?>
                 <?php 
                     // คำนวณเวลาที่เหลือก่อนยกเลิกอัตโนมัติ (24 ชั่วโมงนับจากเวลาจอง)
                     $reservedTime = strtotime($reservation['created_at']);
