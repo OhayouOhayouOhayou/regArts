@@ -935,14 +935,45 @@ async function checkRegistration() {
     }
 }
 
-// ปรับสถานะตาม Timeline
+// ปรับสถานะตาม Timeline และเพิ่มการเปิดแบบฟอร์มลงทะเบียน
 function handleRegistrationStatus(data) {
     const { status, message } = data;
     
     // Debug: แสดงข้อมูลที่ได้รับจาก API
     console.log("ข้อมูลสถานะการลงทะเบียน:", data);
     
-    // สร้าง timeline steps
+    // กรณียังไม่ได้ลงทะเบียน ให้นำไปยังหน้าลงทะเบียน
+    if (status === 'not_registered') {
+        Swal.fire({
+            title: 'ยังไม่ได้ลงทะเบียน',
+            text: 'เบอร์โทรศัพท์นี้ยังไม่เคยลงทะเบียน คุณสามารถลงทะเบียนใหม่ได้ทันที',
+            icon: 'info',
+            showCancelButton: true,
+            confirmButtonText: 'ลงทะเบียนใหม่',
+            cancelButtonText: 'ยกเลิก'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // เก็บเบอร์โทรศัพท์ไว้ใช้ในแบบฟอร์ม
+                const phone = document.getElementById('checkPhone').value;
+                
+                // แสดงฟอร์มลงทะเบียน
+                document.getElementById('phoneCheck').classList.remove('active');
+                document.getElementById('registrationForm').classList.add('active');
+                
+                // โหลดฟิลด์ที่อยู่และข้อมูลจังหวัด
+                loadAddressFields().then(() => {
+                    // เติมเบอร์โทรศัพท์อัตโนมัติ
+                    document.querySelector('input[name="phone"]').value = phone;
+                });
+                
+                // อัพเดทสถานะ progress stepper
+                updateProgress(1);
+            }
+        });
+        return;
+    }
+    
+    // สร้าง timeline steps สำหรับกรณีที่ลงทะเบียนแล้ว
     let timelineSteps = [
         {
             title: 'ลงทะเบียน',
