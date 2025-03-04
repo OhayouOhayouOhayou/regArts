@@ -33,28 +33,40 @@ class RegistrationProcessor {
             // บันทึกที่อยู่
             $this->saveAddresses($conn, $registrationId, $postData);
             
-            // จัดการไฟล์เอกสารประกอบ (ใหม่)
-            if (isset($files['documents'])) {
+            // จัดการไฟล์เอกสารประกอบ (ถ้ามี)
+            if (isset($files['documents']) && $this->isValidDocumentsUpload($files['documents'])) {
                 $this->handleDocuments($conn, $registrationId, $files['documents'], $postData);
             }
             
-            // จัดการไฟล์หลักฐานการชำระเงิน
-            if (isset($files['payment_slip'])) {
-                $this->handlePaymentSlip($conn, $registrationId, $files['payment_slip']);
+            // จัดการไฟล์หลักฐานการชำระเงิน (ถ้ามี)
+            $hasPaymentSlip = false;
+            
+            // ตรวจสอบว่ามีการอัพโหลดหลักฐานการชำระเงินหรือไม่
+            if (isset($files['payment_slip']) && $files['payment_slip']['error'] === UPLOAD_ERR_OK) {
+                // ถ้ามีการอัพโหลดและไม่มีข้อผิดพลาด
+                $hasPaymentSlip = $this->handlePaymentSlip($conn, $registrationId, $files['payment_slip']);
+            } else {
+                // ไม่มีการอัพโหลดหลักฐานหรือมีข้อผิดพลาด
+                error_log("ไม่มีการอัพโหลดหลักฐานการชำระเงิน");
             }
+            
+            // ไม่ต้องอัพเดตสถานะชำระเงิน หากไม่มีไฟล์หลักฐานการชำระเงิน
+            // เนื่องจากตอนสร้างข้อมูลการลงทะเบียนจะกำหนดค่าเริ่มต้นเป็น 'pending' ให้อัตโนมัติ
             
             $conn->commit();
             
             return [
                 'success' => true,
                 'message' => 'บันทึกข้อมูลเรียบร้อยแล้ว',
-                'registration_id' => $registrationId
+                'registration_id' => $registrationId,
+                'payment_uploaded' => $hasPaymentSlip
             ];
             
         } catch (Exception $e) {
             if (isset($conn)) {
                 $conn->rollBack();
             }
+            error_log("เกิดข้อผิดพลาด: " . $e->getMessage());
             throw new Exception($e->getMessage());
         }
     }
@@ -76,6 +88,7 @@ class RegistrationProcessor {
     }
     
     private function saveRegistration($conn, $data) {
+        // สร้างข้อมูลการลงทะเบียนโดยไม่กำหนด payment_status เพื่อให้ใช้ค่าเริ่มต้นจาก DB
         $sql = "INSERT INTO registrations (
                     title, title_other, fullname, organization,
                     phone, email, line_id, created_at, updated_at
@@ -148,10 +161,24 @@ class RegistrationProcessor {
         }
     }
     
-    private function handleDocuments($conn, $registrationId, $files, $postData) {
-
+    private function isValidDocumentsUpload($files) {
+        // ตรวจสอบว่า documents มีข้อมูลและไม่มี error
         if (!isset($files['name']) || !is_array($files['name'])) {
-
+            return false;
+        }
+        
+        // ตรวจสอบว่ามีอย่างน้อย 1 ไฟล์ที่อัพโหลดได้สำเร็จ
+        foreach ($files['error'] as $error) {
+            if ($error === UPLOAD_ERR_OK) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    private function handleDocuments($conn, $registrationId, $files, $postData) {
+        if (!isset($files['name']) || !is_array($files['name'])) {
             $documents = [];
             foreach ($files as $key => $value) {
                 $documents[$key] = [$value];
@@ -190,7 +217,6 @@ class RegistrationProcessor {
                 continue;
             }
             
-
             $fileName = time() . '_' . uniqid() . '_' . basename($documents['name'][$i]);
             $filePath = $uploadDir . $fileName;
             
@@ -222,57 +248,76 @@ class RegistrationProcessor {
     }
 
     private function handlePaymentSlip($conn, $registrationId, $file) {
-        if ($file['error'] !== UPLOAD_ERR_OK) {
-            throw new Exception('เกิดข้อผิดพลาดในการอัพโหลดไฟล์');
+        // ตรวจสอบว่ามีการอัพโหลดไฟล์หรือไม่
+        if ($file['error'] !== UPLOAD_ERR_OK || $file['size'] <= 0) {
+            error_log("ไม่สามารถอัพโหลดหลักฐานการชำระเงินได้: " . $file['error']);
+            return false;
         }
-    
+        
         if ($file['size'] > 5242880) { // 5MB
-            throw new Exception('ขนาดไฟล์ใหญ่เกินไป กรุณาอัพโหลดไฟล์ขนาดไม่เกิน 5MB');
+            error_log("ขนาดไฟล์หลักฐานการชำระเงินใหญ่เกินไป: " . $file['size'] . " bytes");
+            return false;
         }
     
         $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'application/pdf'];
         if (!in_array($file['type'], $allowedTypes)) {
-            throw new Exception('ประเภทไฟล์ไม่ถูกต้อง กรุณาอัพโหลดไฟล์ภาพหรือ PDF เท่านั้น');
+            error_log("ประเภทไฟล์หลักฐานการชำระเงินไม่ถูกต้อง: " . $file['type']);
+            return false;
         }
     
         // ตรวจสอบและสร้างโฟลเดอร์
         $uploadDir = 'uploads/payment_slips/';
         if (!file_exists($uploadDir)) {
-            mkdir($uploadDir, 0777, true);
+            if (!mkdir($uploadDir, 0777, true)) {
+                error_log("ไม่สามารถสร้างโฟลเดอร์: " . $uploadDir);
+                return false;
+            }
         }
         
         // สร้างชื่อไฟล์
-        $fileName = time() . '_' . uniqid() . '_' . $file['name'];
+        $fileName = time() . '_' . uniqid() . '_' . basename($file['name']);
         $filePath = $uploadDir . $fileName;
         
         // อัพโหลดไฟล์
         if (!move_uploaded_file($file['tmp_name'], $filePath)) {
-            throw new Exception('ไม่สามารถอัพโหลดไฟล์ได้');
+            error_log("ไม่สามารถย้ายไฟล์อัพโหลดได้: " . $file['name']);
+            return false;
         }
         
-        // บันทึกข้อมูลไฟล์
-        $sql = "INSERT INTO registration_files (
-                    registration_id, file_name, file_path,
-                    file_type, file_size, uploaded_at
-                ) VALUES (?, ?, ?, ?, ?, NOW())";
-                
-        $stmt = $conn->prepare($sql);
-        $stmt->execute([
-            $registrationId,
-            $fileName,
-            $filePath,
-            $file['type'],
-            $file['size']
-        ]);
-        
-        // อัพเดตสถานะการชำระเงิน
-        $sql = "UPDATE registrations 
-                SET payment_status = 'paid',
-                    updated_at = NOW()
-                WHERE id = ?";
-                
-        $stmt = $conn->prepare($sql);
-        $stmt->execute([$registrationId]);
+        try {
+            // บันทึกข้อมูลไฟล์
+            $sql = "INSERT INTO registration_files (
+                        registration_id, file_name, file_path,
+                        file_type, file_size, uploaded_at
+                    ) VALUES (?, ?, ?, ?, ?, NOW())";
+                    
+            $stmt = $conn->prepare($sql);
+            $stmt->execute([
+                $registrationId,
+                $fileName,
+                $filePath,
+                $file['type'],
+                $file['size']
+            ]);
+            
+            $fileId = $conn->lastInsertId();
+            
+            // อัพเดตสถานะการชำระเงินเป็น 'paid'
+            $sql = "UPDATE registrations 
+                    SET payment_status = 'paid',
+                        payment_updated_at = NOW(),
+                        payment_slip_id = ?
+                    WHERE id = ?";
+                    
+            $stmt = $conn->prepare($sql);
+            $stmt->execute([$fileId, $registrationId]);
+            
+            error_log("อัพโหลดหลักฐานการชำระเงินสำเร็จ: " . $filePath);
+            return true;
+        } catch (Exception $e) {
+            error_log("เกิดข้อผิดพลาดในการบันทึกข้อมูลหลักฐานการชำระเงิน: " . $e->getMessage());
+            return false;
+        }
     }
 }
 

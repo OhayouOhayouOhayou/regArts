@@ -209,6 +209,130 @@
     margin-top: 10px;
     color: var(--primary-color);
 }
+
+/* เพิ่ม CSS สำหรับ Timeline ที่ปรับปรุงใหม่ */
+.timeline-container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.timeline {
+    position: relative;
+    padding: 20px 0;
+}
+
+.timeline-item {
+    padding: 15px 0;
+    position: relative;
+    border-left: 3px solid #dee2e6;
+    margin-left: 20px;
+    margin-bottom: 15px;
+}
+
+.timeline-icon {
+    position: absolute;
+    left: -35px;
+    top: 15px;
+    width: 35px;
+    height: 35px;
+    background: white;
+    border: 2px solid #dee2e6;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    transition: all 0.3s ease;
+}
+
+.timeline-content {
+    margin-left: 30px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+}
+
+.timeline-content h5 {
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+/* สถานะต่างๆ */
+.timeline-item.completed .timeline-icon {
+    background: var(--success-color);
+    color: white;
+    border-color: var(--success-color);
+    transform: scale(1.1);
+}
+
+.timeline-item.completed .timeline-content {
+    border-left: 4px solid var(--success-color);
+}
+
+.timeline-item.current .timeline-icon {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+    transform: scale(1.1);
+}
+
+.timeline-item.current .timeline-content {
+    border-left: 4px solid var(--primary-color);
+    background: rgba(52, 152, 219, 0.1);
+}
+
+.timeline-item.waiting .timeline-icon {
+    background: #f8f9fa;
+    color: #adb5bd;
+}
+
+.timeline-status {
+    display: flex;
+    align-items: center;
+    margin-top: 10px;
+    color: var(--primary-color);
+    font-weight: 500;
+}
+
+/* Card styling for bank info */
+.card-header.bg-primary {
+    background-color: var(--primary-color) !important;
+}
+
+.text-primary {
+    color: var(--primary-color) !important;
+}
+
+/* Input group styling */
+.input-group-text.bg-primary {
+    background-color: var(--primary-color) !important;
+}
+
+/* Button icons */
+.btn i {
+    margin-right: 5px;
+}
+
+/* Animation for timeline items */
+.timeline-item {
+    opacity: 0;
+    transform: translateY(10px);
+    animation: fadeInUp 0.5s forwards;
+}
+
+@keyframes fadeInUp {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.timeline-item:nth-child(1) { animation-delay: 0.1s; }
+.timeline-item:nth-child(2) { animation-delay: 0.2s; }
+.timeline-item:nth-child(3) { animation-delay: 0.3s; }
+.timeline-item:nth-child(4) { animation-delay: 0.4s; }
     </style>
 </head>
 <body>
@@ -462,53 +586,56 @@
     </div>
 </div>
 
-        <!-- Payment Information -->
-        <div class="card">
-            <div class="card-header">
-                <h3 class="card-title">
-                    <i class="fas fa-money-bill me-2"></i>
-                    ข้อมูลการชำระเงิน
-                </h3>
-            </div>
-            <div class="card-body">
-                <div class="payment-info">
-                    <h4 class="mb-3">รายละเอียดการชำระเงิน</h4>
-                    <p class="mb-2">
-                        <i class="fas fa-clock"></i>
-                        กรุณาชำระเงินค่าลงทะเบียน ก่อนวันเข้ารับการฝึกอบรม ๗ วัน
-                    </p>
-                    <p class="mb-2">
-                        <i class="fas fa-university"></i>
-                        โอนเงินเข้าบัญชี ธนาคารกรุงไทย สาขาโรจนะ
-                    </p>
-                    <p class="mb-2">
-                        <i class="fas fa-file-invoice"></i>
-                        ชื่อบัญชี "มทร.สุวรรณภูมิ เงินรายได้"
-                    </p>
-                    <p class="mb-2">
-                        <i class="fas fa-money-check"></i>
-                        เลขที่บัญชี 128-028939-2
-                    </p>
-                    <p class="mb-0 text-danger">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <strong>*ไม่รับชำระด้วยเช็ค*</strong>
-                    </p>
-                </div>
-                
-                <div class="mb-3">
-                    <label class="form-label">หลักฐานการชำระเงิน</label>
-                    <div class="input-group">
-                        <span class="input-group-text">
-                            <i class="fas fa-upload"></i>
-                        </span>
-                        <input type="file" class="form-control" 
-                               name="payment_slip" accept="image/*,.pdf">
-                    </div>
-                    <small class="text-muted">รองรับไฟล์ภาพ (JPG, PNG, GIF) และ PDF ขนาดไม่เกิน 5MB</small>
-                </div>
-            </div>
+       <!-- Payment Information -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">
+            <i class="fas fa-money-bill me-2"></i>
+            ข้อมูลการชำระเงิน
+        </h3>
+    </div>
+    <div class="card-body">
+        <div class="payment-info">
+            <h4 class="mb-3">รายละเอียดการชำระเงิน</h4>
+            <p class="mb-2">
+                <i class="fas fa-clock"></i>
+                กรุณาชำระเงินค่าลงทะเบียน ก่อนวันเข้ารับการฝึกอบรม ๗ วัน
+            </p>
+            <p class="mb-2">
+                <i class="fas fa-university"></i>
+                โอนเงินเข้าบัญชี ธนาคารกรุงไทย สาขาโรจนะ
+            </p>
+            <p class="mb-2">
+                <i class="fas fa-file-invoice"></i>
+                ชื่อบัญชี "มทร.สุวรรณภูมิ เงินรายได้"
+            </p>
+            <p class="mb-2">
+                <i class="fas fa-money-check"></i>
+                เลขที่บัญชี 128-028939-2
+            </p>
+            <p class="mb-0 text-danger">
+                <i class="fas fa-exclamation-triangle"></i>
+                <strong>*ไม่รับชำระด้วยเช็ค*</strong>
+            </p>
         </div>
-
+        
+        <div class="mb-3">
+            <label class="form-label">หลักฐานการชำระเงิน (ถ้ามี)</label>
+            <div class="input-group">
+                <span class="input-group-text">
+                    <i class="fas fa-upload"></i>
+                </span>
+                <input type="file" class="form-control" 
+                       name="payment_slip" accept="image/*,.pdf">
+            </div>
+            <small class="text-muted">รองรับไฟล์ภาพ (JPG, PNG, GIF) และ PDF ขนาดไม่เกิน 5MB</small>
+            <small class="d-block text-info mt-1">
+                <i class="fas fa-info-circle"></i>
+                คุณสามารถลงทะเบียนโดยไม่อัพโหลดหลักฐานการชำระเงินได้ และสามารถอัพโหลดภายหลังได้
+            </small>
+        </div>
+    </div>
+</div>
         <div class="text-center mt-4">
             <button type="submit" class="btn btn-primary btn-lg px-5">
                 <i class="fas fa-check-circle me-2"></i>
@@ -808,38 +935,14 @@ async function checkRegistration() {
     }
 }
 
+// ปรับสถานะตาม Timeline
 function handleRegistrationStatus(data) {
     const { status, message } = data;
     
-    // กรณียังไม่ได้ลงทะเบียน ให้นำไปยังหน้าลงทะเบียน
-    if (status === 'not_registered') {
-        Swal.fire({
-            title: 'ยังไม่ได้ลงทะเบียน',
-            text: 'เบอร์โทรศัพท์นี้ยังไม่เคยลงทะเบียน คุณสามารถลงทะเบียนใหม่ได้ทันที',
-            icon: 'info',
-            showCancelButton: true,
-            confirmButtonText: 'ลงทะเบียนใหม่',
-            cancelButtonText: 'ยกเลิก'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                // เก็บเบอร์โทรศัพท์ไว้ใช้ในแบบฟอร์ม
-                const phone = document.getElementById('checkPhone').value;
-                
-                // แสดงฟอร์มลงทะเบียน
-                document.getElementById('phoneCheck').classList.remove('active');
-                document.getElementById('registrationForm').classList.add('active');
-                
-                // โหลดฟิลด์ที่อยู่และข้อมูลจังหวัด
-                loadAddressFields().then(() => {
-                    // เติมเบอร์โทรศัพท์อัตโนมัติ
-                    document.querySelector('input[name="phone"]').value = phone;
-                });
-            }
-        });
-        return;
-    }
+    // Debug: แสดงข้อมูลที่ได้รับจาก API
+    console.log("ข้อมูลสถานะการลงทะเบียน:", data);
     
-    // สำหรับกรณีที่ลงทะเบียนแล้ว ให้แสดง Timeline
+    // สร้าง timeline steps
     let timelineSteps = [
         {
             title: 'ลงทะเบียน',
@@ -867,35 +970,77 @@ function handleRegistrationStatus(data) {
         }
     ];
 
+    // สร้าง HTML สำหรับข้อมูลบัญชีธนาคาร
+    const bankInfoHTML = `
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-university me-2"></i>ข้อมูลบัญชีสำหรับโอนเงิน</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex flex-column">
+                    <div class="mb-2">
+                        <strong><i class="fas fa-landmark me-2"></i>ธนาคาร:</strong> ธนาคารกรุงไทย สาขาโรจนะ
+                    </div>
+                    <div class="mb-2">
+                        <strong><i class="fas fa-file-invoice me-2"></i>ชื่อบัญชี:</strong> "มทร.สุวรรณภูมิ เงินรายได้"
+                    </div>
+                    <div class="mb-2">
+                        <strong><i class="fas fa-money-check me-2"></i>เลขที่บัญชี:</strong> 
+                        <span class="fs-5 fw-bold text-primary">128-028939-2</span>
+                    </div>
+                    <div class="alert alert-warning mt-2 mb-0">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>ไม่รับชำระด้วยเช็ค</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // ดึงรหัสการลงทะเบียน
+    const registrationId = data.data?.registration_id || data.registration_id;
+    
+    console.log("รหัสการลงทะเบียน:", registrationId);
+
+    // ฟอร์มอัพโหลดหลักฐานการชำระเงิน
+    const uploadFormHTML = `
+        <form id="paymentForm" class="text-start">
+            <div class="mb-3">
+                <label class="form-label">หลักฐานการชำระเงิน</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-primary text-white">
+                        <i class="fas fa-receipt"></i>
+                    </span>
+                    <input type="file" class="form-control" name="payment_slip" accept="image/*,.pdf" required>
+                </div>
+                <small class="text-muted">รองรับไฟล์ภาพ (JPG, PNG, GIF) และ PDF ขนาดไม่เกิน 5MB</small>
+            </div>
+            <input type="hidden" name="registration_id" value="${registrationId}">
+        </form>
+    `;
+
     // ปรับสถานะตาม Timeline
     switch(status) {
         case 'registered_unpaid':
+        case 'not_paid':  // เพิ่มเงื่อนไขนี้เพื่อรองรับค่าในฐานข้อมูล
             timelineSteps[0].status = 'completed';
             
             // ปรับคำอธิบายขั้นตอนชำระเงินให้ชัดเจน
             timelineSteps[1].description = 'กรุณาอัพโหลดหลักฐานการชำระเงิน';
             timelineSteps[1].status = 'current';
             
-            // แสดง Timeline พร้อมปุ่มสำหรับอัพโหลดหลักฐาน
+            // แสดง Timeline พร้อมข้อมูลธนาคารและฟอร์มอัพโหลด
             Swal.fire({
                 title: 'สถานะการลงทะเบียน',
-                html: createTimelineHTML(timelineSteps, data) + `
-                    <div class="mt-4">
-                        <form id="paymentForm" class="text-start">
-                            <div class="mb-3">
-                                <label class="form-label required">หลักฐานการชำระเงิน</label>
-                                <input type="file" class="form-control" name="payment_slip" 
-                                       accept="image/*,.pdf" required>
-                                <small class="text-muted">รองรับไฟล์ภาพและ PDF ขนาดไม่เกิน 5MB</small>
-                            </div>
-                            <input type="hidden" name="registration_id" value="${data.registration_id}">
-                        </form>
-                    </div>
-                `,
-                width: 600,
+                html: createTimelineHTML(timelineSteps, data) + 
+                      bankInfoHTML +
+                      `<div class="mt-4">${uploadFormHTML}</div>`,
+                width: 650,
                 showCancelButton: true,
-                confirmButtonText: 'อัพโหลดหลักฐาน',
-                cancelButtonText: 'ปิด',
+                confirmButtonText: '<i class="fas fa-upload me-2"></i>อัพโหลดหลักฐาน',
+                cancelButtonText: '<i class="fas fa-times me-2"></i>ปิด',
+                confirmButtonColor: '#28a745',
+                cancelButtonColor: '#6c757d',
                 preConfirm: () => {
                     const form = document.getElementById('paymentForm');
                     if (!form.checkValidity()) {
@@ -909,6 +1054,7 @@ function handleRegistrationStatus(data) {
             break;
             
         case 'pending_approval':
+        case 'paid':  // เพิ่มเงื่อนไขนี้เพื่อรองรับค่าในฐานข้อมูล
             timelineSteps[0].status = 'completed';
             timelineSteps[1].status = 'completed';
             timelineSteps[2].status = 'current';
@@ -917,32 +1063,33 @@ function handleRegistrationStatus(data) {
             Swal.fire({
                 title: 'สถานะการลงทะเบียน',
                 html: createTimelineHTML(timelineSteps, data),
-                width: 600,
-                confirmButtonText: 'ตกลง',
-                footer: '<div class="text-center">หากมีข้อสงสัย กรุณาติดต่อเจ้าหน้าที่ที่หมายเลข 02-XXX-XXXX</div>'
+                width: 650,
+                confirmButtonText: '<i class="fas fa-check me-2"></i>ตกลง',
+                confirmButtonColor: '#3085d6',
+                footer: '<div class="text-center">หากมีข้อสงสัย กรุณาติดต่อคุณชนิดาภา บุญเตี้ย (คุณนาว): 095-5439933</div>'
             });
             break;
             
         case 'registration_complete':
+        case 'approved':  // เพิ่มเงื่อนไขนี้เพื่อรองรับค่าในฐานข้อมูล
             timelineSteps.forEach(step => step.status = 'completed');
             
             // แสดง Timeline สำหรับการลงทะเบียนที่เสร็จสมบูรณ์
             Swal.fire({
                 title: 'การลงทะเบียนเสร็จสมบูรณ์',
                 html: createTimelineHTML(timelineSteps, data),
-                width: 600,
-                confirmButtonText: 'ตกลง',
+                width: 650,
+                confirmButtonText: '<i class="fas fa-check-circle me-2"></i>ตกลง',
+                confirmButtonColor: '#28a745',
                 icon: 'success'
             });
             break;
     }
 }
 
-// สร้าง HTML สำหรับ Timeline
 function createTimelineHTML(timelineSteps, data) {
     return `
         <div class="timeline-container p-4">
-            <h4 class="mb-4">สถานะการลงทะเบียน</h4>
             <div class="timeline">
                 ${timelineSteps.map((step, index) => `
                     <div class="timeline-item ${step.status}">
@@ -968,33 +1115,119 @@ function createTimelineHTML(timelineSteps, data) {
     `;
 }
 
-// ฟังก์ชันอัพโหลดหลักฐานการชำระเงิน
+
 async function uploadPaymentSlip(formData) {
     try {
+        // แสดง loading
+        Swal.fire({
+            title: 'กำลังอัพโหลด',
+            text: 'กรุณารอสักครู่...',
+            allowOutsideClick: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
+
+        // ตรวจสอบว่ามีการอัพโหลดไฟล์หรือไม่
+        const paymentFile = formData.get('payment_slip');
+        console.log('ตรวจสอบไฟล์ที่อัพโหลด:', paymentFile);
+        
+        // ถ้าไม่ได้เลือกไฟล์
+        if (!paymentFile || paymentFile.size === 0 || paymentFile.name === '') {
+            console.log('ไม่พบไฟล์อัพโหลด');
+            Swal.fire({
+                icon: 'error',
+                title: 'กรุณาเลือกไฟล์',
+                text: 'คุณยังไม่ได้เลือกไฟล์หลักฐานการชำระเงิน'
+            });
+            return false;
+        }
+
+        console.log('กำลังอัพโหลดไฟล์:', paymentFile.name);
+        
+        // ตรวจสอบประเภทไฟล์
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'application/pdf'];
+        const fileType = paymentFile.type;
+        
+        if (!allowedTypes.includes(fileType)) {
+            Swal.fire({
+                icon: 'error',
+                title: 'ประเภทไฟล์ไม่ถูกต้อง',
+                text: 'กรุณาอัพโหลดไฟล์ภาพ (JPG, PNG, GIF) หรือ PDF เท่านั้น'
+            });
+            return false;
+        }
+        
+        // ตรวจสอบขนาดไฟล์
+        if (paymentFile.size > 5 * 1024 * 1024) { // 5MB
+            Swal.fire({
+                icon: 'error',
+                title: 'ขนาดไฟล์ใหญ่เกินไป',
+                text: 'กรุณาอัพโหลดไฟล์ขนาดไม่เกิน 5MB'
+            });
+            return false;
+        }
+        
+        // แสดงข้อมูลใน FormData เพื่อ debug
+        console.log('ข้อมูลที่ส่งไปยังเซิร์ฟเวอร์:');
+        for (let pair of formData.entries()) {
+            console.log(pair[0] + ': ' + pair[1]);
+        }
+        
+        // ส่งข้อมูลไปยังเซิร์ฟเวอร์
         const response = await fetch('upload_payment.php', {
             method: 'POST',
             body: formData
         });
 
+        console.log('การตอบกลับจากเซิร์ฟเวอร์:', response);
+        
+        const responseText = await response.text();
+        console.log('ข้อความตอบกลับดิบ:', responseText);
+        
         if (!response.ok) {
-            throw new Error('เกิดข้อผิดพลาดในการอัพโหลดไฟล์');
+            console.error('HTTP error! status:', response.status);
+            console.error('Error response:', responseText);
+            
+            let errorMessage = 'เกิดข้อผิดพลาดในการอัพโหลดไฟล์';
+            
+            try {
+                const errorData = JSON.parse(responseText);
+                if (errorData.message) {
+                    errorMessage = errorData.message;
+                }
+            } catch (e) {
+                console.error('Error parsing JSON response:', e);
+            }
+            
+            throw new Error(errorMessage);
         }
         
-        const result = await response.json();
-        
-        if (result.success) {
-            Swal.fire({
-                icon: 'success',
-                title: 'อัพโหลดสำเร็จ',
-                text: 'หลักฐานการชำระเงินถูกอัพโหลดเรียบร้อยแล้ว กรุณารอการตรวจสอบ',
-                confirmButtonText: 'ตกลง'
-            });
-            updateProgress(3);
-            return true;
-        } else {
-            throw new Error(result.message || 'เกิดข้อผิดพลาดในการอัพโหลดไฟล์');
+        try {
+            const result = JSON.parse(responseText);
+            console.log('ผลลัพธ์การอัพโหลด:', result);
+            
+            if (result.success) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'อัพโหลดสำเร็จ',
+                    text: 'หลักฐานการชำระเงินถูกอัพโหลดเรียบร้อยแล้ว กรุณารอการตรวจสอบ',
+                    confirmButtonText: 'ตกลง'
+                }).then(() => {
+                    // รีเฟรชหน้าเพื่อแสดงสถานะล่าสุด
+                    window.location.reload();
+                });
+                return true;
+            } else {
+                throw new Error(result.message || 'เกิดข้อผิดพลาดในการอัพโหลดไฟล์');
+            }
+        } catch (jsonError) {
+            console.error('ไม่สามารถแปลงข้อความตอบกลับเป็น JSON ได้:', jsonError);
+            console.error('ข้อความตอบกลับดิบ:', responseText);
+            throw new Error('ข้อมูลตอบกลับไม่ถูกต้อง กรุณาติดต่อผู้ดูแลระบบ');
         }
     } catch (error) {
+        console.error('เกิดข้อผิดพลาดในกระบวนการอัพโหลด:', error);
         Swal.fire({
             icon: 'error',
             title: 'เกิดข้อผิดพลาด',
@@ -1004,8 +1237,6 @@ async function uploadPaymentSlip(formData) {
         return false;
     }
 }
-
-
 // แสดงข้อความแจ้งเตือนข้อผิดพลาด
 function showError(message) {
     Swal.fire({
@@ -1057,16 +1288,31 @@ document.getElementById('copyToCurrent').addEventListener('change', function() {
 });
 
 
+// อัพเดท Event Listener สำหรับการส่งฟอร์มลงทะเบียน
 document.getElementById('seminarRegistration').addEventListener('submit', async function(e) {
     e.preventDefault();
     console.log('เริ่มการส่งฟอร์ม');
+
+    // แสดง loading
+    Swal.fire({
+        title: 'กำลังประมวลผล',
+        text: 'กรุณารอสักครู่...',
+        allowOutsideClick: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
 
     const formData = new FormData(this);
 
     // Log ข้อมูลทั้งหมดในฟอร์ม
     console.log('ข้อมูลในฟอร์ม:');
     for (let [key, value] of formData.entries()) {
-        console.log(`${key}: ${value}`);
+        if (key === 'payment_slip') {
+            console.log(`${key}: ${value.name ? value.name : 'ไม่ได้อัพโหลดไฟล์'}`);
+        } else {
+            console.log(`${key}: ${value}`);
+        }
     }
 
     try {
@@ -1079,25 +1325,53 @@ document.getElementById('seminarRegistration').addEventListener('submit', async 
         console.log('การตอบกลับจากเซิร์ฟเวอร์:', response);
 
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            const errorText = await response.text();
+            console.error('ข้อความตอบกลับจากเซิร์ฟเวอร์เมื่อเกิดข้อผิดพลาด:', errorText);
+            
+            let errorMessage = 'ไม่สามารถลงทะเบียนได้ กรุณาลองใหม่อีกครั้ง';
+            try {
+                const errorData = JSON.parse(errorText);
+                if (errorData.message) {
+                    errorMessage = errorData.message;
+                }
+            } catch (jsonError) {
+                console.error('ไม่สามารถแปลงข้อความ error เป็น JSON ได้', jsonError);
+            }
+            
+            throw new Error(errorMessage);
         }
 
         const responseText = await response.text();
         console.log('ข้อความตอบกลับดิบ:', responseText);
 
-        const result = JSON.parse(responseText);
-        console.log('ผลลัพธ์การประมวลผล:', result);
+        try {
+            const result = JSON.parse(responseText);
+            console.log('ผลลัพธ์การประมวลผล:', result);
 
-        if (result.success) {
-            Swal.fire({
-                icon: 'success',
-                title: 'ลงทะเบียนสำเร็จ',
-                text: 'กรุณารอการตรวจสอบการชำระเงิน'
-            }).then(() => {
-                window.location.reload();
-            });
-        } else {
-            throw new Error(result.message || 'เกิดข้อผิดพลาดในการลงทะเบียน');
+            if (result.success) {
+                let successMessage = 'ลงทะเบียนสำเร็จ';
+                
+                // แสดงข้อความตามสถานะการชำระเงิน
+                if (result.payment_status === 'paid') {
+                    successMessage += ' และอัพโหลดหลักฐานการชำระเงินเรียบร้อยแล้ว กรุณารอการตรวจสอบจากเจ้าหน้าที่';
+                } else {
+                    successMessage += ' กรุณาอัพโหลดหลักฐานการชำระเงินเมื่อท่านชำระเงินเรียบร้อยแล้ว';
+                }
+                
+                Swal.fire({
+                    icon: 'success',
+                    title: 'ลงทะเบียนสำเร็จ',
+                    text: successMessage
+                }).then(() => {
+                    window.location.reload();
+                });
+            } else {
+                throw new Error(result.message || 'เกิดข้อผิดพลาดในการลงทะเบียน');
+            }
+        } catch (jsonError) {
+            console.error('ไม่สามารถแปลงข้อความตอบกลับเป็น JSON ได้:', jsonError);
+            console.error('ข้อความตอบกลับดิบ:', responseText);
+            throw new Error('ข้อมูลตอบกลับไม่ถูกต้อง กรุณาติดต่อผู้ดูแลระบบ');
         }
     } catch (error) {
         console.error('เกิดข้อผิดพลาดในการส่งฟอร์ม:', error);
@@ -1108,7 +1382,6 @@ document.getElementById('seminarRegistration').addEventListener('submit', async 
         });
     }
 });
-
 
 
 document.addEventListener('DOMContentLoaded', function() {
