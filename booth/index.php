@@ -1340,6 +1340,9 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
 <!-- เพิ่ม CSS ในส่วน style -->
 <style>
     .booth-overview-img {
@@ -1364,10 +1367,7 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
             $('#modalImage').attr('src', imgSrc);
         });
         
-        // ตรวจสอบว่ามีรูปภาพอยู่จริงหรือไม่
-        $('.booth-overview-img').on('error', function() {
-            $(this).attr('src', 'https://via.placeholder.com/600x400?text=ภาพตัวอย่าง');
-        });
+       
     });
 </script>
 
@@ -1378,8 +1378,7 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
         contactInfo.classList.toggle('active');
     }
 </script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  
     <script>
         // เช็คสถานะการเข้าสู่ระบบ
         const isLoggedIn = <?php echo $isLoggedIn ? 'true' : 'false'; ?>;
