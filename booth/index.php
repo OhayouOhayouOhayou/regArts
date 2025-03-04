@@ -541,24 +541,80 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#loginModal">ลงทะเบียน / เข้าสู่ระบบ</button>
         </div>
         <?php endif; ?>
-        
-          
-        <div class="price-info">
-            <div class="row">
-                <div class="col-md-4">
-                    <h5>โซน A</h5>
-                    <p>ราคา: <?php echo formatCurrency($zoneAPrices['min_price']); ?></p>
-                </div>
-                <div class="col-md-4">
-                    <h5>โซน B</h5>
-                    <p>ราคา: <?php echo formatCurrency($zoneBPrices['min_price']); ?> </p>
-                </div>
-                <div class="col-md-4">
-                    <h5>โซน C</h5>
-                    <p>ราคา: <?php echo formatCurrency($zoneCPrices['min_price']); ?> </p>
+        <div class="overview-section mb-4">
+    <h2 class="text-center mb-4">แผนผังภาพรวมงาน</h2>
+    
+    <div class="row">
+        <div class="col-md-4 mb-3">
+            <div class="card h-100">
+                <img src="zone/overview1.png" alt="ภาพรวมงาน 1" class="card-img-top">
+                <div class="card-body">
+                    <h5 class="card-title">มุมมองที่ 1</h5>
+                    <p class="card-text">แผนผังรวมของพื้นที่จัดงานทั้งหมด</p>
                 </div>
             </div>
         </div>
+        <div class="col-md-4 mb-3">
+            <div class="card h-100">
+                <img src="zone/overview2.png" alt="ภาพรวมงาน 2" class="card-img-top">
+                <div class="card-body">
+                    <h5 class="card-title">มุมมองที่ 2</h5>
+                    <p class="card-text">ภาพรวมพื้นที่จัดแสดงสินค้า</p>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+    
+    <div class="alert alert-info mt-3">
+        <p class="mb-0"><i class="bi bi-info-circle-fill me-2"></i> กรุณาเลือกโซนที่ท่านสนใจด้านล่างเพื่อดูรายละเอียดเพิ่มเติมและทำการจอง</p>
+    </div>
+</div>
+          
+<div class="price-info">
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card h-100 border-info">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">โซน A (ห้องสัมมนา)</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>ราคา:</strong> <?php echo formatCurrency($zoneAPrices['min_price']); ?></p>
+                    <p><i class="bi bi-check-circle-fill text-success me-2"></i>ราคาเช่าพร้อมบูธมาตรฐาน</p>
+                    <p><i class="bi bi-check-circle-fill text-success me-2"></i>พื้นที่ห้องแอร์</p>
+                    <p><i class="bi bi-check-circle-fill text-success me-2"></i>ตำแหน่งยอดนิยม</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100 border-success">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">โซน B</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>ราคา:</strong> <?php echo formatCurrency($zoneBPrices['min_price']); ?></p>
+                    <p><i class="bi bi-check-circle-fill text-success me-2"></i>ราคาเช่าพร้อมบูธมาตรฐาน</p>
+                    <p><i class="bi bi-check-circle-fill text-success me-2"></i>พื้นที่ห้องแอร์</p>
+                    <p><i class="bi bi-check-circle-fill text-success me-2"></i>ทำเลดี การเข้าถึงสะดวก</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100 border-purple" style="border-color: #9c27b0;">
+                <div class="card-header text-white" style="background-color: #9c27b0;">
+                    <h5 class="mb-0">โซน C</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>ราคา:</strong> <?php echo formatCurrency($zoneCPrices['min_price']); ?></p>
+                    <p><i class="bi bi-check-circle-fill text-success me-2"></i>ราคาเช่าพร้อมบูธมาตรฐาน</p>
+                    <p><i class="bi bi-check-circle-fill text-success me-2"></i>พื้นที่ไม่มีแอร์</p>
+                    <p><i class="bi bi-check-circle-fill text-success me-2"></i>ราคาประหยัด</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
         
         <div class="zone-tabs">
             <div class="zone-tab tab-a active" onclick="showZone('A')">โซน A</div>

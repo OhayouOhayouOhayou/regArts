@@ -11,6 +11,8 @@ services:
       MYSQL_DATABASE: shared_db
       MYSQL_USER: dbuser
       MYSQL_PASSWORD: dbpassword
+      TZ: Asia/Bangkok
+    command: --default-time-zone='+07:00'
     ports:
       - "3307:3306"
     volumes:
@@ -30,6 +32,8 @@ services:
       - "8001:80"
     depends_on:
       - mysql
+    environment:
+      - TZ=Asia/Bangkok
     networks:
       - app-network
 
@@ -42,6 +46,26 @@ services:
       - ./register:/var/www/html
     ports:
       - "8002:80"
+    depends_on:
+      - mysql
+    environment:
+      - TZ=Asia/Bangkok
+    networks:
+      - app-network
+      
+  # phpMyAdmin
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD: rootpassword
+      PMA_USER: root
+      PMA_PASSWORD: rootpassword
+      TZ: Asia/Bangkok
+    ports:
+      - "8080:80"
     depends_on:
       - mysql
     networks:
