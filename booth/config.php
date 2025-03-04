@@ -294,7 +294,7 @@ function reserveBooth($boothId, $customerName, $customerEmail, $customerPhone, $
         return ["success" => false, "message" => "เกิดข้อผิดพลาดในการจองบูธ: " . $e->getMessage()];
     }
 }
-?>
+
 // Function to process payment (updated to support file upload)
 function processPayment($orderId, $paymentMethod, $reference, $amount, $conn) {
     // Verify order exists
