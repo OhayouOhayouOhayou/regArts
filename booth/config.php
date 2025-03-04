@@ -153,7 +153,7 @@ function reserveBooth($boothId, $customerName, $customerEmail, $customerPhone, $
         writeLog("Generated order number: $orderNumber");
         
         // บันทึกข้อมูล order - ตรวจสอบ SQL query
-        $sql = "INSERT INTO orders (order_number, customer_name, customer_email, customer_phone, customer_company, customer_address, customer_line_id, total_amount, payment_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'unpaid')";
+        $sql = "INSERT INTO orders (order_number, customer_name, customer_email, customer_phone, customer_company, customer_line_id, total_amount, payment_status) VALUES (?, ?, ?, ?, ?, ?, ?, 'unpaid')";
         writeLog("SQL Query: $sql");
         
         $insertOrder = $conn->prepare($sql);
@@ -163,7 +163,7 @@ function reserveBooth($boothId, $customerName, $customerEmail, $customerPhone, $
         }
         
         writeLog("Binding parameters...");
-        $bindResult = $insertOrder->bind_param("sssssssd", $orderNumber, $customerName, $customerEmail, $customerPhone, $customerCompany, $customerAddress, $customerLineId, $booth['price']);
+        $bindResult = $insertOrder->bind_param("ssssssd", $orderNumber, $customerName, $customerEmail, $customerPhone, $customerCompany, $customerLineId, $booth['price']);
         if (!$bindResult) {
             writeLog("ERROR binding parameters: " . $insertOrder->error);
             throw new Exception("Binding Error: " . $insertOrder->error);
