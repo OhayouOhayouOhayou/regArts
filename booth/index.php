@@ -592,7 +592,7 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                 </div>
                 <div class="card-body">
                     <p><strong>ราคา:</strong> <?php echo formatCurrency($zoneBPrices['min_price']); ?></p>
-                    <p><i class="bi bi-check-circle-fill text-success me-2"></i>ราคาเช่าพร้อมบูธมาตรฐาน</p>
+                    <p><i class="bi bi-check-circle-fill text-success me-2"></i>ราคาเช่าพื้นที่ ไม่มีบูธ</p>
                     <p><i class="bi bi-check-circle-fill text-success me-2"></i>พื้นที่ห้องแอร์</p>
                     <p><i class="bi bi-check-circle-fill text-success me-2"></i>ทำเลดี การเข้าถึงสะดวก</p>
                 </div>
@@ -605,7 +605,7 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                 </div>
                 <div class="card-body">
                     <p><strong>ราคา:</strong> <?php echo formatCurrency($zoneCPrices['min_price']); ?></p>
-                    <p><i class="bi bi-check-circle-fill text-success me-2"></i>ราคาเช่าพร้อมบูธมาตรฐาน</p>
+                    <p><i class="bi bi-check-circle-fill text-success me-2"></i>ราคาเช่าพื้นที่ ไม่มีบูธ</p>
                     <p><i class="bi bi-check-circle-fill text-success me-2"></i>พื้นที่ไม่มีแอร์</p>
                     <p><i class="bi bi-check-circle-fill text-success me-2"></i>ราคาประหยัด</p>
                 </div>
