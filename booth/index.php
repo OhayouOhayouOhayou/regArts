@@ -547,7 +547,7 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
     <div class="row">
         <div class="col-md-6 mb-3">
             <div class="card h-100">
-                <img src="zone/overview1.png" alt="ภาพรวมงาน 1" class="card-img-top booth-overview-img" data-bs-toggle="modal" data-bs-target="#overviewModal" data-img="zone/overview1.png">
+                <img src="zone/overview11.png" alt="ภาพรวมงาน 1" class="card-img-top booth-overview-img" data-bs-toggle="modal" data-bs-target="#overviewModal" data-img="zone/overview11.png">
                 <div class="card-body">
                     <h5 class="card-title">มุมมองที่ 1</h5>
                     <p class="card-text">แผนผังรวมของพื้นที่จัดงานทั้งหมด <small class="text-muted">(คลิกเพื่อดูขนาดใหญ่)</small></p>
@@ -556,7 +556,7 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
         </div>
         <div class="col-md-6 mb-3">
             <div class="card h-100">
-                <img src="zone/overview2.png" alt="ภาพรวมงาน 2" class="card-img-top booth-overview-img" data-bs-toggle="modal" data-bs-target="#overviewModal" data-img="zone/overview2.png">
+                <img src="zone/overview12.png" alt="ภาพรวมงาน 2" class="card-img-top booth-overview-img" data-bs-toggle="modal" data-bs-target="#overviewModal" data-img="zone/overview12.png">
                 <div class="card-body">
                     <h5 class="card-title">มุมมองที่ 2</h5>
                     <p class="card-text">ภาพรวมพื้นที่จัดแสดงสินค้า <small class="text-muted">(คลิกเพื่อดูขนาดใหญ่)</small></p>
