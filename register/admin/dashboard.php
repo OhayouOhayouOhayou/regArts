@@ -24,23 +24,25 @@ try {
     $stmt = $pdo->query("SELECT COUNT(*) AS unpaid FROM registrations WHERE payment_status = 'not_paid'");
     $unpaid = $stmt->fetchColumn();
     
-    // Recent registrations
-    $stmt = $pdo->query("
-        SELECT 
-            r.id, 
-            r.fullname, 
-            r.organization, 
-            r.email,
-            r.phone,
-            r.is_approved, 
-            r.payment_status, 
-            DATE_FORMAT(r.created_at, '%d/%m/%Y %H:%i') as formatted_date,
-            DATE_FORMAT(r.created_at, '%Y-%m-%d') as date_for_chart
-        FROM registrations r 
-        ORDER BY r.created_at DESC 
-        LIMIT 5
-    ");
-    $recent_registrations = $stmt->fetchAll(PDO::FETCH_ASSOC);
+   // Recent registrations with payment files
+$stmt = $pdo->query("
+SELECT 
+    r.id, 
+    r.fullname, 
+    r.organization, 
+    r.email,
+    r.phone,
+    r.is_approved, 
+    r.payment_status, 
+    DATE_FORMAT(r.created_at, '%d/%m/%Y %H:%i') as formatted_date,
+    DATE_FORMAT(r.created_at, '%Y-%m-%d') as date_for_chart,
+    (SELECT rf.file_path FROM registration_files rf WHERE rf.registration_id = r.id LIMIT 1) as payment_file_path,
+    (SELECT rf.file_type FROM registration_files rf WHERE rf.registration_id = r.id LIMIT 1) as payment_file_type
+FROM registrations r 
+ORDER BY r.created_at DESC 
+LIMIT 5
+");
+$recent_registrations = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
     // Registration trends for chart (last 7 days)
     $stmt = $pdo->query("
@@ -239,13 +241,13 @@ try {
             font-size: 1.8rem;
             font-weight: 700;
             margin-bottom: 0.2rem;
-            color: #333;
+            color: white;
         }
 
         .stat-info p {
             font-size: 0.9rem;
             margin: 0;
-            color: #666;
+            color: white;
         }
 
         .bg-primary-gradient {
@@ -460,6 +462,21 @@ try {
             font-size: 0.8rem;
             color: #666;
         }
+        .payment-thumbnail {
+                border-radius: 4px;
+                border: 1px solid rgba(0,0,0,0.1);
+                transition: transform 0.2s;
+            }
+
+            .payment-thumbnail:hover {
+                transform: scale(1.1);
+                box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            }
+
+            #paymentProofImage {
+                max-height: 70vh;
+                object-fit: contain;
+            }
     </style>
 </head>
 <body>
@@ -650,59 +667,75 @@ try {
                             </div>
                             <div class="card-body p-0">
                                 <div class="table-responsive">
-                                    <table class="table mb-0">
-                                        <thead>
-                                            <tr>
-                                                <th>วันที่</th>
-                                                <th>ชื่อ-นามสกุล</th>
-                                                <th>หน่วยงาน</th>
-                                                <th>สถานะ</th>
-                                                <th>การชำระเงิน</th>
-                                                <th>การจัดการ</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php if (empty($recent_registrations)): ?>
-                                            <tr>
-                                                <td colspan="6" class="text-center">ไม่พบข้อมูลการลงทะเบียน</td>
-                                            </tr>
-                                            <?php else: ?>
-                                                <?php foreach ($recent_registrations as $reg): ?>
-                                                <tr>
-                                                    <td><?php echo $reg['formatted_date']; ?></td>
-                                                    <td><?php echo htmlspecialchars($reg['fullname']); ?></td>
-                                                    <td><?php echo htmlspecialchars($reg['organization']); ?></td>
-                                                    <td>
-                                                        <?php if ($reg['is_approved']): ?>
-                                                        <span class="status-badge bg-success">อนุมัติแล้ว</span>
-                                                        <?php else: ?>
-                                                        <span class="status-badge bg-warning">รอการอนุมัติ</span>
-                                                        <?php endif; ?>
-                                                    </td>
-                                                    <td>
-                                                        <?php if ($reg['payment_status'] == 'paid'): ?>
-                                                        <span class="status-badge bg-success">ชำระแล้ว</span>
-                                                        <?php else: ?>
-                                                        <span class="status-badge bg-danger">ยังไม่ชำระ</span>
-                                                        <?php endif; ?>
-                                                    </td>
-                                                    <td>
-                                                        <div class="btn-group">
-                                                            <a href="registration_detail.php?id=<?php echo $reg['id']; ?>" class="btn btn-sm btn-primary">
-                                                                <i class="fas fa-eye"></i>
-                                                            </a>
-                                                            <?php if (!$reg['is_approved']): ?>
-                                                            <button class="btn btn-sm btn-success" onclick="approveRegistration(<?php echo $reg['id']; ?>)">
-                                                                <i class="fas fa-check"></i>
-                                                            </button>
-                                                            <?php endif; ?>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                                <?php endforeach; ?>
-                                            <?php endif; ?>
-                                        </tbody>
-                                    </table>
+                                <table class="table mb-0">
+    <thead>
+        <tr>
+            <th>วันที่</th>
+            <th>ชื่อ-นามสกุล</th>
+            <th>หน่วยงาน</th>
+            <th>สถานะ</th>
+            <th>การชำระเงิน</th>
+            <th>หลักฐานการชำระเงิน</th>
+            <th>การจัดการ</th>
+        </tr>
+    </thead>
+    <tbody>
+        <?php if (empty($recent_registrations)): ?>
+        <tr>
+            <td colspan="7" class="text-center">ไม่พบข้อมูลการลงทะเบียน</td>
+        </tr>
+        <?php else: ?>
+            <?php foreach ($recent_registrations as $reg): ?>
+            <tr>
+                <td><?php echo $reg['formatted_date']; ?></td>
+                <td><?php echo htmlspecialchars($reg['fullname']); ?></td>
+                <td><?php echo htmlspecialchars($reg['organization']); ?></td>
+                <td>
+                    <?php if ($reg['is_approved']): ?>
+                    <span class="status-badge bg-success">อนุมัติแล้ว</span>
+                    <?php else: ?>
+                    <span class="status-badge bg-warning">รอการอนุมัติ</span>
+                    <?php endif; ?>
+                </td>
+                <td>
+                    <?php if ($reg['payment_status'] == 'paid'): ?>
+                    <span class="status-badge bg-success">ชำระแล้ว</span>
+                    <?php else: ?>
+                    <span class="status-badge bg-danger">ยังไม่ชำระ</span>
+                    <?php endif; ?>
+                </td>
+                <td>
+                    <?php if (!empty($reg['payment_file_path'])): ?>
+                        <?php if (strpos($reg['payment_file_type'], 'image') !== false): ?>
+                            <img src="../<?php echo $reg['payment_file_path']; ?>" alt="หลักฐานการชำระเงิน" 
+                                 class="payment-thumbnail" style="height: 40px; cursor: pointer;" 
+                                 onclick="showPaymentProof('../<?php echo $reg['payment_file_path']; ?>', '<?php echo htmlspecialchars($reg['fullname']); ?>')">
+                        <?php else: ?>
+                            <a href="../<?php echo $reg['payment_file_path']; ?>" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-file"></i>
+                            </a>
+                        <?php endif; ?>
+                    <?php else: ?>
+                        <span class="text-muted">-</span>
+                    <?php endif; ?>
+                </td>
+                <td>
+                    <div class="btn-group">
+                        <a href="registration_detail.php?id=<?php echo $reg['id']; ?>" class="btn btn-sm btn-primary">
+                            <i class="fas fa-eye"></i>
+                        </a>
+                        <?php if (!$reg['is_approved']): ?>
+                        <button class="btn btn-sm btn-success" onclick="approveRegistration(<?php echo $reg['id']; ?>)">
+                            <i class="fas fa-check"></i>
+                        </button>
+                        <?php endif; ?>
+                    </div>
+                </td>
+            </tr>
+            <?php endforeach; ?>
+        <?php endif; ?>
+    </tbody>
+</table>
                                 </div>
                             </div>
                         </div>
@@ -745,6 +778,15 @@ try {
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <script>
+        // ฟังก์ชันแสดงรูปภาพหลักฐานการชำระเงิน
+            function showPaymentProof(imagePath, fullname) {
+                document.getElementById('paymentProofImage').src = imagePath;
+                document.getElementById('paymentProofModalLabel').textContent = 'หลักฐานการชำระเงิน - ' + fullname;
+                
+                // เปิด Modal
+                var paymentModal = new bootstrap.Modal(document.getElementById('paymentProofModal'));
+                paymentModal.show();
+            }
         document.addEventListener('DOMContentLoaded', function () {
             // Sidebar toggle for mobile
             const sidebarToggle = document.getElementById('sidebarToggle');
