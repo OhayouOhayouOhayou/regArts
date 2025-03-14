@@ -322,12 +322,7 @@ require_once '../config/database.php';
                             <span>รายการลงทะเบียน</span>
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a href="pending_approval.php" class="nav-link">
-                            <i class="fas fa-clock"></i>
-                            <span>รอการอนุมัติ</span>
-                        </a>
-                    </li>
+             
                     <li class="nav-item">
                     <a href="approved.php" class="nav-link">
                             <i class="fas fa-check-circle"></i>

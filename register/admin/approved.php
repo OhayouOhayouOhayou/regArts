@@ -604,12 +604,7 @@ foreach ($admin_stats_raw as $stat) {
                             <span>รายการลงทะเบียน</span>
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a href="pending_approval.php" class="nav-link">
-                            <i class="fas fa-clock"></i>
-                            <span>รอการอนุมัติ</span>
-                        </a>
-                    </li>
+                
                     <li class="nav-item">
                         <a href="approved.php" class="nav-link active">
                             <i class="fas fa-check-circle"></i>

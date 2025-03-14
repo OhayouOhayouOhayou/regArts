@@ -533,15 +533,7 @@ $recent_registrations = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <span>รายการลงทะเบียน</span>
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a href="pending_approval.php" class="nav-link">
-                            <i class="fas fa-clock"></i>
-                            <span>รอการอนุมัติ</span>
-                            <?php if ($pending > 0): ?>
-                            <span class="badge bg-danger rounded-pill ms-auto"><?php echo $pending; ?></span>
-                            <?php endif; ?>
-                        </a>
-                    </li>
+                
                     <li class="nav-item">
                     <a href="approved.php" class="nav-link">
                             <i class="fas fa-check-circle"></i>
