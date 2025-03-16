@@ -1218,6 +1218,166 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
             });
         });
     });
+
+    // ฟังก์ชันสำหรับพิมพ์ข้อมูลการลงทะเบียน
+function printRegistration() {
+    // เตรียมหน้าสำหรับพิมพ์
+    let printWindow = window.open('', '_blank');
+    let registrationId = <?php echo $registration_id; ?>;
+    
+    // โหลดข้อมูลและแสดงในรูปแบบที่เหมาะสำหรับการพิมพ์
+    $.ajax({
+        url: 'print_registration.php',
+        type: 'GET',
+        data: { id: registrationId },
+        success: function(response) {
+            printWindow.document.write(response);
+            printWindow.document.close();
+            printWindow.focus();
+            // เริ่มการพิมพ์หลังจากโหลดเสร็จ
+            setTimeout(function() {
+                printWindow.print();
+            }, 500);
+        },
+        error: function() {
+            printWindow.close();
+            Swal.fire({
+                icon: 'error',
+                title: 'เกิดข้อผิดพลาด',
+                text: 'ไม่สามารถพิมพ์ข้อมูลได้ กรุณาลองใหม่อีกครั้ง',
+            });
+        }
+    });
+}
+
+// ฟังก์ชันสำหรับส่งอีเมลยืนยันการลงทะเบียน
+function sendConfirmation() {
+    let registrationId = <?php echo $registration_id; ?>;
+    let email = '<?php echo $registration['email']; ?>';
+    let fullname = '<?php echo $registration['fullname']; ?>';
+    let paymentStatus = '<?php echo $registration['payment_status']; ?>';
+    
+    Swal.fire({
+        title: 'ยืนยันการส่งอีเมล',
+        text: `ต้องการส่งอีเมลยืนยันไปยัง ${email} ใช่หรือไม่?`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'ใช่, ส่งอีเมล',
+        cancelButtonText: 'ยกเลิก',
+        reverseButtons: true
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // แสดง loading
+            Swal.fire({
+                title: 'กำลังส่งอีเมล...',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+            
+            // ส่งคำขอไปยัง API
+            $.ajax({
+                url: 'api/send_confirmation_email.php',
+                type: 'POST',
+                data: { 
+                    id: registrationId,
+                    email: email,
+                    fullname: fullname,
+                    payment_status: paymentStatus
+                },
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success) {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'ส่งอีเมลสำเร็จ',
+                            text: 'ระบบได้ส่งอีเมลยืนยันไปยังผู้ลงทะเบียนเรียบร้อยแล้ว'
+                        });
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'เกิดข้อผิดพลาด',
+                            text: response.message || 'ไม่สามารถส่งอีเมลได้ กรุณาลองใหม่อีกครั้ง'
+                        });
+                    }
+                },
+                error: function() {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'เกิดข้อผิดพลาด',
+                        text: 'ไม่สามารถเชื่อมต่อกับระบบได้ กรุณาลองใหม่อีกครั้ง'
+                    });
+                }
+            });
+        }
+    });
+}
+
+// ฟังก์ชันสำหรับลบข้อมูลการลงทะเบียน
+function deleteRegistration() {
+    let registrationId = <?php echo $registration_id; ?>;
+    
+    Swal.fire({
+        title: 'ยืนยันการลบ',
+        text: 'คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลการลงทะเบียนนี้? การกระทำนี้ไม่สามารถเปลี่ยนกลับได้',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'ใช่, ลบข้อมูล',
+        cancelButtonText: 'ยกเลิก',
+        confirmButtonColor: '#d33',
+        reverseButtons: true
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // ขอยืนยันอีกครั้ง
+            Swal.fire({
+                title: 'ยืนยันการลบอีกครั้ง',
+                text: 'ข้อมูลทั้งหมดรวมถึงเอกสารที่อัปโหลดจะถูกลบถาวร',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'ใช่, ลบถาวร',
+                cancelButtonText: 'ยกเลิก',
+                confirmButtonColor: '#d33',
+                reverseButtons: true
+            }).then((innerResult) => {
+                if (innerResult.isConfirmed) {
+                    // ส่งคำขอลบไปยัง API
+                    $.ajax({
+                        url: 'api/delete_registration.php',
+                        type: 'POST',
+                        data: { id: registrationId },
+                        dataType: 'json',
+                        success: function(response) {
+                            if (response.success) {
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'ลบข้อมูลสำเร็จ',
+                                    text: 'ระบบได้ลบข้อมูลการลงทะเบียนเรียบร้อยแล้ว',
+                                    confirmButtonText: 'ตกลง'
+                                }).then(() => {
+                                    window.location.href = 'registrations.php';
+                                });
+                            } else {
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'เกิดข้อผิดพลาด',
+                                    text: response.message || 'ไม่สามารถลบข้อมูลได้ กรุณาลองใหม่อีกครั้ง'
+                                });
+                            }
+                        },
+                        error: function() {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'เกิดข้อผิดพลาด',
+                                text: 'ไม่สามารถเชื่อมต่อกับระบบได้ กรุณาลองใหม่อีกครั้ง'
+                            });
+                        }
+                    });
+                }
+            });
+        }
+    });
+}
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
