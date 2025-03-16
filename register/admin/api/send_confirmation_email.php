@@ -1,188 +1,295 @@
 <?php
-require_once '../../config/database.php';
+// ตั้งค่าการแสดงข้อผิดพลาดให้เห็นทั้งหมด (ให้ใช้เฉพาะตอนพัฒนาเท่านั้น)
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 
-// รับข้อมูลจาก POST request
-$registration_id = isset($_POST['id']) ? intval($_POST['id']) : 0;
-$email = isset($_POST['email']) ? $_POST['email'] : '';
-$fullname = isset($_POST['fullname']) ? $_POST['fullname'] : '';
-$payment_status = isset($_POST['payment_status']) ? $_POST['payment_status'] : 'not_paid';
-
-// ตรวจสอบข้อมูล
-if ($registration_id <= 0 || empty($email)) {
-    echo json_encode(['success' => false, 'message' => 'ข้อมูลไม่ครบถ้วน']);
-    exit;
+// ตรวจสอบว่า PHPMailer ติดตั้งแล้วหรือไม่และนำเข้าคลาส
+$phpmailer_installed = false;
+if (file_exists('../../vendor/autoload.php')) {
+    require '../../vendor/autoload.php';
+    // นำเข้าคลาสให้ถูกต้อง - ต้องอยู่ระดับบนสุด
+    if (class_exists('PHPMailer\PHPMailer\PHPMailer')) {
+        use PHPMailer\PHPMailer\PHPMailer;
+        use PHPMailer\PHPMailer\SMTP;
+        use PHPMailer\PHPMailer\Exception;
+        $phpmailer_installed = true;
+    }
 }
 
-// เตรียมข้อมูลอีเมล
-$database = new Database();
-$pdo = $database->getConnection();
-
-// ดึงข้อมูลเพิ่มเติมจากฐานข้อมูล (ถ้าจำเป็น)
-$stmt = $pdo->prepare("SELECT * FROM registrations WHERE id = ?");
-$stmt->execute([$registration_id]);
-$registration = $stmt->fetch(PDO::FETCH_ASSOC);
-
-if (!$registration) {
-    echo json_encode(['success' => false, 'message' => 'ไม่พบข้อมูลการลงทะเบียน']);
-    exit;
-}
-
-// กำหนดหัวข้ออีเมล
-$subject = 'ยืนยันการลงทะเบียนการสัมมนา - มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ';
-
-// กำหนดเนื้อหาอีเมล
-if ($payment_status == 'paid') {
-    // กรณีชำระเงินแล้ว
-    $message = '<div style="font-family: \'Sarabun\', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 5px; background-color: #ffffff;">
-    <div style="text-align: center; margin-bottom: 20px;">
-        <img src="https://arts.rmutsb.ac.th/image/logo_art_2019.png" alt="Logo" style="max-width: 200px;">
-        <h2 style="color: #1a237e; margin-top: 15px;">ยืนยันการลงทะเบียนสัมมนา</h2>
-    </div>
-    
-    <p style="margin-bottom: 15px;">เรียน คุณ'.$fullname.'</p>
-    
-    <p style="margin-bottom: 15px;">มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ ขอขอบคุณที่ท่านได้ลงทะเบียนเข้าร่วมการสัมมนา</p>
-    
-    <div style="background-color: #f5f7fa; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-        <p style="font-weight: bold; color: #1a237e; margin-top: 0;">สถานะการลงทะเบียน: <span style="color: #4caf50;">ลงทะเบียนและชำระเงินเรียบร้อยแล้ว</span></p>
-    </div>
-    
-    <div style="margin-bottom: 20px;">
-        <h3 style="color: #1a237e; font-size: 18px; border-bottom: 1px solid #eaeaea; padding-bottom: 10px;">ข้อมูลสำคัญ</h3>
-        <ul style="padding-left: 20px;">
-            <li style="margin-bottom: 10px;">กรุณาตรวจสอบความถูกต้องของชื่อ-นามสกุลที่ใช้ในการลงทะเบียน</li>
-            <li style="margin-bottom: 10px;">กรุณาตรวจสอบความถูกต้องของที่อยู่สำหรับการออกใบเสร็จ</li>
-            <li style="margin-bottom: 10px;">ท่านสามารถสแกน QR Code เพื่อจองห้องพักโรงแรมในอัตราพิเศษสำหรับผู้เข้าร่วมสัมมนา</li>
-            <li style="margin-bottom: 10px;">เข้าร่วมกลุ่ม Line OA สำหรับรับข่าวสารและอัพเดทล่าสุดเกี่ยวกับการสัมมนา</li>
-        </ul>
-    </div>
-    
-    <div style="display: flex; justify-content: center; gap: 20px; margin-bottom: 20px;">
-        <div style="text-align: center;">
-            <p style="font-weight: bold; margin-bottom: 10px;">จองห้องพัก</p>
-            <img src="https://arts.rmutsb.ac.th/storage/content_picture/cp20250315123535.jpg" alt="QR Code สำหรับจองห้องพัก" style="width: 120px; height: 120px;">
-        </div>
-        <div style="text-align: center;">
-            <p style="font-weight: bold; margin-bottom: 10px;">Line OA</p>
-            <img src="https://arts.rmutsb.ac.th/storage/content_picture/cp20250307131841.jpg" alt="QR Code สำหรับ Line OA" style="width: 120px; height: 120px;">
-        </div>
-    </div>
-    
-    <div style="background-color: #1a237e; color: white; padding: 15px; border-radius: 5px; margin-top: 20px; text-align: center;">
-        <p style="margin: 0;">หากมีข้อสงสัยประการใด กรุณาติดต่อเจ้าหน้าที่ได้ที่ <a href="mailto:arts@rmutsb.ac.th" style="color: white;">arts@rmutsb.ac.th</a> หรือโทร. 095-543-9933</p>
-    </div>
-</div>';
-} else {
-    // กรณียังไม่ชำระเงิน
-    $message = '<div style="font-family: \'Sarabun\', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 5px; background-color: #ffffff;">
-    <div style="text-align: center; margin-bottom: 20px;">
-        <img src="https://arts.rmutsb.ac.th/image/logo_art_2019.png" alt="Logo" style="max-width: 200px;">
-        <h2 style="color: #1a237e; margin-top: 15px;">ยืนยันการลงทะเบียนสัมมนา</h2>
-    </div>
-    
-    <p style="margin-bottom: 15px;">เรียน คุณ'.$fullname.'</p>
-    
-    <p style="margin-bottom: 15px;">มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ ขอขอบคุณที่ท่านได้ลงทะเบียนเข้าร่วมการสัมมนา</p>
-    
-    <div style="background-color: #f5f7fa; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-        <p style="font-weight: bold; color: #1a237e; margin-top: 0;">สถานะการลงทะเบียน: <span style="color: #ff9800;">ลงทะเบียนเรียบร้อยแล้ว (รอชำระเงิน)</span></p>
-        <p style="margin-bottom: 0;">กรุณาชำระค่าลงทะเบียนและแจ้งการชำระเงินเพื่อยืนยันการเข้าร่วมสัมมนา</p>
-    </div>
-    
-    <div style="margin-bottom: 20px;">
-        <h3 style="color: #1a237e; font-size: 18px; border-bottom: 1px solid #eaeaea; padding-bottom: 10px;">ข้อมูลการชำระเงิน</h3>
-        <ul style="padding-left: 20px;">
-            <li style="margin-bottom: 10px;"><strong>ค่าลงทะเบียนสัมมนา:</strong> 3,900 บาท ต่อท่าน</li>
-            <li style="margin-bottom: 10px;"><strong>ช่องทางการชำระเงิน:</strong>
-                <ul style="padding-left: 20px; margin-top: 5px;">
-                    <li style="margin-bottom: 5px;">โอนผ่านธนาคารกรุงไทย สาขาโรจนะ</li>
-                    <li style="margin-bottom: 5px;">ชื่อบัญชี: "มทร.สุวรรณภูมิ เงินรายได้"</li>
-                    <li style="margin-bottom: 5px;">เลขที่บัญชี: 128-028-9392</li>
-                </ul>
-            </li>
-            <li style="margin-bottom: 10px;">สามารถชำระเงินหน้างานเป็นเงินสดได้</li>
-        </ul>
-    </div>
-    
-    <div style="margin-bottom: 20px;">
-        <h3 style="color: #1a237e; font-size: 18px; border-bottom: 1px solid #eaeaea; padding-bottom: 10px;">คำแนะนำเพิ่มเติม</h3>
-        <ul style="padding-left: 20px;">
-            <li style="margin-bottom: 10px;">กรุณาตรวจสอบความถูกต้องของชื่อ-นามสกุลที่ใช้ในการลงทะเบียน</li>
-            <li style="margin-bottom: 10px;">กรุณาตรวจสอบความถูกต้องของที่อยู่สำหรับการออกใบเสร็จ</li>
-            <li style="margin-bottom: 10px;">ท่านสามารถสแกน QR Code เพื่อจองห้องพักโรงแรมในอัตราพิเศษสำหรับผู้เข้าร่วมสัมมนา</li>
-            <li style="margin-bottom: 10px;">เข้าร่วมกลุ่ม Line OA สำหรับรับข่าวสารและอัพเดทล่าสุดเกี่ยวกับการสัมมนา</li>
-        </ul>
-    </div>
-    
-    <div style="display: flex; justify-content: center; gap: 20px; margin-bottom: 20px;">
-        <div style="text-align: center;">
-            <p style="font-weight: bold; margin-bottom: 10px;">จองห้องพัก</p>
-            <img src="https://arts.rmutsb.ac.th/storage/content_picture/cp20250315123535.jpg" alt="QR Code สำหรับจองห้องพัก" style="width: 120px; height: 120px;">
-        </div>
-        <div style="text-align: center;">
-            <p style="font-weight: bold; margin-bottom: 10px;">Line OA</p>
-            <img src="https://arts.rmutsb.ac.th/storage/content_picture/cp20250307131841.jpg" alt="QR Code สำหรับ Line OA" style="width: 120px; height: 120px;">
-        </div>
-    </div>
-    
-    <div style="background-color: #1a237e; color: white; padding: 15px; border-radius: 5px; margin-top: 20px; text-align: center;">
-        <p style="margin: 0;">หากมีข้อสงสัยประการใด กรุณาติดต่อเจ้าหน้าที่ได้ที่ <a href="mailto:arts@rmutsb.ac.th" style="color: white;">arts@rmutsb.ac.th</a> หรือโทร. 034-XXX-XXX</p>
-    </div>
-</div>';
-}
-
-require '../../vendor/autoload.php'; // ต้องติดตั้ง PHPMailer ผ่าน Composer ก่อน
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\SMTP;
-use PHPMailer\PHPMailer\Exception;
-
-$mail = new PHPMailer(true);
+// สร้างไฟล์สำหรับบันทึกข้อผิดพลาด
+$error_log_file = __DIR__ . '/email_error.log';
+file_put_contents($error_log_file, "--- เริ่มการทำงาน " . date('Y-m-d H:i:s') . " ---\n", FILE_APPEND);
 
 try {
-    // ตั้งค่า SMTP สำหรับ Gmail
-    $mail->isSMTP();
-    $mail->Host       = 'smtp.gmail.com';
-    $mail->SMTPAuth   = true;
-    $mail->Username   = 'arts@rmutsb.ac.th';
-    $mail->Password   = 'artsrus6';
-    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-    $mail->Port       = 587;
-    $mail->CharSet    = 'UTF-8';
+    require_once '../../config/database.php';
 
-    // ตั้งค่าผู้ส่งและผู้รับ
-    $mail->setFrom('arts@rmutsb.ac.th', 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ');
-    $mail->addAddress($email, $fullname);
-    $mail->addReplyTo('arts@rmutsb.ac.th', 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ');
+    // บันทึกข้อมูลที่ได้รับมา
+    $log_msg = "กำลังเริ่มกระบวนการส่งอีเมล\n";
+    file_put_contents($error_log_file, $log_msg, FILE_APPEND);
 
-    // เนื้อหาอีเมล
-    $mail->isHTML(true);
-    $mail->Subject = $subject;
-    $mail->Body    = $message;
-    $mail->AltBody = strip_tags(str_replace(['<br>', '</p>'], ["\n", "\n\n"], $message));
+    // รับข้อมูลจาก POST request
+    $registration_id = isset($_POST['id']) ? intval($_POST['id']) : 0;
+    $email = isset($_POST['email']) ? $_POST['email'] : '';
+    $fullname = isset($_POST['fullname']) ? $_POST['fullname'] : '';
+    $payment_status = isset($_POST['payment_status']) ? $_POST['payment_status'] : 'not_paid';
 
-    // ส่งอีเมล
-    $mail->send();
+    $log_msg = "ข้อมูลที่ได้รับ: registration_id=$registration_id, email=$email, payment_status=$payment_status\n";
+    file_put_contents($error_log_file, $log_msg, FILE_APPEND);
 
-    // บันทึกประวัติการส่งอีเมล
+    // ตรวจสอบข้อมูล
+    if ($registration_id <= 0 || empty($email)) {
+        $log_msg = "ข้อมูลไม่ครบถ้วน\n";
+        file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+        echo json_encode(['success' => false, 'message' => 'ข้อมูลไม่ครบถ้วน']);
+        exit;
+    }
+
+    // เตรียมข้อมูลอีเมล
+    $log_msg = "กำลังเชื่อมต่อฐานข้อมูล\n";
+    file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+    
+    $database = new Database();
+    $pdo = $database->getConnection();
+
+    $log_msg = "เชื่อมต่อฐานข้อมูลสำเร็จ\n";
+    file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+
+    // ดึงข้อมูลเพิ่มเติมจากฐานข้อมูล
+    $stmt = $pdo->prepare("SELECT * FROM registrations WHERE id = ?");
+    $stmt->execute([$registration_id]);
+    $registration = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$registration) {
+        $log_msg = "ไม่พบข้อมูลการลงทะเบียน ID: $registration_id\n";
+        file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+        echo json_encode(['success' => false, 'message' => 'ไม่พบข้อมูลการลงทะเบียน']);
+        exit;
+    }
+
+    $log_msg = "ดึงข้อมูลการลงทะเบียนสำเร็จ\n";
+    file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+
+    // กำหนดหัวข้ออีเมล
+    $subject = 'ยืนยันการลงทะเบียนการสัมมนา - มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ';
+
+    // กำหนดเนื้อหาอีเมล
+    if ($payment_status == 'paid') {
+        // กรณีชำระเงินแล้ว
+        $message = '<div style="font-family: \'Sarabun\', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 5px; background-color: #ffffff;">
+        <div style="text-align: center; margin-bottom: 20px;">
+            <img src="https://arts.rmutsb.ac.th/image/logo_art_2019.png" alt="Logo" style="max-width: 200px;">
+            <h2 style="color: #1a237e; margin-top: 15px;">ยืนยันการลงทะเบียนสัมมนา</h2>
+        </div>
+        
+        <p style="margin-bottom: 15px;">เรียน คุณ'.$fullname.'</p>
+        
+        <p style="margin-bottom: 15px;">มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ ขอขอบคุณที่ท่านได้ลงทะเบียนเข้าร่วมการสัมมนา</p>
+        
+        <div style="background-color: #f5f7fa; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+            <p style="font-weight: bold; color: #1a237e; margin-top: 0;">สถานะการลงทะเบียน: <span style="color: #4caf50;">ลงทะเบียนและชำระเงินเรียบร้อยแล้ว</span></p>
+            <p style="margin-bottom: 0;">กรุณารอการตรวจสอบจากเจ้าหน้าที่อีกครั้ง ท่านจะได้รับอีเมลยืนยันเมื่อการลงทะเบียนได้รับการอนุมัติ</p>
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+            <h3 style="color: #1a237e; font-size: 18px; border-bottom: 1px solid #eaeaea; padding-bottom: 10px;">ข้อมูลสำคัญ</h3>
+            <ul style="padding-left: 20px;">
+                <li style="margin-bottom: 10px;">กรุณาตรวจสอบความถูกต้องของชื่อ-นามสกุลที่ใช้ในการลงทะเบียน</li>
+                <li style="margin-bottom: 10px;">กรุณาตรวจสอบความถูกต้องของที่อยู่สำหรับการออกใบเสร็จ</li>
+                <li style="margin-bottom: 10px;">ท่านสามารถสแกน QR Code เพื่อจองห้องพักโรงแรมในอัตราพิเศษสำหรับผู้เข้าร่วมสัมมนา</li>
+                <li style="margin-bottom: 10px;">เข้าร่วมกลุ่ม Line OA สำหรับรับข่าวสารและอัพเดทล่าสุดเกี่ยวกับการสัมมนา</li>
+            </ul>
+        </div>
+        
+        <div style="background-color: #1a237e; color: white; padding: 15px; border-radius: 5px; margin-top: 20px; text-align: center;">
+            <p style="margin: 0;">หากมีข้อสงสัยประการใด กรุณาติดต่อเจ้าหน้าที่ได้ที่ <a href="mailto:arts@rmutsb.ac.th" style="color: white;">arts@rmutsb.ac.th</a> หรือโทร. 034-XXX-XXX</p>
+        </div>
+    </div>';
+    } else {
+        // กรณียังไม่ชำระเงิน
+        $message = '<div style="font-family: \'Sarabun\', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 5px; background-color: #ffffff;">
+        <div style="text-align: center; margin-bottom: 20px;">
+            <img src="https://arts.rmutsb.ac.th/image/logo_art_2019.png" alt="Logo" style="max-width: 200px;">
+            <h2 style="color: #1a237e; margin-top: 15px;">ยืนยันการลงทะเบียนสัมมนา</h2>
+        </div>
+        
+        <p style="margin-bottom: 15px;">เรียน คุณ'.$fullname.'</p>
+        
+        <p style="margin-bottom: 15px;">มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ ขอขอบคุณที่ท่านได้ลงทะเบียนเข้าร่วมการสัมมนา</p>
+        
+        <div style="background-color: #f5f7fa; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+            <p style="font-weight: bold; color: #1a237e; margin-top: 0;">สถานะการลงทะเบียน: <span style="color: #ff9800;">ลงทะเบียนเรียบร้อยแล้ว (รอชำระเงิน)</span></p>
+            <p style="margin-bottom: 0;">กรุณาชำระค่าลงทะเบียนและแจ้งการชำระเงินเพื่อยืนยันการเข้าร่วมสัมมนา</p>
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+            <h3 style="color: #1a237e; font-size: 18px; border-bottom: 1px solid #eaeaea; padding-bottom: 10px;">ข้อมูลการชำระเงิน</h3>
+            <ul style="padding-left: 20px;">
+                <li style="margin-bottom: 10px;"><strong>ค่าลงทะเบียนสัมมนา:</strong> 3,900 บาท ต่อท่าน</li>
+                <li style="margin-bottom: 10px;"><strong>ช่องทางการชำระเงิน:</strong>
+                    <ul style="padding-left: 20px; margin-top: 5px;">
+                        <li style="margin-bottom: 5px;">โอนผ่านธนาคารกรุงไทย สาขาโรจนะ</li>
+                        <li style="margin-bottom: 5px;">ชื่อบัญชี: "มทร.สุวรรณภูมิ เงินรายได้"</li>
+                        <li style="margin-bottom: 5px;">เลขที่บัญชี: 128-028-9392</li>
+                    </ul>
+                </li>
+                <li style="margin-bottom: 10px;">สามารถชำระเงินหน้างานเป็นเงินสดได้</li>
+            </ul>
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+            <h3 style="color: #1a237e; font-size: 18px; border-bottom: 1px solid #eaeaea; padding-bottom: 10px;">คำแนะนำเพิ่มเติม</h3>
+            <ul style="padding-left: 20px;">
+                <li style="margin-bottom: 10px;">กรุณาตรวจสอบความถูกต้องของชื่อ-นามสกุลที่ใช้ในการลงทะเบียน</li>
+                <li style="margin-bottom: 10px;">กรุณาตรวจสอบความถูกต้องของที่อยู่สำหรับการออกใบเสร็จ</li>
+                <li style="margin-bottom: 10px;">ท่านสามารถสแกน QR Code เพื่อจองห้องพักโรงแรมในอัตราพิเศษสำหรับผู้เข้าร่วมสัมมนา</li>
+                <li style="margin-bottom: 10px;">เข้าร่วมกลุ่ม Line OA สำหรับรับข่าวสารและอัพเดทล่าสุดเกี่ยวกับการสัมมนา</li>
+            </ul>
+        </div>
+        
+        <div style="background-color: #1a237e; color: white; padding: 15px; border-radius: 5px; margin-top: 20px; text-align: center;">
+            <p style="margin: 0;">หากมีข้อสงสัยประการใด กรุณาติดต่อเจ้าหน้าที่ได้ที่ <a href="mailto:arts@rmutsb.ac.th" style="color: white;">arts@rmutsb.ac.th</a> หรือโทร. 034-XXX-XXX</p>
+        </div>
+    </div>';
+    }
+
+    $log_msg = "สร้างเนื้อหาอีเมลเรียบร้อย\n";
+    file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+
+    // ตรวจสอบว่ามีตาราง email_logs หรือไม่
     try {
-        $stmt = $pdo->prepare("INSERT INTO email_logs (registration_id, email, subject, message, sent_at, status) VALUES (?, ?, ?, ?, NOW(), 'success')");
-        $stmt->execute([$registration_id, $email, $subject, $message]);
+        $stmt = $pdo->query("SHOW TABLES LIKE 'email_logs'");
+        if ($stmt->rowCount() == 0) {
+            $log_msg = "ไม่พบตาราง email_logs กำลังสร้างตาราง...\n";
+            file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+            
+            // สร้างตาราง email_logs
+            $sql = "CREATE TABLE `email_logs` (
+                `id` int(11) NOT NULL AUTO_INCREMENT,
+                `registration_id` int(11) NOT NULL,
+                `email` varchar(255) NOT NULL,
+                `subject` varchar(255) NOT NULL,
+                `sent_at` datetime NOT NULL,
+                `status` enum('success','failed') NOT NULL DEFAULT 'success',
+                `error_message` text,
+                PRIMARY KEY (`id`),
+                KEY `registration_id` (`registration_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
+            
+            $pdo->exec($sql);
+            $log_msg = "สร้างตาราง email_logs สำเร็จ\n";
+            file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+        } else {
+            $log_msg = "พบตาราง email_logs แล้ว\n";
+            file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+        }
     } catch (PDOException $e) {
-        // หากไม่สามารถบันทึกประวัติได้ ให้เก็บบันทึกข้อผิดพลาด แต่ยังคงถือว่าส่งอีเมลสำเร็จ
-        error_log('ไม่สามารถบันทึกประวัติการส่งอีเมล: ' . $e->getMessage());
+        $log_msg = "เกิดข้อผิดพลาดในการตรวจสอบหรือสร้างตาราง email_logs: " . $e->getMessage() . "\n";
+        file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+    }
+
+    // ทางเลือกที่ 1: ใช้ PHPMailer (ถ้าติดตั้งแล้ว)
+    if ($phpmailer_installed) {
+        $log_msg = "กำลังใช้ PHPMailer...\n";
+        file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+
+        try {
+            $mail = new PHPMailer(true);
+            
+            // บันทึกการทำงานละเอียด
+            $mail->SMTPDebug = 3; // ระดับการบันทึกสูงสุด
+            $mail->Debugoutput = function($str, $level) use ($error_log_file) {
+                file_put_contents($error_log_file, "PHPMailer Debug: $str\n", FILE_APPEND);
+            };
+            
+            // ตั้งค่า SMTP
+            $mail->isSMTP();
+            $mail->Host = 'smtp.gmail.com';
+            $mail->SMTPAuth = true;
+            $mail->Username = 'arts@rmutsb.ac.th';
+            $mail->Password = 'artsrus6'; // ควรใช้ App Password แทน
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+            $mail->Port = 587;
+            $mail->CharSet = 'UTF-8';
+            
+            // ตั้งค่าผู้ส่งและผู้รับ
+            $mail->setFrom('arts@rmutsb.ac.th', 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ');
+            $mail->addAddress($email, $fullname);
+            
+            // เนื้อหาอีเมล
+            $mail->isHTML(true);
+            $mail->Subject = $subject;
+            $mail->Body = $message;
+            
+            // ส่งอีเมล
+            $log_msg = "กำลังส่งอีเมลด้วย PHPMailer...\n";
+            file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+            
+            $mail->send();
+            
+            $log_msg = "ส่งอีเมลสำเร็จด้วย PHPMailer\n";
+            file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+            
+            // บันทึกประวัติว่าส่งสำเร็จ
+            $stmt = $pdo->prepare("INSERT INTO email_logs (registration_id, email, subject, sent_at, status) 
+                                  VALUES (?, ?, ?, NOW(), 'success')");
+            $stmt->execute([$registration_id, $email, $subject]);
+            
+            echo json_encode(['success' => true]);
+            exit;
+        } catch (Exception $e) {
+            $log_msg = "เกิดข้อผิดพลาดในการส่งอีเมลด้วย PHPMailer: " . $e->getMessage() . "\n";
+            file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+            
+            // บันทึกข้อผิดพลาดแต่ให้ทดลองส่งแบบอื่นต่อไป
+        }
     }
     
-    echo json_encode(['success' => true]);
+    // ทางเลือกที่ 2: ใช้ mail() function พื้นฐานของ PHP
+    $log_msg = "กำลังใช้ PHP mail() function...\n";
+    file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+    
+    $headers = "From: คณะศิลปศาสตร์ มทร.สุวรรณภูมิ <arts@rmutsb.ac.th>\r\n";
+    $headers .= "Reply-To: arts@rmutsb.ac.th\r\n";
+    $headers .= "MIME-Version: 1.0\r\n";
+    $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
+    
+    // ส่งอีเมล
+    $mail_sent = mail($email, $subject, $message, $headers);
+    
+    if ($mail_sent) {
+        $log_msg = "ส่งอีเมลสำเร็จด้วย PHP mail() function\n";
+        file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+        
+        // บันทึกประวัติว่าส่งสำเร็จ
+        $stmt = $pdo->prepare("INSERT INTO email_logs (registration_id, email, subject, sent_at, status) 
+                              VALUES (?, ?, ?, NOW(), 'success')");
+        $stmt->execute([$registration_id, $email, $subject]);
+        
+        echo json_encode(['success' => true]);
+    } else {
+        $error = error_get_last();
+        $error_message = $error ? $error['message'] : 'Unknown error';
+        
+        $log_msg = "ส่งอีเมลไม่สำเร็จด้วย PHP mail() function: $error_message\n";
+        file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+        
+        // บันทึกประวัติว่าส่งไม่สำเร็จ
+        $stmt = $pdo->prepare("INSERT INTO email_logs (registration_id, email, subject, sent_at, status, error_message) 
+                              VALUES (?, ?, ?, NOW(), 'failed', ?)");
+        $stmt->execute([$registration_id, $email, $subject, $error_message]);
+        
+        echo json_encode(['success' => false, 'message' => 'ไม่สามารถส่งอีเมลได้: ' . $error_message]);
+    }
+    
 } catch (Exception $e) {
-    // บันทึกข้อผิดพลาดการส่งอีเมล
-    try {
-        $stmt = $pdo->prepare("INSERT INTO email_logs (registration_id, email, subject, message, sent_at, status, error_message) VALUES (?, ?, ?, ?, NOW(), 'failed', ?)");
-        $stmt->execute([$registration_id, $email, $subject, $message, $mail->ErrorInfo]);
-    } catch (PDOException $logError) {
-        // หากไม่สามารถบันทึกประวัติได้ ให้เก็บบันทึกข้อผิดพลาด
-        error_log('ไม่สามารถบันทึกประวัติข้อผิดพลาดการส่งอีเมล: ' . $logError->getMessage());
-    }
+    // จับข้อผิดพลาดทั้งหมด
+    $log_msg = "เกิดข้อผิดพลาดทั่วไป: " . $e->getMessage() . "\n";
+    file_put_contents($error_log_file, $log_msg, FILE_APPEND);
     
-    echo json_encode(['success' => false, 'message' => 'เกิดข้อผิดพลาดในการส่งอีเมล: ' . $mail->ErrorInfo]);
+    echo json_encode(['success' => false, 'message' => 'เกิดข้อผิดพลาด: ' . $e->getMessage()]);
 }
+
+// บันทึกการทำงานเสร็จสิ้น
+file_put_contents($error_log_file, "--- จบการทำงาน " . date('Y-m-d H:i:s') . " ---\n\n", FILE_APPEND);
 ?>
