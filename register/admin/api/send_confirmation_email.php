@@ -1,18 +1,18 @@
 <?php
-// ตั้งค่าการแสดงข้อผิดพลาดให้เห็นทั้งหมด (ให้ใช้เฉพาะตอนพัฒนาเท่านั้น)
+// Include these at the top, outside of any conditional blocks
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\SMTP;
+use PHPMailer\PHPMailer\Exception;
+
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-// ตรวจสอบว่า PHPMailer ติดตั้งแล้วหรือไม่และนำเข้าคลาส
+// Then check for PHPMailer
 $phpmailer_installed = false;
-if (file_exists('vendor/autoload.php')) {
-    require 'vendor/autoload.php';
-    // นำเข้าคลาสให้ถูกต้อง - ต้องอยู่ระดับบนสุด
+if (file_exists(__DIR__ . '/../../../vendor/autoload.php')) {
+    require __DIR__ . '/../../../vendor/autoload.php';
     if (class_exists('PHPMailer\PHPMailer\PHPMailer')) {
-        use PHPMailer\PHPMailer\PHPMailer;
-        use PHPMailer\PHPMailer\SMTP;
-        use PHPMailer\PHPMailer\Exception;
         $phpmailer_installed = true;
     }
 }
