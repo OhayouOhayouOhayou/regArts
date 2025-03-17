@@ -50,9 +50,6 @@ class RegistrationProcessor {
                 error_log("ไม่มีการอัพโหลดหลักฐานการชำระเงิน");
             }
             
-            // ไม่ต้องอัพเดตสถานะชำระเงิน หากไม่มีไฟล์หลักฐานการชำระเงิน
-            // เนื่องจากตอนสร้างข้อมูลการลงทะเบียนจะกำหนดค่าเริ่มต้นเป็น 'pending' ให้อัตโนมัติ
-            
             $conn->commit();
             
             return [
@@ -76,6 +73,7 @@ class RegistrationProcessor {
             'title' => 'คำนำหน้าชื่อ',
             'fullname' => 'ชื่อ-นามสกุล',
             'organization' => 'หน่วยงาน',
+            'position' => 'ตำแหน่ง',
             'phone' => 'เบอร์โทรศัพท์',
             'email' => 'อีเมล'
         ];
@@ -88,11 +86,11 @@ class RegistrationProcessor {
     }
     
     private function saveRegistration($conn, $data) {
-        // สร้างข้อมูลการลงทะเบียนโดยไม่กำหนด payment_status เพื่อให้ใช้ค่าเริ่มต้นจาก DB
+        // สร้างข้อมูลการลงทะเบียนโดยเพิ่มฟิลด์ position
         $sql = "INSERT INTO registrations (
-                    title, title_other, fullname, organization,
+                    title, title_other, fullname, organization, position,
                     phone, email, line_id, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
                 
         $stmt = $conn->prepare($sql);
         $stmt->execute([
@@ -100,6 +98,7 @@ class RegistrationProcessor {
             $data['title'] === 'other' ? $data['title_other'] : null,
             $data['fullname'],
             $data['organization'],
+            $data['position'],
             $data['phone'],
             $data['email'],
             $data['line_id'] ?? null

@@ -436,6 +436,10 @@
                             <option value="other">อื่นๆ</option>
                         </select>
                     </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label required">ชื่อ-นามสกุล</label>
+                        <input type="text" class="form-control" name="fullname" required>
+                    </div>
                     <div class="col-md-3 mb-3 title-other-container d-none">
                         <label class="form-label required">ระบุคำนำหน้าชื่อ</label>
                         <input type="text" class="form-control" name="title_other">
@@ -444,12 +448,12 @@
 
                 <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label class="form-label required">ชื่อ-นามสกุล</label>
-                        <input type="text" class="form-control" name="fullname" required>
-                    </div>
-                    <div class="col-md-6 mb-3">
                         <label class="form-label required">หน่วยงาน</label>
                         <input type="text" class="form-control" name="organization" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label required">ตำแหน่ง</label>
+                        <input type="text" class="form-control" name="position" required>
                     </div>
                 </div>
 
@@ -484,7 +488,6 @@
                 </div>
             </div>
         </div>
-
         <!-- Address Sections -->
         <div class="card">
             <div class="card-header">
