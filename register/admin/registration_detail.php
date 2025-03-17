@@ -147,11 +147,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_registration']
             }
         }
         
-        // Handle approval
+
         if (isset($_POST['is_approved']) && $_POST['is_approved'] != $registration['is_approved']) {
             $is_approved = ($_POST['is_approved'] == '1') ? 1 : 0;
             $approved_at = ($is_approved) ? date('Y-m-d H:i:s') : null;
-            $approved_by = ($is_approved) ? $_SESSION['admin_id'] : null;
+            
+            // ถ้ามี session admin_id ให้ใช้ ถ้าไม่มีให้ใช้ค่า 1 หรือค่าที่กำหนด
+            $admin_id = isset($_SESSION['admin_id']) ? $_SESSION['admin_id'] : 1;
+            $approved_by = ($is_approved) ? $admin_id : null;
             
             $approval_update = $pdo->prepare("
                 UPDATE registrations 
@@ -1199,7 +1202,7 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
             });
         });
         
-        // แสดง sweetalert2 ก่อนบันทึก
+       // แสดง sweetalert2 ก่อนบันทึก
         $('#registrationForm').submit(function(e) {
             e.preventDefault();
             
@@ -1213,10 +1216,11 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                 reverseButtons: true
             }).then((result) => {
                 if (result.isConfirmed) {
-                    this.submit();
+                    // ใช้ DOM API เพื่อส่งฟอร์มโดยตรง
+                    document.getElementById('registrationForm').submit();
                 }
             });
-        });
+});
     });
 
     // ฟังก์ชันสำหรับพิมพ์ข้อมูลการลงทะเบียน
