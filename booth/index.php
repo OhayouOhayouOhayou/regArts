@@ -578,7 +578,7 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                     <h5 class="mb-0">โซน A (ห้องสัมมนา)</h5>
                 </div>
                 <div class="card-body">
-                    <p><strong>ราคา:</strong> <?php echo formatCurrency($zoneAPrices['min_price']); ?></p>
+                    <p><strong>ราคา:</strong> <?php echo formatCurrency($zoneAPrices['min_price']); ?> <span class="text-muted small">(exclude VAT 7%)</span></p>
                     <p><i class="bi bi-check-circle-fill text-success me-2"></i>ราคาเช่าพร้อมบูธมาตรฐาน</p>
                     <p><i class="bi bi-check-circle-fill text-success me-2"></i>พื้นที่ห้องแอร์</p>
                     <p><i class="bi bi-check-circle-fill text-success me-2"></i>ตำแหน่งยอดนิยม</p>
@@ -591,7 +591,7 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                     <h5 class="mb-0">โซน B</h5>
                 </div>
                 <div class="card-body">
-                    <p><strong>ราคา:</strong> <?php echo formatCurrency($zoneBPrices['min_price']); ?></p>
+                    <p><strong>ราคา:</strong> <?php echo formatCurrency($zoneBPrices['min_price']); ?> <span class="text-muted small">(exclude VAT 7%)</span></p>
                     <p><i class="bi bi-check-circle-fill text-success me-2"></i>ราคาเช่าพื้นที่ ไม่มีบูธ</p>
                     <p><i class="bi bi-check-circle-fill text-success me-2"></i>พื้นที่ห้องแอร์</p>
                     <p><i class="bi bi-check-circle-fill text-success me-2"></i>ทำเลดี การเข้าถึงสะดวก</p>
@@ -604,7 +604,7 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                     <h5 class="mb-0">โซน C</h5>
                 </div>
                 <div class="card-body">
-                    <p><strong>ราคา:</strong> <?php echo formatCurrency($zoneCPrices['min_price']); ?></p>
+                    <p><strong>ราคา:</strong> <?php echo formatCurrency($zoneCPrices['min_price']); ?> <span class="text-muted small">(exclude VAT 7%)</span></p>
                     <p><i class="bi bi-check-circle-fill text-success me-2"></i>ราคาเช่าพื้นที่ ไม่มีบูธ</p>
                     <p><i class="bi bi-check-circle-fill text-success me-2"></i>พื้นที่ไม่มีแอร์</p>
                     <p><i class="bi bi-check-circle-fill text-success me-2"></i>ราคาประหยัด</p>
@@ -613,7 +613,6 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
         </div>
     </div>
 </div>
-
         
         <div class="zone-tabs">
             <div class="zone-tab tab-a active" onclick="showZone('A')">โซน A</div>
