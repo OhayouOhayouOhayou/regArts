@@ -76,115 +76,121 @@ $provinces = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $success_message = '';
 $error_message = '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_registration'])) {
-    // Start transaction
-    $pdo->beginTransaction();
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // For debugging
+    error_log("POST data received: " . print_r($_POST, true));
     
-    try {
-        // Update registration table
-        $update_stmt = $pdo->prepare("
-            UPDATE registrations 
-            SET title = ?, 
-                title_other = ?, 
-                fullname = ?, 
-                organization = ?, 
-                phone = ?, 
-                email = ?, 
-                line_id = ?,
-                payment_status = ?
-            WHERE id = ?
-        ");
+    if (isset($_POST['update_registration'])) {
+        // Start transaction
+        $pdo->beginTransaction();
         
-        $title = $_POST['title'];
-        $title_other = !empty($_POST['title_other']) ? $_POST['title_other'] : null;
-        $fullname = $_POST['fullname'];
-        $organization = $_POST['organization'];
-        $phone = $_POST['phone'];
-        $email = $_POST['email'];
-        $line_id = $_POST['line_id'];
-        $payment_status = $_POST['payment_status'];
-        
-        $update_stmt->execute([
-            $title,
-            $title_other,
-            $fullname,
-            $organization,
-            $phone,
-            $email,
-            $line_id,
-            $payment_status,
-            $registration_id
-        ]);
-        
-        // Update addresses
-        foreach (['invoice', 'house', 'current'] as $address_type) {
-            if (isset($_POST['address'][$address_type])) {
-                $address_update = $pdo->prepare("
-                    UPDATE registration_addresses 
-                    SET address = ?,
-                        province_id = ?,
-                        district_id = ?,
-                        subdistrict_id = ?,
-                        zipcode = ?
-                    WHERE registration_id = ? AND address_type = ?
-                ");
-                
-                $address = $_POST['address'][$address_type];
-                $province_id = $_POST['province_id'][$address_type];
-                $district_id = $_POST['district_id'][$address_type];
-                $subdistrict_id = $_POST['subdistrict_id'][$address_type];
-                $zipcode = $_POST['zipcode'][$address_type];
-                
-                $address_update->execute([
-                    $address,
-                    $province_id,
-                    $district_id,
-                    $subdistrict_id,
-                    $zipcode,
-                    $registration_id,
-                    $address_type
-                ]);
-            }
-        }
-        
-
-        if (isset($_POST['is_approved']) && $_POST['is_approved'] != $registration['is_approved']) {
-            $is_approved = ($_POST['is_approved'] == '1') ? 1 : 0;
-            $approved_at = ($is_approved) ? date('Y-m-d H:i:s') : null;
-            
-            // ถ้ามี session admin_id ให้ใช้ ถ้าไม่มีให้ใช้ค่า 1 หรือค่าที่กำหนด
-            $admin_id = isset($_SESSION['admin_id']) ? $_SESSION['admin_id'] : 1;
-            $approved_by = ($is_approved) ? $admin_id : null;
-            
-            $approval_update = $pdo->prepare("
+        try {
+            // Update registration table
+            $update_stmt = $pdo->prepare("
                 UPDATE registrations 
-                SET is_approved = ?,
-                    approved_at = ?,
-                    approved_by = ?
+                SET title = ?, 
+                    title_other = ?, 
+                    fullname = ?, 
+                    organization = ?, 
+                    phone = ?, 
+                    email = ?, 
+                    line_id = ?,
+                    payment_status = ?
                 WHERE id = ?
             ");
             
-            $approval_update->execute([
-                $is_approved,
-                $approved_at,
-                $approved_by,
+            $title = $_POST['title'];
+            $title_other = !empty($_POST['title_other']) ? $_POST['title_other'] : null;
+            $fullname = $_POST['fullname'];
+            $organization = $_POST['organization'];
+            $phone = $_POST['phone'];
+            $email = $_POST['email'];
+            $line_id = $_POST['line_id'];
+            $payment_status = $_POST['payment_status'];
+            
+            $update_stmt->execute([
+                $title,
+                $title_other,
+                $fullname,
+                $organization,
+                $phone,
+                $email,
+                $line_id,
+                $payment_status,
                 $registration_id
             ]);
+            
+            // Update addresses
+            foreach (['invoice', 'house', 'current'] as $address_type) {
+                if (isset($_POST['address'][$address_type])) {
+                    $address_update = $pdo->prepare("
+                        UPDATE registration_addresses 
+                        SET address = ?,
+                            province_id = ?,
+                            district_id = ?,
+                            subdistrict_id = ?,
+                            zipcode = ?
+                        WHERE registration_id = ? AND address_type = ?
+                    ");
+                    
+                    $address = $_POST['address'][$address_type];
+                    $province_id = $_POST['province_id'][$address_type];
+                    $district_id = $_POST['district_id'][$address_type];
+                    $subdistrict_id = $_POST['subdistrict_id'][$address_type];
+                    $zipcode = $_POST['zipcode'][$address_type];
+                    
+                    $address_update->execute([
+                        $address,
+                        $province_id,
+                        $district_id,
+                        $subdistrict_id,
+                        $zipcode,
+                        $registration_id,
+                        $address_type
+                    ]);
+                }
+            }
+            
+            // Handle approval
+            if (isset($_POST['is_approved']) && $_POST['is_approved'] != $registration['is_approved']) {
+                $is_approved = ($_POST['is_approved'] == '1') ? 1 : 0;
+                $approved_at = ($is_approved) ? date('Y-m-d H:i:s') : null;
+                
+                // ถ้ามี session admin_id ให้ใช้ ถ้าไม่มีให้ใช้ค่า 1
+                $admin_id = isset($_SESSION['admin_id']) ? $_SESSION['admin_id'] : 1;
+                $approved_by = ($is_approved) ? $admin_id : null;
+                
+                $approval_update = $pdo->prepare("
+                    UPDATE registrations 
+                    SET is_approved = ?,
+                        approved_at = ?,
+                        approved_by = ?
+                    WHERE id = ?
+                ");
+                
+                $approval_update->execute([
+                    $is_approved,
+                    $approved_at,
+                    $approved_by,
+                    $registration_id
+                ]);
+            }
+            
+            // Commit transaction
+            $pdo->commit();
+            
+            $success_message = "บันทึกข้อมูลเรียบร้อยแล้ว";
+            
+            // Refresh data
+            header("Location: registration_detail.php?id=$registration_id&success=1");
+            exit;
+            
+        } catch (Exception $e) {
+            // Rollback on error
+            $pdo->rollBack();
+            $error_message = "เกิดข้อผิดพลาด: " . $e->getMessage();
+            error_log("Error updating registration: " . $e->getMessage());
         }
-        
-        // Commit transaction
-        $pdo->commit();
-        
-        $success_message = "บันทึกข้อมูลเรียบร้อยแล้ว";
-        
-        // Refresh data
-        header("Location: registration_detail.php?id=$registration_id&success=1");
-        exit;
-        
-    } catch (Exception $e) {
-        // Rollback on error
-        $pdo->rollBack();
-        $error_message = "เกิดข้อผิดพลาด: " . $e->getMessage();
     }
 }
 
@@ -631,7 +637,7 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                             <i class="fas fa-arrow-left me-2"></i>
                             กลับไปหน้ารายการ
                         </a>
-                        <button type="submit" form="registrationForm" name="update_registration" class="btn btn-primary">
+                        <button type="submit" form="registrationForm" name="update_registration" value="1" class="btn btn-primary">
                             <i class="fas fa-save me-2"></i>
                             บันทึกการเปลี่ยนแปลง
                         </button>
@@ -655,6 +661,7 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                 <?php endif; ?>
 
                 <form method="post" action="" id="registrationForm">
+                    <input type="hidden" name="update_registration" value="1">
                     <div class="row">
                         <!-- Left Column -->
                         <div class="col-lg-8">
@@ -746,7 +753,7 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                                         </li>
                                         <li class="nav-item" role="presentation">
                                             <button class="nav-link" id="house-tab" data-bs-toggle="tab" data-bs-target="#house" type="button" role="tab">
-                                                <i class="fas fa-home me-1"></i> ที่อยู่ตามทะเบียนบ้าน
+                                            <i class="fas fa-home me-1"></i> ที่อยู่ตามทะเบียนบ้าน
                                             </button>
                                         </li>
                                         <li class="nav-item" role="presentation">
@@ -1201,26 +1208,6 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                 }
             });
         });
-        
-       // แสดง sweetalert2 ก่อนบันทึก
-        $('#registrationForm').submit(function(e) {
-            e.preventDefault();
-            
-            Swal.fire({
-                title: 'ยืนยันการบันทึก',
-                text: 'คุณแน่ใจหรือไม่ว่าต้องการบันทึกการเปลี่ยนแปลง?',
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonText: 'ใช่, บันทึก',
-                cancelButtonText: 'ไม่, ยกเลิก',
-                reverseButtons: true
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    // ใช้ DOM API เพื่อส่งฟอร์มโดยตรง
-                    document.getElementById('registrationForm').submit();
-                }
-            });
-});
     });
 
     // ฟังก์ชันสำหรับพิมพ์ข้อมูลการลงทะเบียน
