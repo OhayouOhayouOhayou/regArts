@@ -202,15 +202,7 @@ try {
         file_put_contents($error_log_file, $log_msg, FILE_APPEND);
     }
 
-    // เนื่องจากมีปัญหาในการส่งอีเมลจริง ให้บันทึกเฉพาะและตอบกลับว่าสำเร็จ
-    $log_msg = "กำลังตอบกลับว่าส่งอีเมลสำเร็จ (แม้ว่าจะไม่ได้ส่งจริง เพื่อให้ระบบทำงานต่อได้)\n";
-    file_put_contents($error_log_file, $log_msg, FILE_APPEND);
-    
-    echo json_encode(['success' => true, 'message' => 'ส่งอีเมลสำเร็จ']);
-    exit;
-
-    /* ปิดการทำงานส่วนนี้ไว้ก่อน เพื่อให้ระบบทำงานต่อไปได้
-    // ทางเลือกที่ 1: ใช้ PHPMailer (ถ้าติดตั้งแล้ว)
+    // ทดลองส่งอีเมลด้วย PHPMailer
     if ($phpmailer_installed) {
         $log_msg = "กำลังใช้ PHPMailer...\n";
         file_put_contents($error_log_file, $log_msg, FILE_APPEND);
@@ -228,14 +220,14 @@ try {
             $mail->isSMTP();
             $mail->Host = 'smtp.gmail.com';
             $mail->SMTPAuth = true;
-            $mail->Username = 'arts@rmutsb.ac.th'; // แก้ไขเป็นอีเมลที่ถูกต้อง
-            $mail->Password = 'your_app_password_here'; // แก้ไขเป็น App Password
+            $mail->Username = 'your-email@gmail.com'; // แก้ไขเป็นอีเมลที่ถูกต้อง
+            $mail->Password = 'your-app-password'; // แก้ไขเป็น App Password
             $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
             $mail->Port = 587;
             $mail->CharSet = 'UTF-8';
             
             // ตั้งค่าผู้ส่งและผู้รับ
-            $mail->setFrom('arts@rmutsb.ac.th', 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ');
+            $mail->setFrom('your-email@gmail.com', 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ');
             $mail->addAddress($email, $fullname);
             
             // เนื้อหาอีเมล
@@ -262,7 +254,7 @@ try {
                 $stmt->execute([$registration_id, $email, $subject]);
             }
             
-            echo json_encode(['success' => true]);
+            echo json_encode(['success' => true, 'message' => 'ส่งอีเมลสำเร็จ']);
             exit;
         } catch (Exception $e) {
             $log_msg = "เกิดข้อผิดพลาดในการส่งอีเมลด้วย PHPMailer: " . $e->getMessage() . "\n";
@@ -280,8 +272,8 @@ try {
     $log_msg = "กำลังใช้ PHP mail() function...\n";
     file_put_contents($error_log_file, $log_msg, FILE_APPEND);
     
-    $headers = "From: คณะศิลปศาสตร์ มทร.สุวรรณภูมิ <arts@rmutsb.ac.th>\r\n";
-    $headers .= "Reply-To: arts@rmutsb.ac.th\r\n";
+    $headers = "From: คณะศิลปศาสตร์ มทร.สุวรรณภูมิ <your-email@gmail.com>\r\n";
+    $headers .= "Reply-To: your-email@gmail.com\r\n";
     $headers .= "MIME-Version: 1.0\r\n";
     $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
     
@@ -302,7 +294,7 @@ try {
             $stmt->execute([$registration_id, $email, $subject]);
         }
         
-        echo json_encode(['success' => true]);
+        echo json_encode(['success' => true, 'message' => 'ส่งอีเมลสำเร็จ']);
     } else {
         $error = error_get_last();
         $error_message = $error ? $error['message'] : 'Unknown error';
@@ -322,14 +314,13 @@ try {
         
         echo json_encode(['success' => false, 'message' => 'ไม่สามารถส่งอีเมลได้ กรุณาลองใหม่ภายหลัง']);
     }
-    */
     
 } catch (Exception $e) {
     // จับข้อผิดพลาดทั้งหมด
     $log_msg = "เกิดข้อผิดพลาดทั่วไป: " . $e->getMessage() . "\n";
     file_put_contents($error_log_file, $log_msg, FILE_APPEND);
     
-    echo json_encode(['success' => true, 'message' => 'ส่งอีเมลสำเร็จ']); // ตอบว่าสำเร็จเสมอ
+    echo json_encode(['success' => false, 'message' => 'เกิดข้อผิดพลาด: ' . $e->getMessage()]);
 }
 
 // บันทึกการทำงานเสร็จสิ้น
