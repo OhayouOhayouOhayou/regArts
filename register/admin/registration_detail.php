@@ -92,6 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     title_other = ?, 
                     fullname = ?, 
                     organization = ?, 
+                    position = ?,
                     phone = ?, 
                     email = ?, 
                     line_id = ?,
@@ -103,6 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $title_other = !empty($_POST['title_other']) ? $_POST['title_other'] : null;
             $fullname = $_POST['fullname'];
             $organization = $_POST['organization'];
+            $position = $_POST['position']; // เพิ่มตำแหน่ง
             $phone = $_POST['phone'];
             $email = $_POST['email'];
             $line_id = $_POST['line_id'];
@@ -113,6 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $title_other,
                 $fullname,
                 $organization,
+                $position, // เพิ่มตำแหน่ง
                 $phone,
                 $email,
                 $line_id,
@@ -209,6 +212,8 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
     <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- เพิ่ม Light Gallery สำหรับขยายรูปภาพ -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/lightgallery/2.7.1/css/lightgallery.min.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
         :root {
@@ -398,6 +403,7 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
             max-height: 200px;
             object-fit: contain;
             border-radius: 0.5rem;
+            cursor: pointer; /* เพิ่มเคอร์เซอร์เป็นรูปมือชี้เพื่อบอกว่าคลิกได้ */
         }
 
         .file-preview-pdf {
@@ -547,6 +553,16 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
         .timeline-date {
             color: var(--text-secondary);
             font-size: 0.875rem;
+        }
+        
+        /* เพิ่มสไตล์สำหรับ light gallery */
+        .gallery-item {
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .gallery-item:hover {
+            opacity: 0.9;
         }
     </style>
 </head>
@@ -707,6 +723,13 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                                         </div>
                                     </div>
                                     
+                                    <div class="row mb-3">
+                                        <label class="col-lg-3 col-form-label">ตำแหน่ง</label>
+                                        <div class="col-lg-9">
+                                            <input type="text" class="form-control" name="position" value="<?php echo $registration['position']; ?>" required>
+                                        </div>
+                                    </div>
+                                    
                                     <div class="row">
                                         <div class="col-lg-6">
                                             <div class="row mb-3">
@@ -735,7 +758,6 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                                 </div>
                             </div>
                             
-                            <!-- ข้อมูลที่อยู่ -->
                             <div class="card">
                                 <div class="card-header">
                                     <h5 class="title">
@@ -832,7 +854,7 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                                     </h5>
                                 </div>
                                 <div class="card-body">
-                                    <div class="row">
+                                    <div class="row" id="documents-gallery">
                                         <?php if (count($documents) > 0): ?>
                                             <?php foreach($documents as $document): ?>
                                                 <div class="col-md-6 mb-3">
@@ -857,7 +879,9 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                                                         
                                                         <?php if (strpos($document['file_type'], 'image') !== false): ?>
                                                             <div class="text-center mb-2">
-                                                                <img src="../<?php echo $document['file_path']; ?>" alt="Document image">
+                                                                <div class="gallery-item" data-src="../<?php echo $document['file_path']; ?>">
+                                                                    <img src="../<?php echo $document['file_path']; ?>" alt="Document image">
+                                                                </div>
                                                             </div>
                                                         <?php elseif (strpos($document['file_type'], 'pdf') !== false): ?>
                                                             <div class="file-preview-pdf mb-2">
@@ -995,11 +1019,14 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                                     
                                     <div class="mb-3">
                                         <label class="form-label">หลักฐานการชำระเงิน</label>
+                                        <div id="payment-gallery">
                                         <?php if (count($payment_files) > 0): ?>
                                             <?php foreach($payment_files as $file): ?>
                                                 <div class="file-preview mb-3">
                                                     <?php if (strpos($file['file_type'], 'image') !== false): ?>
-                                                        <img src="../<?php echo $file['file_path']; ?>" alt="Payment proof" class="img-fluid mb-2">
+                                                        <div class="gallery-item" data-src="../<?php echo $file['file_path']; ?>">
+                                                            <img src="../<?php echo $file['file_path']; ?>" alt="Payment proof" class="img-fluid mb-2">
+                                                        </div>
                                                     <?php elseif (strpos($file['file_type'], 'pdf') !== false): ?>
                                                         <div class="file-preview-pdf mb-2">
                                                             <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-primary">
@@ -1033,6 +1060,7 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                                                 ไม่พบไฟล์หลักฐานการชำระเงิน
                                             </div>
                                         <?php endif; ?>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1070,6 +1098,14 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
             </div>
         </div>
     </div>
+
+    <!-- JavaScript libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- เพิ่ม Light Gallery สำหรับขยายรูปภาพ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lightgallery/2.7.1/lightgallery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lightgallery/2.7.1/plugins/zoom/lg-zoom.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lightgallery/2.7.1/plugins/thumbnail/lg-thumbnail.min.js"></script>
 
     <!-- JavaScript สำหรับโหลดข้อมูลเขต/อำเภอและตำบล -->
     <script>
@@ -1208,9 +1244,30 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                 }
             });
         });
+        
+        // เริ่มต้นการใช้งาน Light Gallery สำหรับรูปภาพทั้งหมด
+        // สำหรับเอกสาร
+        lightGallery(document.getElementById('documents-gallery'), {
+            selector: '.gallery-item',
+            plugins: [lgZoom, lgThumbnail],
+            speed: 500,
+            download: true,
+            counter: true,
+            thumbnail: true
+        });
+        
+        // สำหรับหลักฐานการชำระเงิน
+        lightGallery(document.getElementById('payment-gallery'), {
+            selector: '.gallery-item',
+            plugins: [lgZoom, lgThumbnail],
+            speed: 500,
+            download: true,
+            counter: true,
+            thumbnail: true
+        });
     });
 
-    // ฟังก์ชันสำหรับพิมพ์ข้อมูลการลงทะเบียน
+// ฟังก์ชันสำหรับพิมพ์ข้อมูลการลงทะเบียน
 function printRegistration() {
     // เตรียมหน้าสำหรับพิมพ์
     let printWindow = window.open('', '_blank');
@@ -1370,8 +1427,5 @@ function deleteRegistration() {
     });
 }
     </script>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </body>
 </html>
