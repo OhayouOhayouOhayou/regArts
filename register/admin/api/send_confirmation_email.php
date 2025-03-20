@@ -1,27 +1,26 @@
 <?php
-// Include these at the top, outside of any conditional blocks
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\SMTP;
-use PHPMailer\PHPMailer\Exception;
+// เริ่มต้น session สำหรับตรวจสอบการล็อกอิน
+session_start();
 
+// เปิดแสดงข้อผิดพลาดทั้งหมด
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
-
-// Then check for PHPMailer - แก้ไขเส้นทางให้ถูกต้อง
-$phpmailer_installed = false;
-if (file_exists(__DIR__ . '/../../../vendor/autoload.php')) {
-    require __DIR__ . '/../../../vendor/autoload.php';
-    if (class_exists('PHPMailer\PHPMailer\PHPMailer')) {
-        $phpmailer_installed = true;
-    }
-}
 
 // สร้างไฟล์สำหรับบันทึกข้อผิดพลาด - เก็บในโฟลเดอร์เดียวกับไฟล์นี้
 $error_log_file = __DIR__ . '/email_error.log';
 file_put_contents($error_log_file, "--- เริ่มการทำงาน " . date('Y-m-d H:i:s') . " ---\n", FILE_APPEND);
 
+// ตรวจสอบการเข้าถึงไฟล์โดยตรง
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    file_put_contents($error_log_file, "มีการเรียกใช้โดยไม่ใช่ POST method\n", FILE_APPEND);
+    http_response_code(405); // Method Not Allowed
+    echo json_encode(['success' => false, 'message' => 'Method not allowed']);
+    exit;
+}
+
 try {
+    // เชื่อมต่อฐานข้อมูล
     require_once '../../config/database.php';
 
     // บันทึกข้อมูลที่ได้รับมา
@@ -202,78 +201,15 @@ try {
         file_put_contents($error_log_file, $log_msg, FILE_APPEND);
     }
 
-    // ใช้ PHPMailer กับ SMTP ถ้าติดตั้งแล้ว
-    if ($phpmailer_installed) {
-        $log_msg = "กำลังใช้ PHPMailer ด้วย SMTP...\n";
-        file_put_contents($error_log_file, $log_msg, FILE_APPEND);
-
-        try {
-            $mail = new PHPMailer(true);
-            
-            // บันทึกการทำงานละเอียด
-            $mail->SMTPDebug = 3; // ระดับการบันทึกสูงสุด
-            $mail->Debugoutput = function($str, $level) use ($error_log_file) {
-                file_put_contents($error_log_file, "PHPMailer Debug: $str\n", FILE_APPEND);
-            };
-            
-            // ตั้งค่า SMTP
-            $mail->isSMTP();
-            $mail->Host = 'smtp.gmail.com'; // หรือใช้ SMTP เซิร์ฟเวอร์ของคุณ
-            $mail->SMTPAuth = true;
-            $mail->Username = 'arts@rmutsb.ac.th'; // อีเมลของคุณ
-            $mail->Password = 'artsrus6'; // รหัสผ่านหรือ App Password
-            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-            $mail->Port = 587;
-            $mail->CharSet = 'UTF-8';
-            
-            // ตั้งค่าผู้ส่งและผู้รับ
-            $mail->setFrom('arts@rmutsb.ac.th', 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ');
-            $mail->addAddress($email, $fullname);
-            
-            // เนื้อหาอีเมล
-            $mail->isHTML(true);
-            $mail->Subject = $subject;
-            $mail->Body = $message;
-            
-            // ส่งอีเมล
-            $log_msg = "กำลังส่งอีเมลด้วย PHPMailer SMTP...\n";
-            file_put_contents($error_log_file, $log_msg, FILE_APPEND);
-            
-            $mail->send();
-            
-            $log_msg = "ส่งอีเมลสำเร็จด้วย PHPMailer SMTP\n";
-            file_put_contents($error_log_file, $log_msg, FILE_APPEND);
-            
-            // บันทึกประวัติว่าส่งสำเร็จ
-            if (isset($email_log_id)) {
-                $stmt = $pdo->prepare("UPDATE email_logs SET status = 'success', error_message = NULL WHERE id = ?");
-                $stmt->execute([$email_log_id]);
-            }
-            
-            echo json_encode(['success' => true, 'message' => 'ส่งอีเมลสำเร็จ']);
-            exit;
-        } catch (Exception $e) {
-            $log_msg = "เกิดข้อผิดพลาดในการส่งอีเมลด้วย PHPMailer SMTP: " . $e->getMessage() . "\n";
-            file_put_contents($error_log_file, $log_msg, FILE_APPEND);
-            
-            // บันทึกข้อผิดพลาดแต่ให้ทดลองส่งแบบอื่นต่อไป
-            if (isset($email_log_id)) {
-                $stmt = $pdo->prepare("UPDATE email_logs SET status = 'failed', error_message = ? WHERE id = ?");
-                $stmt->execute([$e->getMessage(), $email_log_id]);
-            }
-            
-            // ถ้า SMTP ล้มเหลว ให้ลองใช้ mail() function ต่อไป
-        }
-    }
-
-    // ลองส่งอีเมลด้วย PHP mail() function ถ้า SMTP ไม่สำเร็จ
+    // ส่งอีเมลด้วย PHP mail() function
     $log_msg = "กำลังใช้ PHP mail() function...\n";
     file_put_contents($error_log_file, $log_msg, FILE_APPEND);
     
-    $headers = "From: คณะศิลปศาสตร์ มทร.สุวรรณภูมิ <arts@rmutsb.ac.th>\r\n";
+    $headers = "From: คณะศิลปศาสตร์ มทร.สุวรรณภูมิ <noreply@" . $_SERVER['SERVER_NAME'] . ">\r\n";
     $headers .= "Reply-To: arts@rmutsb.ac.th\r\n";
     $headers .= "MIME-Version: 1.0\r\n";
     $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
+    $headers .= "X-Mailer: PHP/" . phpversion();
     
     // ส่งอีเมล
     $mail_sent = mail($email, $subject, $message, $headers);
@@ -286,10 +222,6 @@ try {
         if (isset($email_log_id)) {
             $stmt = $pdo->prepare("UPDATE email_logs SET status = 'success', error_message = NULL WHERE id = ?");
             $stmt->execute([$email_log_id]);
-        } else {
-            $stmt = $pdo->prepare("INSERT INTO email_logs (registration_id, email, subject, sent_at, status) 
-                                 VALUES (?, ?, ?, NOW(), 'success')");
-            $stmt->execute([$registration_id, $email, $subject]);
         }
         
         echo json_encode(['success' => true, 'message' => 'ส่งอีเมลสำเร็จ']);
@@ -304,14 +236,9 @@ try {
         if (isset($email_log_id)) {
             $stmt = $pdo->prepare("UPDATE email_logs SET status = 'failed', error_message = ? WHERE id = ?");
             $stmt->execute([$error_message, $email_log_id]);
-        } else {
-            $stmt = $pdo->prepare("INSERT INTO email_logs (registration_id, email, subject, sent_at, status, error_message) 
-                                 VALUES (?, ?, ?, NOW(), 'failed', ?)");
-            $stmt->execute([$registration_id, $email, $subject, $error_message]);
         }
         
-        // แม้จะส่งไม่สำเร็จก็ตอบว่าสำเร็จ เพื่อให้ระบบทำงานต่อได้
-        echo json_encode(['success' => true, 'message' => 'ส่งอีเมลสำเร็จ']);
+        echo json_encode(['success' => false, 'message' => 'ไม่สามารถส่งอีเมลได้']);
     }
     
 } catch (Exception $e) {
@@ -319,8 +246,7 @@ try {
     $log_msg = "เกิดข้อผิดพลาดทั่วไป: " . $e->getMessage() . "\n";
     file_put_contents($error_log_file, $log_msg, FILE_APPEND);
     
-    // ตอบว่าสำเร็จเสมอเพื่อให้ระบบทำงานต่อได้
-    echo json_encode(['success' => true, 'message' => 'ส่งอีเมลสำเร็จ']);
+    echo json_encode(['success' => false, 'message' => 'เกิดข้อผิดพลาด: ' . $e->getMessage()]);
 }
 
 // บันทึกการทำงานเสร็จสิ้น
