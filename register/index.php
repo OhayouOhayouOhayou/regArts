@@ -603,13 +603,13 @@
                         
                         <!-- เพิ่ม QR Code -->
                         <div class="text-center mb-4">
-                            <img src="QR.jpg" alt="QR Code สำหรับชำระเงิน" style="max-width: 200px;" class="img-fluid border p-2">
+                            <img src="QR.jpg" alt="QR Code สำหรับชำระเงิน" style="max-width: 600px;" class="img-fluid border p-2">
                             <p class="text-muted mt-2">สแกน QR Code เพื่อชำระเงิน</p>
                         </div>
                         
                         <p class="mb-3 fs-5 fw-bold text-danger">
                             <i class="fas fa-exclamation-circle me-2"></i>
-                            กรุณาชำระเงินค่าลงทะเบียน ก่อนวันเข้ารับการฝึกอบรม ๗ วัน
+                            กรุณาชำระเงินค่าลงทะเบียน ก่อนวันเข้ารับการฝึกอบรม 7 วัน
                         </p>
                         <p class="mb-2">
                             <i class="fas fa-university"></i>
@@ -982,6 +982,59 @@ function handleRegistrationStatus(data) {
         return;
     }
     
+    // อาจจำเป็นต้องโหลดข้อมูลรายละเอียดผู้ลงทะเบียนเพิ่มเติม
+    // ทำการเรียก API เพื่อดึงข้อมูลรายละเอียดทั้งหมด
+    fetchRegistrationDetails(data.data?.registration_id || data.registration_id);
+}
+
+// ฟังก์ชันใหม่สำหรับดึงข้อมูลผู้ลงทะเบียนทั้งหมด
+function fetchRegistrationDetails(registrationId) {
+    // แสดง loading
+    Swal.fire({
+        title: 'กำลังโหลดข้อมูล',
+        text: 'กรุณารอสักครู่...',
+        allowOutsideClick: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
+    
+    // เรียก API เพื่อดึงข้อมูลรายละเอียด
+    fetch('get_registration_details.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ registration_id: registrationId })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // ปิด loading
+            Swal.close();
+            
+            // แสดงหน้ารายละเอียดผู้ลงทะเบียน
+            displayRegistrationDetails(data);
+        } else {
+            throw new Error(data.message || 'ไม่สามารถโหลดข้อมูลได้');
+        }
+    })
+    .catch(error => {
+        console.error('Error loading registration details:', error);
+        Swal.fire({
+            icon: 'error',
+            title: 'เกิดข้อผิดพลาด',
+            text: error.message || 'ไม่สามารถโหลดข้อมูลได้ กรุณาลองใหม่อีกครั้ง'
+        });
+    });
+}
+
+// ฟังก์ชันสำหรับแสดงรายละเอียดผู้ลงทะเบียน
+function displayRegistrationDetails(data) {
+    const registration = data.registration;
+    const addresses = data.addresses;
+    const documents = data.documents;
+    
     // กรณีที่ลงทะเบียนแล้ว ให้แสดงหน้าข้อมูลผู้ลงทะเบียน
     document.getElementById('phoneCheck').classList.remove('active');
     
@@ -995,8 +1048,7 @@ function handleRegistrationStatus(data) {
     let statusClass = '';
     let actionHtml = '';
     
-    switch(status) {
-        case 'registered_unpaid':
+    switch(registration.payment_status) {
         case 'not_paid':
             statusText = 'รอชำระเงิน';
             statusClass = 'text-warning';
@@ -1011,13 +1063,13 @@ function handleRegistrationStatus(data) {
                             
                             <!-- เพิ่ม QR Code -->
                             <div class="text-center mb-4">
-                                <img src="assets/images/payment_qr.png" alt="QR Code สำหรับชำระเงิน" style="max-width: 200px;" class="img-fluid border p-2">
+                                <img src="QR.jpg" alt="QR Code สำหรับชำระเงิน" style="max-width: 600px;" class="img-fluid border p-2">
                                 <p class="text-muted mt-2">สแกน QR Code เพื่อชำระเงิน</p>
                             </div>
                             
                             <p class="mb-3 fs-5 fw-bold text-danger">
                                 <i class="fas fa-exclamation-circle me-2"></i>
-                                กรุณาชำระเงินค่าลงทะเบียน ก่อนวันเข้ารับการฝึกอบรม ๗ วัน
+                                กรุณาชำระเงินค่าลงทะเบียน ก่อนวันเข้ารับการฝึกอบรม 7 วัน
                             </p>
                             <p class="mb-2">
                                 <i class="fas fa-university"></i>
@@ -1043,7 +1095,7 @@ function handleRegistrationStatus(data) {
                                 <input type="file" class="form-control" name="payment_slip" accept="image/*,.pdf" required>
                                 <small class="text-muted">รองรับไฟล์ภาพ (JPG, PNG, GIF) และ PDF ขนาดไม่เกิน 5MB</small>
                             </div>
-                            <input type="hidden" name="registration_id" value="${data.data?.registration_id || data.registration_id}">
+                            <input type="hidden" name="registration_id" value="${registration.id}">
                             <div class="d-grid">
                                 <button type="submit" class="btn btn-primary">
                                     <i class="fas fa-upload me-2"></i>อัพโหลดหลักฐาน
@@ -1054,16 +1106,94 @@ function handleRegistrationStatus(data) {
                 </div>
             `;
             break;
-        case 'pending_approval':
         case 'paid':
-            statusText = 'อัพโหลดหลักฐานแล้ว รอการตรวจสอบจากเจ้าหน้าที่';
-            statusClass = 'text-info';
+            if (registration.is_approved) {
+                statusText = 'ลงทะเบียนเสร็จสมบูรณ์';
+                statusClass = 'text-success';
+            } else {
+                statusText = 'อัพโหลดหลักฐานแล้ว รอการตรวจสอบจากเจ้าหน้าที่';
+                statusClass = 'text-info';
+            }
             break;
-        case 'registration_complete':
-        case 'approved':
-            statusText = 'ลงทะเบียนเสร็จสมบูรณ์';
-            statusClass = 'text-success';
-            break;
+    }
+    
+    // เตรียมข้อมูลที่อยู่
+    const addressHTML = addresses.map(address => {
+        let addressTitle = '';
+        switch(address.address_type) {
+            case 'invoice':
+                addressTitle = 'ที่อยู่สำหรับออกใบเสร็จ';
+                break;
+            case 'house':
+                addressTitle = 'ที่อยู่ตามทะเบียนบ้าน';
+                break;
+            case 'current':
+                addressTitle = 'ที่อยู่ปัจจุบัน';
+                break;
+        }
+        
+        return `
+            <div class="card mb-3">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="fas fa-map-marker-alt me-2"></i>${addressTitle}</h6>
+                </div>
+                <div class="card-body">
+                    <p class="mb-1">${address.address}</p>
+                    <p class="mb-0">
+                        ตำบล/แขวง ${address.subdistrict_name} 
+                        อำเภอ/เขต ${address.district_name} 
+                        จังหวัด ${address.province_name} 
+                        ${address.zipcode}
+                    </p>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    // เตรียมข้อมูลเอกสาร
+    let documentsHTML = '';
+    if (documents && documents.length > 0) {
+        documentsHTML = `
+            <div class="card mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="fas fa-file-alt me-2"></i>เอกสารที่อัพโหลด</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        ${documents.map(doc => {
+                            let docType = '';
+                            switch(doc.document_type) {
+                                case 'identification':
+                                    docType = 'บัตรประชาชน/บัตรข้าราชการ';
+                                    break;
+                                case 'certificate':
+                                    docType = 'วุฒิบัตร/ประกาศนียบัตร';
+                                    break;
+                                case 'professional':
+                                    docType = 'เอกสารรับรองทางวิชาชีพ';
+                                    break;
+                                default:
+                                    docType = 'เอกสารอื่นๆ';
+                            }
+                            
+                            return `
+                                <div class="list-group-item">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h6 class="mb-1">${docType}</h6>
+                                            <small class="text-muted">${doc.description || 'ไม่มีคำอธิบาย'}</small>
+                                        </div>
+                                        <a href="${doc.file_path}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-eye me-1"></i>ดูเอกสาร
+                                        </a>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            </div>
+        `;
     }
     
     // สร้าง HTML สำหรับหน้าแสดงข้อมูล
@@ -1074,22 +1204,57 @@ function handleRegistrationStatus(data) {
             </div>
             <div class="card-body">
                 <div class="row mb-4">
-                    <div class="col-md-8">
+                    <div class="col-12">
                         <h5>สถานะการลงทะเบียน: <span class="${statusClass} fw-bold">${statusText}</span></h5>
-                        <p class="mb-0">รหัสการลงทะเบียน: <strong>${data.data?.registration_id || data.registration_id}</strong></p>
-                    </div>
-                    <div class="col-md-4 text-end">
-                        <div class="d-grid">
-                            <button onclick="window.print()" class="btn btn-outline-primary">
-                                <i class="fas fa-print me-2"></i>พิมพ์ข้อมูล
-                            </button>
-                        </div>
+                        <p class="mb-2">รหัสการลงทะเบียน: <strong>${registration.id}</strong></p>
+                        <p class="mb-0">วันที่ลงทะเบียน: <strong>${new Date(registration.created_at).toLocaleString('th-TH')}</strong></p>
                     </div>
                 </div>
                 
                 <div id="registrationTimeline" class="mb-4">
-                    ${createTimelineHTML(getTimelineSteps(status), data)}
+                    ${createTimelineHTML(getTimelineSteps(registration.payment_status, registration.is_approved), data)}
                 </div>
+                
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0"><i class="fas fa-user me-2"></i>ข้อมูลผู้ลงทะเบียน</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <p class="mb-1"><strong>ชื่อ-นามสกุล:</strong></p>
+                                <p>${registration.title === 'other' ? registration.title_other : registration.title} ${registration.fullname}</p>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <p class="mb-1"><strong>หน่วยงาน:</strong></p>
+                                <p>${registration.organization}</p>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <p class="mb-1"><strong>ตำแหน่ง:</strong></p>
+                                <p>${registration.position}</p>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <p class="mb-1"><strong>เบอร์โทรศัพท์:</strong></p>
+                                <p>${registration.phone}</p>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <p class="mb-1"><strong>อีเมล:</strong></p>
+                                <p>${registration.email}</p>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <p class="mb-1"><strong>LINE ID:</strong></p>
+                                <p>${registration.line_id || '-'}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="address-info">
+                    <h5 class="mb-3">ข้อมูลที่อยู่</h5>
+                    ${addressHTML}
+                </div>
+                
+                ${documentsHTML}
             </div>
         </div>
         
@@ -1109,8 +1274,8 @@ function handleRegistrationStatus(data) {
     }
 }
 
-// ฟังก์ชันสำหรับสร้าง Timeline Steps
-function getTimelineSteps(status) {
+// ปรับปรุงฟังก์ชัน getTimelineSteps เพื่อพิจารณาทั้งสถานะการชำระเงินและการอนุมัติ
+function getTimelineSteps(paymentStatus, isApproved) {
     const timelineSteps = [
         {
             title: 'ลงทะเบียน',
@@ -1139,22 +1304,14 @@ function getTimelineSteps(status) {
     ];
     
     // ปรับสถานะตาม Timeline
-    switch(status) {
-        case 'registered_unpaid':
-        case 'not_paid':
-            // เฉพาะขั้นตอนแรกที่เสร็จสมบูรณ์
-            break;
-        case 'pending_approval':
-        case 'paid':
-            timelineSteps[1].status = 'completed';
-            timelineSteps[2].status = 'current';
-            break;
-        case 'registration_complete':
-        case 'approved':
-            timelineSteps[1].status = 'completed';
+    if (paymentStatus === 'paid') {
+        timelineSteps[1].status = 'completed';
+        timelineSteps[2].status = 'current';
+        
+        if (isApproved) {
             timelineSteps[2].status = 'completed';
             timelineSteps[3].status = 'completed';
-            break;
+        }
     }
     
     return timelineSteps;
