@@ -61,7 +61,6 @@ try {
     $stmt = $conn->prepare("
         SELECT * FROM registration_files
         WHERE registration_id = ?
-        ORDER BY uploaded_at DESC
     ");
     $stmt->execute([$registrationId]);
     $paymentFiles = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -84,4 +83,3 @@ try {
         'message' => $e->getMessage()
     ], JSON_UNESCAPED_UNICODE);
 }
-?>
