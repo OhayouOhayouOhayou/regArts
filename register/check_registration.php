@@ -25,7 +25,7 @@ try {
     $stmt = $conn->prepare("
         SELECT r.*, rf.id as payment_slip_id 
         FROM registrations r 
-        LEFT JOIN registration_files rf ON r.id = rf.registration_id AND rf.id = r.payment_slip_id
+        LEFT JOIN registration_files rf ON r.id = rf.registration_id 
         WHERE r.phone = ?
     ");
     
@@ -44,8 +44,7 @@ try {
             'data' => [
                 'registration_id' => $registration['id'],
                 'payment_status' => $registration['payment_status'],
-                'is_approved' => !empty($registration['approved_at']),
-                'approved_at' => $registration['approved_at']
+                'is_approved' => $registration['is_approved']
             ]
         ];
         
@@ -54,12 +53,13 @@ try {
                 $response['status'] = 'registered_unpaid';
                 break;
             case 'paid':
-                if (!empty($registration['approved_at'])) {
+                if ($registration['is_approved']) {
                     $response['status'] = 'registration_complete';
-                    $response['message'] = 'ชำระเงินเรียบร้อยแล้ว';
+                    $response['message'] = 'ลงทะเบียนเสร็จสมบูรณ์';
                 } else {
+       
                     $response['status'] = 'pending_approval';
-                    $response['message'] = 'อัพโหลดหลักฐานแล้ว รอการตรวจสอบจากเจ้าหน้าที่';
+                    $response['message'] = 'ชำระเงิน (อัพโหลดแล้วรอการตรวจสอบ)';
                 }
                 break;
         }
@@ -84,4 +84,3 @@ try {
         'message' => $e->getMessage()
     ], JSON_UNESCAPED_UNICODE);
 }
-?>
