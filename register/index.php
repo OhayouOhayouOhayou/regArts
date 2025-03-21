@@ -59,7 +59,7 @@
         }
 
         .card-header {
-            background-color: var(--primary-color);
+            background-color: var(--primary-color) !important;
             color: white;
             padding: 1rem 1.5rem;
             border-bottom: none;
@@ -628,7 +628,11 @@
                             <strong>*ไม่รับชำระด้วยเช็ค*</strong>
                         </p>
                     </div>
-                    
+                    <div class="mb-3">
+                        <label class="form-label">วันที่และเวลาที่ชำระเงิน (ถ้ามี)</label>
+                        <input type="datetime-local" class="form-control" name="payment_date">
+                        <small class="text-muted">กรอกเฉพาะกรณีที่มีการอัพโหลดหลักฐานการชำระเงิน</small>
+                    </div>
                     <div class="mb-3">
                         <label class="form-label">หลักฐานการชำระเงิน (ถ้ามี)</label>
                         <div class="input-group">
@@ -1106,16 +1110,17 @@ function displayRegistrationDetails(data) {
                 </div>
             `;
             break;
-        case 'paid':
-            if (registration.is_approved) {
-                statusText = 'ลงทะเบียนเสร็จสมบูรณ์';
-                statusClass = 'text-success';
-            } else {
-                statusText = 'อัพโหลดหลักฐานแล้ว รอการตรวจสอบจากเจ้าหน้าที่';
-                statusClass = 'text-info';
-            }
-            break;
-    }
+            case 'paid':
+        if (registration.is_approved) {
+            statusText = 'ลงทะเบียนเสร็จสมบูรณ์';
+            statusClass = 'text-success';
+        } else {
+          
+            statusText = 'ชำระเงิน (อัพโหลดแล้วรอการตรวจสอบ)';
+            statusClass = 'text-primary'; 
+        }
+        break;
+}
     
     // เตรียมข้อมูลที่อยู่
     const addressHTML = addresses.map(address => {
@@ -1306,17 +1311,18 @@ function getTimelineSteps(paymentStatus, isApproved) {
     // ปรับสถานะตาม Timeline
     if (paymentStatus === 'paid') {
         timelineSteps[1].status = 'completed';
-        timelineSteps[2].status = 'current';
         
         if (isApproved) {
             timelineSteps[2].status = 'completed';
             timelineSteps[3].status = 'completed';
+        } else {
+            // ถ้ายังไม่อนุมัติ ให้แสดงเป็นรอตรวจสอบ
+            timelineSteps[2].status = 'current';
         }
     }
     
     return timelineSteps;
 }
-
 // ฟังก์ชันสำหรับอัพโหลดหลักฐานการชำระเงินพร้อมวันที่
 function uploadPaymentWithDate(formData) {
     // แสดง loading

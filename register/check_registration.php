@@ -55,10 +55,11 @@ try {
             case 'paid':
                 if ($registration['is_approved']) {
                     $response['status'] = 'registration_complete';
+                    $response['message'] = 'ลงทะเบียนเสร็จสมบูรณ์';
                 } else {
-                    // เปลี่ยนคำอธิบายสถานะเป็นรอการตรวจสอบ
+       
                     $response['status'] = 'pending_approval';
-                    $response['message'] = 'อัพโหลดหลักฐานแล้ว รอการตรวจสอบจากเจ้าหน้าที่';
+                    $response['message'] = 'ชำระเงิน (อัพโหลดแล้วรอการตรวจสอบ)';
                 }
                 break;
         }

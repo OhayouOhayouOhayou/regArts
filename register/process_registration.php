@@ -253,6 +253,11 @@ class RegistrationProcessor {
             return false;
         }
         
+        // ตรวจสอบวันที่ชำระเงิน
+        $paymentDate = isset($_POST['payment_date']) && !empty($_POST['payment_date']) 
+            ? $_POST['payment_date'] 
+            : date('Y-m-d H:i:s'); // ใช้เวลาปัจจุบันถ้าไม่ได้ระบุ
+        
         if ($file['size'] > 5242880) { // 5MB
             error_log("ขนาดไฟล์หลักฐานการชำระเงินใหญ่เกินไป: " . $file['size'] . " bytes");
             return false;
@@ -301,15 +306,16 @@ class RegistrationProcessor {
             
             $fileId = $conn->lastInsertId();
             
-            // อัพเดตสถานะการชำระเงินเป็น 'paid'
+            // อัพเดตสถานะการชำระเงินเป็น 'paid' และบันทึกวันที่ชำระเงิน
             $sql = "UPDATE registrations 
                     SET payment_status = 'paid',
+                        payment_date = ?,
                         payment_updated_at = NOW(),
                         payment_slip_id = ?
                     WHERE id = ?";
                     
             $stmt = $conn->prepare($sql);
-            $stmt->execute([$fileId, $registrationId]);
+            $stmt->execute([$paymentDate, $fileId, $registrationId]);
             
             error_log("อัพโหลดหลักฐานการชำระเงินสำเร็จ: " . $filePath);
             return true;

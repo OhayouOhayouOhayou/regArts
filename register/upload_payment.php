@@ -302,13 +302,17 @@ class PaymentUploader {
     }
 }
 
-// Process upload request
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $uploader = new PaymentUploader();
     
     // Debug registration ID and payment date
     $registrationId = $_POST['registration_id'] ?? null;
     $paymentDate = $_POST['payment_date'] ?? null;
+    
+    // ถ้าไม่มีวันที่ชำระเงิน ให้ใช้วันที่ปัจจุบัน
+    if (empty($paymentDate)) {
+        $paymentDate = date('Y-m-d H:i:s');
+    }
     
     error_log("Received registration_id: " . $registrationId);
     error_log("Received payment_date: " . $paymentDate);
