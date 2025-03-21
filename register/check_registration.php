@@ -42,8 +42,7 @@ try {
             'message' => 'เบอร์โทรศัพท์นี้ได้ลงทะเบียนแล้ว',
             'data' => [
                 'registration_id' => $registration['id'],
-                'payment_status' => $registration['payment_status'],
-                'is_approved' => isset($registration['is_approved']) ? $registration['is_approved'] : false
+                'payment_status' => $registration['payment_status']
             ]
         ];
         
@@ -56,7 +55,7 @@ try {
                     $response['status'] = 'registration_complete';
                 } else {
                     $response['status'] = 'pending_approval';
-                    $response['message'] = 'ชำระเงินแล้ว รอการตรวจสอบจากเจ้าหน้าที่';
+                    $response['message'] = 'รอการตรวจสอบจากเจ้าหน้าที่';
                 }
                 break;
         }
