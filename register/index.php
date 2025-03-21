@@ -589,56 +589,63 @@
     </div>
 </div>
 
-       <!-- Payment Information -->
-<div class="card">
-    <div class="card-header">
-        <h3 class="card-title">
-            <i class="fas fa-money-bill me-2"></i>
-            ข้อมูลการชำระเงิน
-        </h3>
-    </div>
-    <div class="card-body">
-        <div class="payment-info">
-            <h4 class="mb-3">รายละเอียดการชำระเงิน</h4>
-            <p class="mb-2">
-                <i class="fas fa-clock"></i>
-                กรุณาชำระเงินค่าลงทะเบียน ก่อนวันเข้ารับการฝึกอบรม ๗ วัน
-            </p>
-            <p class="mb-2">
-                <i class="fas fa-university"></i>
-                โอนเงินเข้าบัญชี ธนาคารกรุงไทย สาขาโรจนะ
-            </p>
-            <p class="mb-2">
-                <i class="fas fa-file-invoice"></i>
-                ชื่อบัญชี "มทร.สุวรรณภูมิ เงินรายได้"
-            </p>
-            <p class="mb-2">
-                <i class="fas fa-money-check"></i>
-                เลขที่บัญชี 128-028939-2
-            </p>
-            <p class="mb-0 text-danger">
-                <i class="fas fa-exclamation-triangle"></i>
-                <strong>*ไม่รับชำระด้วยเช็ค*</strong>
-            </p>
-        </div>
-        
-        <div class="mb-3">
-            <label class="form-label">หลักฐานการชำระเงิน (ถ้ามี)</label>
-            <div class="input-group">
-                <span class="input-group-text">
-                    <i class="fas fa-upload"></i>
-                </span>
-                <input type="file" class="form-control" 
-                       name="payment_slip" accept="image/*,.pdf">
+      <!-- Payment Information -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-money-bill me-2"></i>
+                        ข้อมูลการชำระเงิน
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <div class="payment-info">
+                        <h4 class="mb-3">รายละเอียดการชำระเงิน</h4>
+                        
+                        <!-- เพิ่ม QR Code -->
+                        <div class="text-center mb-4">
+                            <img src="QR.jpg" alt="QR Code สำหรับชำระเงิน" style="max-width: 200px;" class="img-fluid border p-2">
+                            <p class="text-muted mt-2">สแกน QR Code เพื่อชำระเงิน</p>
+                        </div>
+                        
+                        <p class="mb-3 fs-5 fw-bold text-danger">
+                            <i class="fas fa-exclamation-circle me-2"></i>
+                            กรุณาชำระเงินค่าลงทะเบียน ก่อนวันเข้ารับการฝึกอบรม ๗ วัน
+                        </p>
+                        <p class="mb-2">
+                            <i class="fas fa-university"></i>
+                            โอนเงินเข้าบัญชี ธนาคารกรุงไทย สาขาโรจนะ
+                        </p>
+                        <p class="mb-2">
+                            <i class="fas fa-file-invoice"></i>
+                            ชื่อบัญชี "มทร.สุวรรณภูมิ เงินรายได้"
+                        </p>
+                        <p class="mb-2">
+                            <i class="fas fa-money-check"></i>
+                            เลขที่บัญชี 128-028939-2
+                        </p>
+                        <p class="mb-0 text-danger">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <strong>*ไม่รับชำระด้วยเช็ค*</strong>
+                        </p>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">หลักฐานการชำระเงิน (ถ้ามี)</label>
+                        <div class="input-group">
+                            <span class="input-group-text">
+                                <i class="fas fa-upload"></i>
+                            </span>
+                            <input type="file" class="form-control" 
+                                name="payment_slip" accept="image/*,.pdf">
+                        </div>
+                        <small class="text-muted">รองรับไฟล์ภาพ (JPG, PNG, GIF) และ PDF ขนาดไม่เกิน 5MB</small>
+                        <small class="d-block text-info mt-1">
+                            <i class="fas fa-info-circle"></i>
+                            คุณสามารถลงทะเบียนโดยไม่อัพโหลดหลักฐานการชำระเงินได้ และสามารถอัพโหลดภายหลังได้
+                        </small>
+                    </div>
+                </div>
             </div>
-            <small class="text-muted">รองรับไฟล์ภาพ (JPG, PNG, GIF) และ PDF ขนาดไม่เกิน 5MB</small>
-            <small class="d-block text-info mt-1">
-                <i class="fas fa-info-circle"></i>
-                คุณสามารถลงทะเบียนโดยไม่อัพโหลดหลักฐานการชำระเงินได้ และสามารถอัพโหลดภายหลังได้
-            </small>
-        </div>
-    </div>
-</div>
         <div class="text-center mt-4">
             <button type="submit" class="btn btn-primary btn-lg px-5">
                 <i class="fas fa-check-circle me-2"></i>
@@ -938,7 +945,6 @@ async function checkRegistration() {
     }
 }
 
-// ปรับสถานะตาม Timeline และเพิ่มการเปิดแบบฟอร์มลงทะเบียน
 function handleRegistrationStatus(data) {
     const { status, message } = data;
     
@@ -976,8 +982,136 @@ function handleRegistrationStatus(data) {
         return;
     }
     
-    // สร้าง timeline steps สำหรับกรณีที่ลงทะเบียนแล้ว
-    let timelineSteps = [
+    // กรณีที่ลงทะเบียนแล้ว ให้แสดงหน้าข้อมูลผู้ลงทะเบียน
+    document.getElementById('phoneCheck').classList.remove('active');
+    
+    // สร้างหน้าแสดงข้อมูลผู้ลงทะเบียนและสถานะ
+    const registrantInfoDiv = document.createElement('div');
+    registrantInfoDiv.id = 'registrantInfo';
+    registrantInfoDiv.className = 'form-section active';
+    
+    // สถานะการลงทะเบียน
+    let statusText = '';
+    let statusClass = '';
+    let actionHtml = '';
+    
+    switch(status) {
+        case 'registered_unpaid':
+        case 'not_paid':
+            statusText = 'รอชำระเงิน';
+            statusClass = 'text-warning';
+            actionHtml = `
+                <div class="card mt-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-upload me-2"></i>อัพโหลดหลักฐานการชำระเงิน</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="payment-info mb-4">
+                            <h5 class="mb-3">รายละเอียดการโอนเงิน</h5>
+                            
+                            <!-- เพิ่ม QR Code -->
+                            <div class="text-center mb-4">
+                                <img src="assets/images/payment_qr.png" alt="QR Code สำหรับชำระเงิน" style="max-width: 200px;" class="img-fluid border p-2">
+                                <p class="text-muted mt-2">สแกน QR Code เพื่อชำระเงิน</p>
+                            </div>
+                            
+                            <p class="mb-3 fs-5 fw-bold text-danger">
+                                <i class="fas fa-exclamation-circle me-2"></i>
+                                กรุณาชำระเงินค่าลงทะเบียน ก่อนวันเข้ารับการฝึกอบรม ๗ วัน
+                            </p>
+                            <p class="mb-2">
+                                <i class="fas fa-university"></i>
+                                โอนเงินเข้าบัญชี ธนาคารกรุงไทย สาขาโรจนะ
+                            </p>
+                            <p class="mb-2">
+                                <i class="fas fa-file-invoice"></i>
+                                ชื่อบัญชี "มทร.สุวรรณภูมิ เงินรายได้"
+                            </p>
+                            <p class="mb-2">
+                                <i class="fas fa-money-check"></i>
+                                เลขที่บัญชี 128-028939-2
+                            </p>
+                        </div>
+                        
+                        <form id="paymentForm">
+                            <div class="mb-3">
+                                <label class="form-label required">วันที่และเวลาที่ชำระเงิน</label>
+                                <input type="datetime-local" class="form-control" name="payment_date" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label required">หลักฐานการชำระเงิน</label>
+                                <input type="file" class="form-control" name="payment_slip" accept="image/*,.pdf" required>
+                                <small class="text-muted">รองรับไฟล์ภาพ (JPG, PNG, GIF) และ PDF ขนาดไม่เกิน 5MB</small>
+                            </div>
+                            <input type="hidden" name="registration_id" value="${data.data?.registration_id || data.registration_id}">
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-upload me-2"></i>อัพโหลดหลักฐาน
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+            break;
+        case 'pending_approval':
+        case 'paid':
+            statusText = 'อัพโหลดหลักฐานแล้ว รอการตรวจสอบจากเจ้าหน้าที่';
+            statusClass = 'text-info';
+            break;
+        case 'registration_complete':
+        case 'approved':
+            statusText = 'ลงทะเบียนเสร็จสมบูรณ์';
+            statusClass = 'text-success';
+            break;
+    }
+    
+    // สร้าง HTML สำหรับหน้าแสดงข้อมูล
+    registrantInfoDiv.innerHTML = `
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0"><i class="fas fa-user-check me-2"></i>ข้อมูลการลงทะเบียน</h4>
+            </div>
+            <div class="card-body">
+                <div class="row mb-4">
+                    <div class="col-md-8">
+                        <h5>สถานะการลงทะเบียน: <span class="${statusClass} fw-bold">${statusText}</span></h5>
+                        <p class="mb-0">รหัสการลงทะเบียน: <strong>${data.data?.registration_id || data.registration_id}</strong></p>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <div class="d-grid">
+                            <button onclick="window.print()" class="btn btn-outline-primary">
+                                <i class="fas fa-print me-2"></i>พิมพ์ข้อมูล
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="registrationTimeline" class="mb-4">
+                    ${createTimelineHTML(getTimelineSteps(status), data)}
+                </div>
+            </div>
+        </div>
+        
+        ${actionHtml}
+    `;
+    
+    // เพิ่มหน้าแสดงข้อมูลเข้าไปในหน้าเว็บ
+    document.querySelector('.container.py-4').appendChild(registrantInfoDiv);
+    
+    // เพิ่ม Event Listener สำหรับฟอร์มอัพโหลดหลักฐานการชำระเงิน
+    const paymentForm = document.getElementById('paymentForm');
+    if (paymentForm) {
+        paymentForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            uploadPaymentWithDate(new FormData(this));
+        });
+    }
+}
+
+// ฟังก์ชันสำหรับสร้าง Timeline Steps
+function getTimelineSteps(status) {
+    const timelineSteps = [
         {
             title: 'ลงทะเบียน',
             description: 'ดำเนินการลงทะเบียนเรียบร้อยแล้ว',
@@ -1003,122 +1137,124 @@ function handleRegistrationStatus(data) {
             status: 'waiting'
         }
     ];
-
-    // สร้าง HTML สำหรับข้อมูลบัญชีธนาคาร
-    const bankInfoHTML = `
-        <div class="card mb-4">
-            <div class="card-header bg-primary text-white">
-                <h5 class="mb-0"><i class="fas fa-university me-2"></i>ข้อมูลบัญชีสำหรับโอนเงิน</h5>
-            </div>
-            <div class="card-body">
-                <div class="d-flex flex-column">
-                    <div class="mb-2">
-                        <strong><i class="fas fa-landmark me-2"></i>ธนาคาร:</strong> ธนาคารกรุงไทย สาขาโรจนะ
-                    </div>
-                    <div class="mb-2">
-                        <strong><i class="fas fa-file-invoice me-2"></i>ชื่อบัญชี:</strong> "มทร.สุวรรณภูมิ เงินรายได้"
-                    </div>
-                    <div class="mb-2">
-                        <strong><i class="fas fa-money-check me-2"></i>เลขที่บัญชี:</strong> 
-                        <span class="fs-5 fw-bold text-primary">128-028939-2</span>
-                    </div>
-                    <div class="alert alert-warning mt-2 mb-0">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        <strong>ไม่รับชำระด้วยเช็ค</strong>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-
-    // ดึงรหัสการลงทะเบียน
-    const registrationId = data.data?.registration_id || data.registration_id;
     
-    console.log("รหัสการลงทะเบียน:", registrationId);
-
-    // ฟอร์มอัพโหลดหลักฐานการชำระเงิน
-    const uploadFormHTML = `
-        <form id="paymentForm" class="text-start">
-            <div class="mb-3">
-                <label class="form-label">หลักฐานการชำระเงิน</label>
-                <div class="input-group">
-                    <span class="input-group-text bg-primary text-white">
-                        <i class="fas fa-receipt"></i>
-                    </span>
-                    <input type="file" class="form-control" name="payment_slip" accept="image/*,.pdf" required>
-                </div>
-                <small class="text-muted">รองรับไฟล์ภาพ (JPG, PNG, GIF) และ PDF ขนาดไม่เกิน 5MB</small>
-            </div>
-            <input type="hidden" name="registration_id" value="${registrationId}">
-        </form>
-    `;
-
     // ปรับสถานะตาม Timeline
     switch(status) {
         case 'registered_unpaid':
-        case 'not_paid':  // เพิ่มเงื่อนไขนี้เพื่อรองรับค่าในฐานข้อมูล
-            timelineSteps[0].status = 'completed';
-            
-            // ปรับคำอธิบายขั้นตอนชำระเงินให้ชัดเจน
-            timelineSteps[1].description = 'กรุณาอัพโหลดหลักฐานการชำระเงิน';
-            timelineSteps[1].status = 'current';
-            
-            // แสดง Timeline พร้อมข้อมูลธนาคารและฟอร์มอัพโหลด
-            Swal.fire({
-                title: 'สถานะการลงทะเบียน',
-                html: createTimelineHTML(timelineSteps, data) + 
-                      bankInfoHTML +
-                      `<div class="mt-4">${uploadFormHTML}</div>`,
-                width: 650,
-                showCancelButton: true,
-                confirmButtonText: '<i class="fas fa-upload me-2"></i>อัพโหลดหลักฐาน',
-                cancelButtonText: '<i class="fas fa-times me-2"></i>ปิด',
-                confirmButtonColor: '#28a745',
-                cancelButtonColor: '#6c757d',
-                preConfirm: () => {
-                    const form = document.getElementById('paymentForm');
-                    if (!form.checkValidity()) {
-                        form.reportValidity();
-                        return false;
-                    }
-                    const formData = new FormData(form);
-                    return uploadPaymentSlip(formData);
-                }
-            });
+        case 'not_paid':
+            // เฉพาะขั้นตอนแรกที่เสร็จสมบูรณ์
             break;
-            
         case 'pending_approval':
-        case 'paid':  // เพิ่มเงื่อนไขนี้เพื่อรองรับค่าในฐานข้อมูล
-            timelineSteps[0].status = 'completed';
+        case 'paid':
             timelineSteps[1].status = 'completed';
             timelineSteps[2].status = 'current';
-            
-            // แสดง Timeline สำหรับกรณีรอการตรวจสอบ
-            Swal.fire({
-                title: 'สถานะการลงทะเบียน',
-                html: createTimelineHTML(timelineSteps, data),
-                width: 650,
-                confirmButtonText: '<i class="fas fa-check me-2"></i>ตกลง',
-                confirmButtonColor: '#3085d6',
-                footer: '<div class="text-center">หากมีข้อสงสัย กรุณาติดต่อคุณชนิดาภา บุญเตี้ย (คุณนาว): 095-5439933</div>'
-            });
             break;
-            
         case 'registration_complete':
-        case 'approved':  // เพิ่มเงื่อนไขนี้เพื่อรองรับค่าในฐานข้อมูล
-            timelineSteps.forEach(step => step.status = 'completed');
-            
-            // แสดง Timeline สำหรับการลงทะเบียนที่เสร็จสมบูรณ์
-            Swal.fire({
-                title: 'การลงทะเบียนเสร็จสมบูรณ์',
-                html: createTimelineHTML(timelineSteps, data),
-                width: 650,
-                confirmButtonText: '<i class="fas fa-check-circle me-2"></i>ตกลง',
-                confirmButtonColor: '#28a745',
-                icon: 'success'
-            });
+        case 'approved':
+            timelineSteps[1].status = 'completed';
+            timelineSteps[2].status = 'completed';
+            timelineSteps[3].status = 'completed';
             break;
     }
+    
+    return timelineSteps;
+}
+
+// ฟังก์ชันสำหรับอัพโหลดหลักฐานการชำระเงินพร้อมวันที่
+function uploadPaymentWithDate(formData) {
+    // แสดง loading
+    Swal.fire({
+        title: 'กำลังอัพโหลด',
+        text: 'กรุณารอสักครู่...',
+        allowOutsideClick: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
+    
+    // ตรวจสอบว่ามีการกรอกวันที่และอัพโหลดไฟล์หรือไม่
+    const paymentDate = formData.get('payment_date');
+    const paymentFile = formData.get('payment_slip');
+    
+    if (!paymentDate) {
+        Swal.fire({
+            icon: 'error',
+            title: 'กรุณาระบุวันที่และเวลาที่ชำระเงิน',
+            text: 'โปรดกรอกวันที่และเวลาที่คุณชำระเงิน'
+        });
+        return;
+    }
+    
+    if (!paymentFile || paymentFile.size === 0) {
+        Swal.fire({
+            icon: 'error',
+            title: 'กรุณาเลือกไฟล์',
+            text: 'คุณยังไม่ได้เลือกไฟล์หลักฐานการชำระเงิน'
+        });
+        return;
+    }
+    
+    // ตรวจสอบประเภทไฟล์
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'application/pdf'];
+    const fileType = paymentFile.type;
+    
+    if (!allowedTypes.includes(fileType)) {
+        Swal.fire({
+            icon: 'error',
+            title: 'ประเภทไฟล์ไม่ถูกต้อง',
+            text: 'กรุณาอัพโหลดไฟล์ภาพ (JPG, PNG, GIF) หรือ PDF เท่านั้น'
+        });
+        return;
+    }
+    
+    // ตรวจสอบขนาดไฟล์
+    if (paymentFile.size > 5 * 1024 * 1024) { // 5MB
+        Swal.fire({
+            icon: 'error',
+            title: 'ขนาดไฟล์ใหญ่เกินไป',
+            text: 'กรุณาอัพโหลดไฟล์ขนาดไม่เกิน 5MB'
+        });
+        return;
+    }
+    
+    // ส่งข้อมูลไปยังเซิร์ฟเวอร์
+    fetch('upload_payment.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.text())
+    .then(text => {
+        try {
+            return JSON.parse(text);
+        } catch (e) {
+            console.error('Invalid JSON response:', text);
+            throw new Error('ข้อมูลตอบกลับไม่ถูกต้อง กรุณาติดต่อผู้ดูแลระบบ');
+        }
+    })
+    .then(result => {
+        if (result.success) {
+            Swal.fire({
+                icon: 'success',
+                title: 'อัพโหลดสำเร็จ',
+                text: 'หลักฐานการชำระเงินถูกอัพโหลดเรียบร้อยแล้ว กรุณารอการตรวจสอบจากเจ้าหน้าที่',
+                confirmButtonText: 'ตกลง'
+            }).then(() => {
+                // รีเฟรชหน้าเพื่อแสดงสถานะล่าสุด
+                window.location.reload();
+            });
+        } else {
+            throw new Error(result.message || 'เกิดข้อผิดพลาดในการอัพโหลดไฟล์');
+        }
+    })
+    .catch(error => {
+        console.error('Error uploading file:', error);
+        Swal.fire({
+            icon: 'error',
+            title: 'เกิดข้อผิดพลาด',
+            text: error.message || 'ไม่สามารถอัพโหลดไฟล์ได้ กรุณาลองใหม่อีกครั้ง',
+            confirmButtonText: 'ตกลง'
+        });
+    });
 }
 
 function createTimelineHTML(timelineSteps, data) {

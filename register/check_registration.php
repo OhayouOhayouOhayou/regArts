@@ -56,7 +56,9 @@ try {
                 if ($registration['is_approved']) {
                     $response['status'] = 'registration_complete';
                 } else {
+                    // เปลี่ยนคำอธิบายสถานะเป็นรอการตรวจสอบ
                     $response['status'] = 'pending_approval';
+                    $response['message'] = 'อัพโหลดหลักฐานแล้ว รอการตรวจสอบจากเจ้าหน้าที่';
                 }
                 break;
         }

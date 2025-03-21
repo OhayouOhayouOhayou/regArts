@@ -23,13 +23,19 @@ class PaymentUploader {
         $this->db = $database->getConnection();
     }
 
-    public function upload($registrationId, $file) {
+    public function upload($registrationId, $paymentDate, $file) {
         try {
             error_log("Processing upload for registration ID: " . $registrationId);
+            error_log("Payment date: " . $paymentDate);
             
             // Validate registrationId
             if (!$registrationId) {
                 throw new Exception('ไม่พบรหัสการลงทะเบียน');
+            }
+            
+            // Validate payment date
+            if (!$paymentDate) {
+                throw new Exception('กรุณาระบุวันที่และเวลาที่ชำระเงิน');
             }
             
             // Begin transaction
@@ -49,7 +55,7 @@ class PaymentUploader {
             error_log("File uploaded to: " . $uploadResult['file_path']);
             
             // Update database records
-            $this->updateDatabase($registrationId, $uploadResult);
+            $this->updateDatabase($registrationId, $paymentDate, $uploadResult);
             
             // Commit transaction
             $this->db->commit();
@@ -156,7 +162,7 @@ class PaymentUploader {
         ];
     }
 
-    private function updateDatabase($registrationId, $uploadResult) {
+    private function updateDatabase($registrationId, $paymentDate, $uploadResult) {
         try {
             // Get table structure
             $this->logTableStructure('registration_files');
@@ -199,11 +205,47 @@ class PaymentUploader {
             $fileId = $this->db->lastInsertId();
             error_log("Inserted file record with ID: " . $fileId);
             
-            // Check if payment_slip_id column exists
-            $updateQuery = $this->determineUpdateQuery($registrationId, $fileId);
+            // Check columns
+            $columns = $this->getTableColumns('registrations');
+            $hasPaymentDate = false;
+            $hasPaymentSlipId = false;
+            $hasPaymentUpdatedAt = false;
+            
+            foreach ($columns as $column) {
+                if ($column['Field'] === 'payment_date') {
+                    $hasPaymentDate = true;
+                }
+                if ($column['Field'] === 'payment_slip_id') {
+                    $hasPaymentSlipId = true;
+                }
+                if ($column['Field'] === 'payment_updated_at') {
+                    $hasPaymentUpdatedAt = true;
+                }
+            }
+            
+            // Construct update query
+            $updateQuery = "UPDATE registrations SET payment_status = 'paid'";
+            $params = [];
+            
+            if ($hasPaymentDate) {
+                $updateQuery .= ", payment_date = ?";
+                $params[] = $paymentDate;
+            }
+            
+            if ($hasPaymentUpdatedAt) {
+                $updateQuery .= ", payment_updated_at = CURRENT_TIMESTAMP";
+            }
+            
+            if ($hasPaymentSlipId) {
+                $updateQuery .= ", payment_slip_id = ?";
+                $params[] = $fileId;
+            }
+            
+            $updateQuery .= " WHERE id = ?";
+            $params[] = $registrationId;
             
             error_log("Executing update query: " . $updateQuery);
-            error_log("With fileId: " . $fileId . " and registrationId: " . $registrationId);
+            error_log("With parameters: " . print_r($params, true));
             
             $stmt = $this->db->prepare($updateQuery);
             
@@ -212,11 +254,7 @@ class PaymentUploader {
                 throw new Exception('เกิดข้อผิดพลาดในการเตรียมคำสั่ง SQL สำหรับอัพเดทสถานะ');
             }
             
-            if (strpos($updateQuery, 'payment_slip_id') !== false) {
-                $updateResult = $stmt->execute([$fileId, $registrationId]);
-            } else {
-                $updateResult = $stmt->execute([$registrationId]);
-            }
+            $updateResult = $stmt->execute($params);
             
             if (!$updateResult) {
                 error_log("PDO execute error (update): " . print_r($stmt->errorInfo(), true));
@@ -232,49 +270,20 @@ class PaymentUploader {
         }
     }
     
-    private function determineUpdateQuery($registrationId, $fileId) {
-        // Try to get the column structure to see if payment_slip_id exists
-        try {
-            $columns = $this->getTableColumns('registrations');
-            
-            $hasPaymentSlipId = false;
-            $hasPaymentUpdatedAt = false;
-            
-            foreach ($columns as $column) {
-                if ($column['Field'] === 'payment_slip_id') {
-                    $hasPaymentSlipId = true;
-                }
-                if ($column['Field'] === 'payment_updated_at') {
-                    $hasPaymentUpdatedAt = true;
-                }
-            }
-            
-            // Construct query based on available columns
-            $query = "UPDATE registrations SET payment_status = 'paid'";
-            
-            if ($hasPaymentUpdatedAt) {
-                $query .= ", payment_updated_at = CURRENT_TIMESTAMP";
-            }
-            
-            if ($hasPaymentSlipId) {
-                $query .= ", payment_slip_id = ?";
-            }
-            
-            $query .= " WHERE id = ?";
-            
-            return $query;
-            
-        } catch (Exception $e) {
-            error_log("Error determining update query: " . $e->getMessage());
-            // Fallback to a basic query
-            return "UPDATE registrations SET payment_status = 'paid' WHERE id = ?";
-        }
-    }
-    
     private function getTableColumns($tableName) {
         $stmt = $this->db->prepare("DESCRIBE " . $tableName);
         $stmt->execute();
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+    
+    private function hasColumn($tableName, $columnName) {
+        $columns = $this->getTableColumns($tableName);
+        foreach ($columns as $column) {
+            if ($column['Field'] === $columnName) {
+                return true;
+            }
+        }
+        return false;
     }
     
     private function logTableStructure($tableName) {
@@ -297,9 +306,12 @@ class PaymentUploader {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $uploader = new PaymentUploader();
     
-    // Debug registration ID
+    // Debug registration ID and payment date
     $registrationId = $_POST['registration_id'] ?? null;
+    $paymentDate = $_POST['payment_date'] ?? null;
+    
     error_log("Received registration_id: " . $registrationId);
+    error_log("Received payment_date: " . $paymentDate);
     
     // Check if files are properly received
     if (isset($_FILES['payment_slip'])) {
@@ -310,6 +322,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     $result = $uploader->upload(
         $registrationId,
+        $paymentDate,
         $_FILES['payment_slip'] ?? null
     );
     
