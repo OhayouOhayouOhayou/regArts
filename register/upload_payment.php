@@ -205,47 +205,19 @@ class PaymentUploader {
             $fileId = $this->db->lastInsertId();
             error_log("Inserted file record with ID: " . $fileId);
             
-            // Check columns
-            $columns = $this->getTableColumns('registrations');
-            $hasPaymentDate = false;
-            $hasPaymentSlipId = false;
-            $hasPaymentUpdatedAt = false;
-            
-            foreach ($columns as $column) {
-                if ($column['Field'] === 'payment_date') {
-                    $hasPaymentDate = true;
-                }
-                if ($column['Field'] === 'payment_slip_id') {
-                    $hasPaymentSlipId = true;
-                }
-                if ($column['Field'] === 'payment_updated_at') {
-                    $hasPaymentUpdatedAt = true;
-                }
-            }
-            
-            // Construct update query
-            $updateQuery = "UPDATE registrations SET payment_status = 'paid'";
-            $params = [];
-            
-            if ($hasPaymentDate) {
-                $updateQuery .= ", payment_date = ?";
-                $params[] = $paymentDate;
-            }
-            
-            if ($hasPaymentUpdatedAt) {
-                $updateQuery .= ", payment_updated_at = CURRENT_TIMESTAMP";
-            }
-            
-            if ($hasPaymentSlipId) {
-                $updateQuery .= ", payment_slip_id = ?";
-                $params[] = $fileId;
-            }
-            
-            $updateQuery .= " WHERE id = ?";
-            $params[] = $registrationId;
+            // อัพเดตสถานะการชำระเงิน
+            $updateQuery = "
+                UPDATE registrations 
+                SET payment_status = 'paid',
+                    payment_date = ?,
+                    payment_updated_at = NOW(),
+                    payment_slip_id = ?,
+                    approved_at = NULL
+                WHERE id = ?
+            ";
             
             error_log("Executing update query: " . $updateQuery);
-            error_log("With parameters: " . print_r($params, true));
+            error_log("With parameters: [" . $paymentDate . ", " . $fileId . ", " . $registrationId . "]");
             
             $stmt = $this->db->prepare($updateQuery);
             
@@ -254,7 +226,7 @@ class PaymentUploader {
                 throw new Exception('เกิดข้อผิดพลาดในการเตรียมคำสั่ง SQL สำหรับอัพเดทสถานะ');
             }
             
-            $updateResult = $stmt->execute($params);
+            $updateResult = $stmt->execute([$paymentDate, $fileId, $registrationId]);
             
             if (!$updateResult) {
                 error_log("PDO execute error (update): " . print_r($stmt->errorInfo(), true));
@@ -302,6 +274,7 @@ class PaymentUploader {
     }
 }
 
+// Process upload request
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $uploader = new PaymentUploader();
     
@@ -342,3 +315,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'message' => 'Method Not Allowed'
     ]);
 }
+?>

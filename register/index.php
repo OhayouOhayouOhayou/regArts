@@ -1033,11 +1033,54 @@ function fetchRegistrationDetails(registrationId) {
     });
 }
 
-// ฟังก์ชันสำหรับแสดงรายละเอียดผู้ลงทะเบียน
+function viewPaymentSlip(filePath) {
+    Swal.fire({
+        title: 'หลักฐานการชำระเงิน',
+        html: `<img src="${filePath}" class="img-fluid" alt="หลักฐานการชำระเงิน">`,
+        width: 800,
+        confirmButtonText: 'ปิด'
+    });
+}
+
+
+function showUploadNewSlip(registrationId) {
+    Swal.fire({
+        title: 'อัพโหลดหลักฐานการชำระเงินใหม่',
+        html: `
+            <form id="newPaymentForm">
+                <div class="mb-3">
+                    <label class="form-label required">วันที่และเวลาที่ชำระเงิน</label>
+                    <input type="datetime-local" class="form-control" name="payment_date" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label required">หลักฐานการชำระเงิน</label>
+                    <input type="file" class="form-control" name="payment_slip" accept="image/*,.pdf" required>
+                    <small class="text-muted">รองรับไฟล์ภาพ (JPG, PNG, GIF) และ PDF ขนาดไม่เกิน 5MB</small>
+                </div>
+                <input type="hidden" name="registration_id" value="${registrationId}">
+            </form>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'อัพโหลด',
+        cancelButtonText: 'ยกเลิก',
+        preConfirm: () => {
+            const form = document.getElementById('newPaymentForm');
+            if (!form.checkValidity()) {
+                form.reportValidity();
+                return false;
+            }
+            
+            const formData = new FormData(form);
+            return uploadPaymentWithDate(formData);
+        }
+    });
+}
+
 function displayRegistrationDetails(data) {
     const registration = data.registration;
     const addresses = data.addresses;
     const documents = data.documents;
+    const paymentFiles = data.payment_files || [];
     
     // กรณีที่ลงทะเบียนแล้ว ให้แสดงหน้าข้อมูลผู้ลงทะเบียน
     document.getElementById('phoneCheck').classList.remove('active');
@@ -1051,6 +1094,7 @@ function displayRegistrationDetails(data) {
     let statusText = '';
     let statusClass = '';
     let actionHtml = '';
+    let paymentViewHtml = '';
     
     switch(registration.payment_status) {
         case 'not_paid':
@@ -1110,17 +1154,37 @@ function displayRegistrationDetails(data) {
                 </div>
             `;
             break;
-            case 'paid':
-        if (registration.is_approved) {
-            statusText = 'ลงทะเบียนเสร็จสมบูรณ์';
-            statusClass = 'text-success';
-        } else {
-          
-            statusText = 'ชำระเงิน (อัพโหลดแล้วรอการตรวจสอบ)';
-            statusClass = 'text-primary'; 
-        }
-        break;
-}
+        case 'paid':
+            if (registration.approved_at) {
+                statusText = 'ชำระเงินเรียบร้อยแล้ว';
+                statusClass = 'text-success';
+            } else {
+                statusText = 'อัพโหลดหลักฐานแล้ว รอการตรวจสอบจากเจ้าหน้าที่';
+                statusClass = 'text-primary'; 
+            }
+            
+            // ตรวจสอบว่ามีไฟล์หลักฐานการชำระเงินหรือไม่
+            if (paymentFiles.length > 0) {
+                const latestPayment = paymentFiles[paymentFiles.length - 1];
+                paymentViewHtml = `
+                    <div class="card mt-4">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0"><i class="fas fa-receipt me-2"></i>หลักฐานการชำระเงิน</h5>
+                        </div>
+                        <div class="card-body text-center">
+                            <button type="button" class="btn btn-primary" onclick="viewPaymentSlip('${latestPayment.file_path}')">
+                                <i class="fas fa-eye me-2"></i>ดูหลักฐานการชำระเงิน
+                            </button>
+                            
+                            <button type="button" class="btn btn-outline-warning ms-2" onclick="showUploadNewSlip(${registration.id})">
+                                <i class="fas fa-upload me-2"></i>อัพโหลดใหม่
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+            break;
+    }
     
     // เตรียมข้อมูลที่อยู่
     const addressHTML = addresses.map(address => {
@@ -1217,7 +1281,7 @@ function displayRegistrationDetails(data) {
                 </div>
                 
                 <div id="registrationTimeline" class="mb-4">
-                    ${createTimelineHTML(getTimelineSteps(registration.payment_status, registration.is_approved), data)}
+                    ${createTimelineHTML(getTimelineSteps(registration.payment_status, registration.approved_at), data)}
                 </div>
                 
                 <div class="card mb-4">
@@ -1260,6 +1324,8 @@ function displayRegistrationDetails(data) {
                 </div>
                 
                 ${documentsHTML}
+                
+                ${paymentViewHtml}
             </div>
         </div>
         
@@ -1279,8 +1345,7 @@ function displayRegistrationDetails(data) {
     }
 }
 
-// ปรับปรุงฟังก์ชัน getTimelineSteps เพื่อพิจารณาทั้งสถานะการชำระเงินและการอนุมัติ
-function getTimelineSteps(paymentStatus, isApproved) {
+function getTimelineSteps(paymentStatus, approved_at) {
     const timelineSteps = [
         {
             title: 'ลงทะเบียน',
@@ -1308,15 +1373,15 @@ function getTimelineSteps(paymentStatus, isApproved) {
         }
     ];
     
-    // ปรับสถานะตาม Timeline
     if (paymentStatus === 'paid') {
         timelineSteps[1].status = 'completed';
         
-        if (isApproved) {
+        if (approved_at) {
+            timelineSteps[2].description = 'ตรวจสอบหลักฐานการชำระเงินเรียบร้อยแล้ว';
             timelineSteps[2].status = 'completed';
             timelineSteps[3].status = 'completed';
         } else {
-            // ถ้ายังไม่อนุมัติ ให้แสดงเป็นรอตรวจสอบ
+            timelineSteps[2].description = 'อัพโหลดหลักฐานแล้ว รอการตรวจสอบจากเจ้าหน้าที่';
             timelineSteps[2].status = 'current';
         }
     }
