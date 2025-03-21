@@ -23,9 +23,8 @@ try {
     $conn = $db->getConnection();
     
     $stmt = $conn->prepare("
-        SELECT r.*, rf.id as payment_slip_id 
+        SELECT r.* 
         FROM registrations r 
-        LEFT JOIN registration_files rf ON r.id = rf.registration_id 
         WHERE r.phone = ?
     ");
     
@@ -43,8 +42,7 @@ try {
             'message' => 'เบอร์โทรศัพท์นี้ได้ลงทะเบียนแล้ว',
             'data' => [
                 'registration_id' => $registration['id'],
-                'payment_status' => $registration['payment_status'],
-                'is_approved' => $registration['is_approved']
+                'payment_status' => $registration['payment_status']
             ]
         ];
         
@@ -53,10 +51,11 @@ try {
                 $response['status'] = 'registered_unpaid';
                 break;
             case 'paid':
-                if ($registration['is_approved']) {
+                if (isset($registration['is_approved']) && $registration['is_approved']) {
                     $response['status'] = 'registration_complete';
                 } else {
                     $response['status'] = 'pending_approval';
+                    $response['message'] = 'รอการตรวจสอบจากเจ้าหน้าที่';
                 }
                 break;
         }
@@ -81,3 +80,4 @@ try {
         'message' => $e->getMessage()
     ], JSON_UNESCAPED_UNICODE);
 }
+?>
