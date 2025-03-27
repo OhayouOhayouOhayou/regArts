@@ -942,7 +942,7 @@
                 console.error('Error loading zipcode:', error);
                 const zipcodeInput = document.querySelector(`input[name="${section}_zipcode"]`);
                 zipcodeInput.value = '';
-                showError('ไม่สามารถโหลดข้อมูลรหัสไปรษณีย์ได้ กรุณาลองใหม่อีกครั้ง');
+               // showError('ไม่สามารถโหลดข้อมูลรหัสไปรษณีย์ได้ กรุณาลองใหม่อีกครั้ง');
             }
         }
         
