@@ -506,7 +506,7 @@
                                         </div>
                                     </div>
                                     <div class="col-md-4 mb-3">
-                                        <label class="form-label required">อีเมล <span style="color:red">(ใช้สำหรับออกวุฒิบัตร)</span></label>
+                                        <label class="form-label required">อีเมล <span style="color:red">(ใช้สำหรับรับวุฒิบัตร)</span></label>
                                         <div class="input-group">
                                             <span class="input-group-text">
                                                 <i class="fas fa-envelope"></i>
@@ -1655,7 +1655,7 @@
 
                 <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label class="form-label required">อีเมล <span style="color:red">(ใช้สำหรับออกวุฒิบัตร)</span></label>
+                        <label class="form-label required">อีเมล <span style="color:red">(ใช้สำหรับรับวุฒิบัตร)</span></label>
                         <div class="input-group">
                             <span class="input-group-text">
                                 <i class="fas fa-envelope"></i>
