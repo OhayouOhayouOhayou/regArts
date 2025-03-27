@@ -34,6 +34,18 @@ try {
         throw new Exception('ไม่พบข้อมูลการลงทะเบียน');
     }
     
+    // ดึงข้อมูลผู้ลงทะเบียนในกลุ่มเดียวกัน
+    $groupRegistrations = [];
+    if (!empty($registration['registration_group'])) {
+        $groupStmt = $conn->prepare("
+            SELECT * FROM registrations
+            WHERE registration_group = ?
+            ORDER BY id ASC
+        ");
+        $groupStmt->execute([$registration['registration_group']]);
+        $groupRegistrations = $groupStmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+    
     // ดึงข้อมูลที่อยู่
     $stmt = $conn->prepare("
         SELECT ra.*, 
@@ -69,6 +81,7 @@ try {
     echo json_encode([
         'success' => true,
         'registration' => $registration,
+        'group_registrations' => $groupRegistrations,
         'addresses' => $addresses,
         'documents' => $documents,
         'payment_files' => $paymentFiles

@@ -24,30 +24,94 @@ class RegistrationProcessor {
             $conn = $this->db->getConnection();
             $conn->beginTransaction();
 
-            // ตรวจสอบข้อมูลที่จำเป็น
-            $this->validateData($postData);
+            // สร้าง registration_group_id สำหรับผู้ลงทะเบียนทั้งหมดในครั้งนี้
+            $groupId = uniqid('group_');
+            $registrationIds = [];
             
-            // บันทึกข้อมูลการลงทะเบียน
-            $registrationId = $this->saveRegistration($conn, $postData);
+            // หาจำนวนผู้ลงทะเบียน
+            $registrantCount = 1; // มีอย่างน้อย 1 คน
             
-            // บันทึกที่อยู่
-            $this->saveAddresses($conn, $registrationId, $postData);
-            
-            // จัดการไฟล์เอกสารประกอบ (ถ้ามี)
-            if (isset($files['documents']) && $this->isValidDocumentsUpload($files['documents'])) {
-                $this->handleDocuments($conn, $registrationId, $files['documents'], $postData);
+            // ตรวจสอบว่ามีผู้ลงทะเบียนกี่คน โดยนับจากฟิลด์ fullname_X
+            foreach ($postData as $key => $value) {
+                if (preg_match('/^fullname_(\d+)$/', $key, $matches)) {
+                    $index = (int)$matches[1];
+                    if ($index >= $registrantCount) {
+                        $registrantCount = $index + 1;
+                    }
+                }
             }
             
-            // จัดการไฟล์หลักฐานการชำระเงิน (ถ้ามี)
-            $hasPaymentSlip = false;
+            // ประมวลผลแต่ละผู้ลงทะเบียน
+            for ($i = 0; $i < $registrantCount; $i++) {
+                $registrantData = [];
+                
+                // จัดการข้อมูลสำหรับคนแรก (ไม่มี suffix)
+                if ($i === 0) {
+                    $registrantData = [
+                        'title' => $postData['title'],
+                        'title_other' => $postData['title_other'] ?? null,
+                        'fullname' => $postData['fullname'],
+                        'organization' => $postData['organization'],
+                        'position' => $postData['position'],
+                        'phone' => $postData['phone'],
+                        'email' => $postData['email'],
+                        'line_id' => $postData['line_id'] ?? null
+                    ];
+                } else {
+                    // จัดการข้อมูลสำหรับคนที่ 2 เป็นต้นไป (มี suffix _X)
+                    $registrantData = [
+                        'title' => $postData["title_{$i}"] ?? '',
+                        'title_other' => $postData["title_other_{$i}"] ?? null,
+                        'fullname' => $postData["fullname_{$i}"] ?? '',
+                        'organization' => $postData["organization_{$i}"] ?? '',
+                        'position' => $postData["position_{$i}"] ?? '',
+                        'phone' => $postData['phone'], // ใช้เบอร์โทรศัพท์เดียวกับคนแรก
+                        'email' => $postData["email_{$i}"] ?? '',
+                        'line_id' => $postData["line_id_{$i}"] ?? null
+                    ];
+                }
+                
+                // ตรวจสอบว่ามีข้อมูลที่จำเป็นครบหรือไม่
+                if (empty($registrantData['fullname'])) {
+                    // ข้ามผู้ลงทะเบียนที่ไม่มีข้อมูล
+                    continue;
+                }
+                
+                // ตรวจสอบข้อมูลที่จำเป็น
+                foreach (['title', 'fullname', 'organization', 'position', 'email'] as $field) {
+                    if (empty($registrantData[$field])) {
+                        throw new Exception("กรุณากรอก{$field}ให้ครบถ้วน");
+                    }
+                }
+                
+                // บันทึกข้อมูลการลงทะเบียน
+                $registrationId = $this->saveRegistrationWithGroup($conn, $registrantData, $groupId);
+                $registrationIds[] = $registrationId;
+                
+                // บันทึกที่อยู่ (เฉพาะผู้ลงทะเบียนคนแรกเท่านั้น)
+                if ($i === 0) {
+                    $this->saveAddresses($conn, $registrationId, $postData);
+                }
+            }
             
-            // ตรวจสอบว่ามีการอัพโหลดหลักฐานการชำระเงินหรือไม่
+            // จัดการไฟล์เอกสารประกอบ (ถ้ามี) - เชื่อมโยงกับผู้ลงทะเบียนคนแรก
+            if (isset($files['documents']) && $this->isValidDocumentsUpload($files['documents'])) {
+                $this->handleDocuments($conn, $registrationIds[0], $files['documents'], $postData);
+            }
+            
+            // จัดการไฟล์หลักฐานการชำระเงินสำหรับทุกคน (ถ้ามี)
+            $hasPaymentSlip = false;
             if (isset($files['payment_slip']) && $files['payment_slip']['error'] === UPLOAD_ERR_OK) {
-                // ถ้ามีการอัพโหลดและไม่มีข้อผิดพลาด
-                $hasPaymentSlip = $this->handlePaymentSlip($conn, $registrationId, $files['payment_slip']);
-            } else {
-                // ไม่มีการอัพโหลดหลักฐานหรือมีข้อผิดพลาด
-                error_log("ไม่มีการอัพโหลดหลักฐานการชำระเงิน");
+                $fileId = $this->handleGroupPaymentSlip($conn, $registrationIds[0], $files['payment_slip']);
+                
+                if ($fileId) {
+                    $hasPaymentSlip = true;
+                    
+                    // อัพเดตสถานะการชำระเงินสำหรับทุกคนในกลุ่ม
+                    foreach ($registrationIds as $regId) {
+                        $this->updatePaymentStatus($conn, $regId, $fileId, $postData['payment_date'] ?? null);
+                    }
+                }
             }
             
             $conn->commit();
@@ -55,7 +119,8 @@ class RegistrationProcessor {
             return [
                 'success' => true,
                 'message' => 'บันทึกข้อมูลเรียบร้อยแล้ว',
-                'registration_id' => $registrationId,
+                'registration_ids' => $registrationIds,
+                'registration_count' => count($registrationIds),
                 'payment_uploaded' => $hasPaymentSlip
             ];
             
@@ -68,29 +133,12 @@ class RegistrationProcessor {
         }
     }
     
-    private function validateData($data) {
-        $requiredFields = [
-            'title' => 'คำนำหน้าชื่อ',
-            'fullname' => 'ชื่อ-นามสกุล',
-            'organization' => 'หน่วยงาน',
-            'position' => 'ตำแหน่ง',
-            'phone' => 'เบอร์โทรศัพท์',
-            'email' => 'อีเมล'
-        ];
-        
-        foreach ($requiredFields as $field => $label) {
-            if (empty($data[$field])) {
-                throw new Exception("กรุณากรอก{$label}");
-            }
-        }
-    }
-    
-    private function saveRegistration($conn, $data) {
-        // สร้างข้อมูลการลงทะเบียนโดยเพิ่มฟิลด์ position
+    // เพิ่มฟังก์ชันใหม่สำหรับบันทึกการลงทะเบียนพร้อมกับ group_id
+    private function saveRegistrationWithGroup($conn, $data, $groupId) {
         $sql = "INSERT INTO registrations (
                     title, title_other, fullname, organization, position,
-                    phone, email, line_id, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
+                    phone, email, line_id, registration_group, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
                 
         $stmt = $conn->prepare($sql);
         $stmt->execute([
@@ -101,7 +149,8 @@ class RegistrationProcessor {
             $data['position'],
             $data['phone'],
             $data['email'],
-            $data['line_id'] ?? null
+            $data['line_id'] ?? null,
+            $groupId
         ]);
         
         return $conn->lastInsertId();
@@ -139,7 +188,13 @@ class RegistrationProcessor {
                 empty($data[$fields['district']]) || 
                 empty($data[$fields['subdistrict']]) || 
                 empty($data[$fields['zipcode']])) {
-                throw new Exception("กรุณากรอกข้อมูลที่อยู่ให้ครบถ้วน");
+                if ($type === 'invoice') {
+                    // สำหรับ invoice address จำเป็นต้องมีข้อมูลครบถ้วน
+                    throw new Exception("กรุณากรอกข้อมูลที่อยู่สำหรับออกใบเสร็จให้ครบถ้วน");
+                } else {
+                    // สำหรับที่อยู่อื่นๆ ใช้ที่อยู่เดียวกับ invoice
+                    continue;
+                }
             }
     
             $sql = "INSERT INTO registration_addresses (
@@ -158,6 +213,23 @@ class RegistrationProcessor {
                 $data[$fields['zipcode']]
             ]);
         }
+    }
+    
+    // เพิ่มฟังก์ชันสำหรับอัพเดตสถานะการชำระเงิน
+    private function updatePaymentStatus($conn, $registrationId, $fileId, $paymentDate) {
+        $sql = "UPDATE registrations 
+                SET payment_status = 'paid',
+                    payment_date = ?,
+                    payment_updated_at = NOW(),
+                    payment_slip_id = ?
+                WHERE id = ?";
+                
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([
+            $paymentDate ?: date('Y-m-d H:i:s'),
+            $fileId,
+            $registrationId
+        ]);
     }
     
     private function isValidDocumentsUpload($files) {
@@ -246,7 +318,8 @@ class RegistrationProcessor {
         }
     }
 
-    private function handlePaymentSlip($conn, $registrationId, $file) {
+    // แก้ไขฟังก์ชัน handlePaymentSlip เป็น handleGroupPaymentSlip
+    private function handleGroupPaymentSlip($conn, $registrationId, $file) {
         // ตรวจสอบว่ามีการอัพโหลดไฟล์หรือไม่
         if ($file['error'] !== UPLOAD_ERR_OK || $file['size'] <= 0) {
             error_log("ไม่สามารถอัพโหลดหลักฐานการชำระเงินได้: " . $file['error']);
@@ -304,21 +377,7 @@ class RegistrationProcessor {
                 $file['size']
             ]);
             
-            $fileId = $conn->lastInsertId();
-            
-            // อัพเดตสถานะการชำระเงินเป็น 'paid' และบันทึกวันที่ชำระเงิน
-            $sql = "UPDATE registrations 
-                    SET payment_status = 'paid',
-                        payment_date = ?,
-                        payment_updated_at = NOW(),
-                        payment_slip_id = ?
-                    WHERE id = ?";
-                    
-            $stmt = $conn->prepare($sql);
-            $stmt->execute([$paymentDate, $fileId, $registrationId]);
-            
-            error_log("อัพโหลดหลักฐานการชำระเงินสำเร็จ: " . $filePath);
-            return true;
+            return $conn->lastInsertId(); // คืนค่า ID ของไฟล์ที่อัพโหลด
         } catch (Exception $e) {
             error_log("เกิดข้อผิดพลาดในการบันทึกข้อมูลหลักฐานการชำระเงิน: " . $e->getMessage());
             return false;

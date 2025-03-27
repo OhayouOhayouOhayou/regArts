@@ -22,10 +22,13 @@ try {
     $db = new Database();
     $conn = $db->getConnection();
     
+    // ปรับเปลี่ยนคำสั่ง SQL ให้ดึงผู้ลงทะเบียนจาก phone และ registration_group
     $stmt = $conn->prepare("
         SELECT r.* 
         FROM registrations r 
         WHERE r.phone = ?
+        ORDER BY r.created_at DESC
+        LIMIT 1
     ");
     
     error_log("Checking phone number: " . $data['phone']);
@@ -36,13 +39,31 @@ try {
     
     $response = [];
     if ($registration) {
+        // ถ้าพบการลงทะเบียน ให้ตรวจสอบว่ามีการลงทะเบียนกลุ่มหรือไม่
+        $registrationCount = 1;
+        $registrationGroup = $registration['registration_group'] ?? null;
+        
+        if ($registrationGroup) {
+            // นับจำนวนคนในกลุ่มเดียวกัน
+            $groupStmt = $conn->prepare("
+                SELECT COUNT(*) as count
+                FROM registrations
+                WHERE registration_group = ?
+            ");
+            $groupStmt->execute([$registrationGroup]);
+            $groupResult = $groupStmt->fetch(PDO::FETCH_ASSOC);
+            $registrationCount = $groupResult['count'];
+        }
+        
         $response = [
             'success' => true,
             'status' => 'exists',
             'message' => 'เบอร์โทรศัพท์นี้ได้ลงทะเบียนแล้ว',
             'data' => [
                 'registration_id' => $registration['id'],
-                'payment_status' => $registration['payment_status']
+                'payment_status' => $registration['payment_status'],
+                'registration_count' => $registrationCount,
+                'registration_group' => $registrationGroup
             ]
         ];
         
@@ -80,4 +101,3 @@ try {
         'message' => $e->getMessage()
     ], JSON_UNESCAPED_UNICODE);
 }
-?>
