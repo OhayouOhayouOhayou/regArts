@@ -917,7 +917,7 @@
                 
             } catch (error) {
                 console.error('Error loading subdistricts:', error);
-                showError('ไม่สามารถโหลดข้อมูลตำบลได้');
+             //   showError('ไม่สามารถโหลดข้อมูลตำบลได้');
             }
         }
 
