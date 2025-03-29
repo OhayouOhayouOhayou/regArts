@@ -2,7 +2,7 @@
 // ตั้งค่า header
 header('Content-Type: application/json');
 
-// ข้อมูลการเชื่อมต่อฐานข้อมูลที่ถูกต้องสำหรับ Docker
+// สร้างการเชื่อมต่อฐานข้อมูลโดยตรง
 try {
     $conn = new PDO(
         "mysql:host=mysql;port=3306;dbname=shared_db",
@@ -29,31 +29,46 @@ $phone = $_GET['phone'] ?? '';
 $status = $_GET['status'] ?? '';
 $search = $_GET['search'] ?? '';
 
-// สร้าง SQL หลัก - ใช้แบบง่ายที่สุดก่อน
-$sql = "SELECT * FROM registrations WHERE 1=1";
+// สร้าง SQL หลัก - รวมตาราง registrations และ registration_addresses
+$sql = "SELECT r.*, 
+               a.address, a.province_id, a.district_id, a.subdistrict_id, a.zipcode,
+               p.name_in_thai AS province_name, 
+               d.name_in_thai AS district_name, 
+               s.name_in_thai AS subdistrict_name
+        FROM registrations r 
+        LEFT JOIN registration_addresses a ON r.id = a.registration_id
+        LEFT JOIN provinces p ON a.province_id = p.id 
+        LEFT JOIN districts d ON a.district_id = d.id 
+        LEFT JOIN subdistricts s ON a.subdistrict_id = s.id 
+        WHERE 1=1";
 
 // สร้างเงื่อนไขและพารามิเตอร์สำหรับ Prepared Statement
 $conditions = [];
 $params = [];
 
 if ($province) {
-    $conditions[] = "province_id = :province";
+    $conditions[] = "a.province_id = :province";
     $params[':province'] = $province;
 }
 if ($firstName) {
-    $conditions[] = "fullname LIKE :firstName";
+    $conditions[] = "r.fullname LIKE :firstName";
     $params[':firstName'] = "%$firstName%";
 }
 if ($phone) {
-    $conditions[] = "phone LIKE :phone";
+    $conditions[] = "r.phone LIKE :phone";
     $params[':phone'] = "%$phone%";
 }
-if ($status) {
-    $conditions[] = "payment_status = :status";
-    $params[':status'] = $status;
+if ($status === 'approved') {
+    $conditions[] = "r.is_approved = 1";
+} else if ($status === 'pending') {
+    $conditions[] = "r.is_approved = 0";
+} else if ($status === 'paid') {
+    $conditions[] = "r.payment_status = 'paid'";
+} else if ($status === 'not_paid') {
+    $conditions[] = "r.payment_status = 'not_paid'";
 }
 if ($search) {
-    $conditions[] = "(fullname LIKE :search OR email LIKE :search OR phone LIKE :search)";
+    $conditions[] = "(r.fullname LIKE :search OR r.email LIKE :search OR r.phone LIKE :search OR r.organization LIKE :search)";
     $params[':search'] = "%$search%";
 }
 
@@ -63,7 +78,14 @@ if (!empty($conditions)) {
 
 try {
     // นับจำนวนข้อมูลทั้งหมด
-    $countSql = "SELECT COUNT(*) as total FROM registrations WHERE 1=1";
+    $countSql = "SELECT COUNT(*) as total FROM registrations r";
+    
+    // ต้องเพิ่ม JOIN ถ้ามีเงื่อนไขที่เกี่ยวข้องกับตารางอื่น
+    if ($province) {
+        $countSql .= " LEFT JOIN registration_addresses a ON r.id = a.registration_id";
+    }
+    $countSql .= " WHERE 1=1";
+    
     if (!empty($conditions)) {
         $countSql .= " AND " . implode(" AND ", $conditions);
     }
@@ -76,7 +98,7 @@ try {
     $total = $countStmt->fetchColumn();
 
     // เพิ่มการแบ่งหน้า
-    $sql .= " ORDER BY created_at DESC LIMIT :offset, :limit";
+    $sql .= " ORDER BY r.created_at DESC LIMIT :offset, :limit";
     $params[':offset'] = (int)$offset;
     $params[':limit'] = (int)$limit;
 
