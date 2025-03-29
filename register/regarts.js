@@ -622,6 +622,10 @@ function displayRegistrationDetails(data) {
                 statusClass = 'text-primary';
             }
             break;
+        case 'paid_onsite':
+            statusText = 'ชำระเงินหน้างาน';
+            statusClass = 'text-success';
+            break;
     }
     
     // Prepare main container content
@@ -631,7 +635,7 @@ function displayRegistrationDetails(data) {
                 <div class="d-flex justify-content-between align-items-center">
                     <h4 class="mb-0"><i class="fas fa-user-check me-2"></i>ข้อมูลการลงทะเบียน</h4>
                     <div>
-                        <button class="btn btn-sm btn-light" onclick="window.printRegistrationDetails()">
+                       <button class="btn btn-sm btn-light" onclick="printRegistrationDetails()">
                             <i class="fas fa-print me-1"></i> พิมพ์
                         </button>
                     </div>
@@ -1685,3 +1689,97 @@ document.addEventListener('DOMContentLoaded', function() {
     // Set up form validation
     setupEnhancedValidation();
 });
+
+function printRegistrationDetails() {
+    const content = document.getElementById('registrantInfo').innerHTML;
+    const printWindow = window.open('', '_blank');
+    
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>รายละเอียดการลงทะเบียน</title>
+            <meta charset="UTF-8">
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+            <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+            <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+            <style>
+                body {
+                    font-family: 'Sarabun', sans-serif;
+                    padding: 20px;
+                }
+                .print-header {
+                    text-align: center;
+                    margin-bottom: 20px;
+                    padding: 15px;
+                    border-bottom: 2px solid #2C3E50;
+                }
+                .print-logo {
+                    max-height: 60px;
+                    margin-bottom: 10px;
+                }
+                @media print {
+                    .no-print {
+                        display: none !important;
+                    }
+                    .card {
+                        border: 1px solid #ddd !important;
+                        break-inside: avoid;
+                    }
+                    .card-header {
+                        background-color: #f8f9fa !important;
+                        color: #000 !important;
+                        border-bottom: 1px solid #ddd !important;
+                    }
+                    button {
+                        display: none !important;
+                    }
+                }
+                .tab-pane {
+                    display: block !important;
+                    opacity: 1 !important;
+                }
+                .nav-tabs {
+                    display: none !important;
+                }
+                .registrant-separator {
+                    margin-top: 20px;
+                    padding: 10px;
+                    background-color: #f8f9fa;
+                    border-top: 1px solid #ddd;
+                    border-bottom: 1px solid #ddd;
+                    font-weight: bold;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="print-header">
+                <img src="https://arts.rmutsb.ac.th/image/logo_art_2019.png" alt="Logo" class="print-logo">
+                <h2>รายละเอียดการลงทะเบียน</h2>
+                <p class="lead">การสัมมนาเพิ่มศักยภาพท้องถิ่นเพื่อการขับเคลื่อนอนาคตไทยอย่างยั่งยืน</p>
+                <p>วันที่ 13-15 พฤษภาคม พ.ศ. 2568</p>
+            </div>
+            <div class="container">
+                ${content}
+            </div>
+            <div class="text-center mt-4 no-print">
+                <button class="btn btn-primary" onclick="window.print()">พิมพ์เอกสาร</button>
+                <button class="btn btn-secondary" onclick="window.close()">ปิด</button>
+            </div>
+            <script>
+                document.addEventListener('DOMContentLoaded', function() {
+                    const tabPanes = document.querySelectorAll('.tab-pane');
+                    tabPanes.forEach((pane, index) => {
+                        const wrapper = document.createElement('div');
+                        wrapper.className = 'registrant-separator';
+                        wrapper.innerHTML = '<h4>ผู้ลงทะเบียนคนที่ ' + (index + 1) + '</h4>';
+                        pane.insertBefore(wrapper, pane.firstChild);
+                    });
+                });
+            </script>
+        </body>
+        </html>
+    `);
+    
+    printWindow.document.close();
+}
