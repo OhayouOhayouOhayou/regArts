@@ -1,7 +1,5 @@
-
-
-
 <?php
+session_start(); // เรียก session_start() ที่จุดเริ่มต้นก่อนส่งข้อมูลใดๆ
 require_once 'check_auth.php';
 require_once '../config/database.php';
 ?>
@@ -17,7 +15,7 @@ require_once '../config/database.php';
     <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
-         :root {
+        :root {
             --primary-color: #1a237e;
             --primary-light: #534bae;
             --primary-dark: #000051;
