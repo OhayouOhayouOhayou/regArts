@@ -25,14 +25,17 @@ $phone = $_GET['phone'] ?? '';
 $status = $_GET['status'] ?? '';
 $search = $_GET['search'] ?? '';
 
-// สร้าง SQL หลัก
-$sql = "SELECT r.*, 
-               a.address, a.province_id, a.district_id, a.subdistrict_id, a.zipcode,
-               p.name_in_thai AS province_name, 
-               d.name_in_thai AS district_name, 
-               s.name_in_thai AS subdistrict_name,
+// สร้าง SQL หลัก - ใช้ ANY_VALUE() เพื่อแก้ปัญหา GROUP BY
+$sql = "SELECT r.id, r.fullname, r.organization, r.position, r.phone, 
+               r.email, r.line_id, r.payment_status, r.is_approved, 
+               r.payment_date, r.created_at,
+               ANY_VALUE(a.address) AS address, 
+               ANY_VALUE(a.zipcode) AS zipcode,
+               ANY_VALUE(p.name_in_thai) AS province_name, 
+               ANY_VALUE(d.name_in_thai) AS district_name, 
+               ANY_VALUE(s.name_in_thai) AS subdistrict_name,
                GROUP_CONCAT(DISTINCT CONCAT(rd.document_type, ':', rd.file_path) SEPARATOR '|') AS document_paths,
-               rf.file_path AS payment_slip_path
+               ANY_VALUE(rf.file_path) AS payment_slip_path
         FROM registrations r 
         LEFT JOIN registration_addresses a ON r.id = a.registration_id AND a.address_type = 'invoice'
         LEFT JOIN provinces p ON a.province_id = p.id 
