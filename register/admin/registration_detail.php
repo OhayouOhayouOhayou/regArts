@@ -1163,64 +1163,72 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
         });
         
         // ฟังก์ชันโหลดข้อมูลอำเภอ
-        function loadDistricts(provinceId, addressType) {
-            $.ajax({
-                url: 'api/get_districts.php',
-                type: 'GET',
-                data: { province_id: provinceId },
-                dataType: 'json',
-                success: function(data) {
-                    let options = '<option value="">--- เลือกอำเภอ/เขต ---</option>';
-                    
-                    $.each(data, function(index, district) {
-                        // ดึงค่า district_id จากฐานข้อมูล
-                        const selected = district.id == <?php echo isset($addresses[$address_type]['district_id']) ? $addresses[$address_type]['district_id'] : 0; ?> ? 'selected' : '';
-                        options += `<option value="${district.id}" ${selected}>${district.name_in_thai}</option>`;
-                    });
-                    
-                    $(`select[name="district_id[${addressType}]"]`).html(options);
-                    
-                    // โหลดข้อมูลตำบลหากมีการเลือกอำเภอ
-                    const selectedDistrictId = $(`select[name="district_id[${addressType}]"]`).val();
-                    if (selectedDistrictId) {
-                        loadSubdistricts(selectedDistrictId, addressType);
+            function loadDistricts(provinceId, addressType) {
+                $.ajax({
+                    url: 'api/get_districts.php',
+                    type: 'GET',
+                    data: { province_id: provinceId },
+                    dataType: 'json',
+                    success: function(data) {
+                        let options = '<option value="">--- เลือกอำเภอ/เขต ---</option>';
+                        
+                        if (data && data.length > 0) {
+                            // ดึงค่า district_id ที่บันทึกไว้สำหรับที่อยู่นี้
+                            let savedDistrictId = $(`select[name="district_id[${addressType}]"]`).data('saved-value') || 0;
+                            
+                            $.each(data, function(index, district) {
+                                const selected = district.id == savedDistrictId ? 'selected' : '';
+                                options += `<option value="${district.id}" ${selected}>${district.name_in_thai}</option>`;
+                            });
+                        }
+                        
+                        $(`select[name="district_id[${addressType}]"]`).html(options);
+                        
+                        // โหลดข้อมูลตำบลหากมีการเลือกอำเภอ
+                        const selectedDistrictId = $(`select[name="district_id[${addressType}]"]`).val();
+                        if (selectedDistrictId) {
+                            loadSubdistricts(selectedDistrictId, addressType);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error loading districts:', error);
                     }
-                },
-                error: function(xhr, status, error) {
-                    console.error('Error loading districts:', error);
-                }
-            });
-        }
-        
-        // ฟังก์ชันโหลดข้อมูลตำบล
-        function loadSubdistricts(districtId, addressType) {
-            $.ajax({
-                url: 'api/get_subdistricts.php',
-                type: 'GET',
-                data: { district_id: districtId },
-                dataType: 'json',
-                success: function(data) {
-                    let options = '<option value="">--- เลือกตำบล/แขวง ---</option>';
-                    
-                    $.each(data, function(index, subdistrict) {
-                        // ดึงค่า subdistrict_id จากฐานข้อมูล
-                        const selected = subdistrict.id == <?php echo isset($addresses[$address_type]['subdistrict_id']) ? $addresses[$address_type]['subdistrict_id'] : 0; ?> ? 'selected' : '';
-                        options += `<option value="${subdistrict.id}" data-zipcode="${subdistrict.zip_code}" ${selected}>${subdistrict.name_in_thai}</option>`;
-                    });
-                    
-                    $(`select[name="subdistrict_id[${addressType}]"]`).html(options);
-                    
-                    // อัพเดทรหัสไปรษณีย์อัตโนมัติ
-                    const zipcode = $(`select[name="subdistrict_id[${addressType}]"] option:selected`).data('zipcode');
-                    if (zipcode) {
-                        $(`input[name="zipcode[${addressType}]"]`).val(zipcode);
+                });
+            }
+
+            // ฟังก์ชันโหลดข้อมูลตำบล
+            function loadSubdistricts(districtId, addressType) {
+                $.ajax({
+                    url: 'api/get_subdistricts.php',
+                    type: 'GET',
+                    data: { district_id: districtId },
+                    dataType: 'json',
+                    success: function(data) {
+                        let options = '<option value="">--- เลือกตำบล/แขวง ---</option>';
+                        
+                        if (data && data.length > 0) {
+                            // ดึงค่า subdistrict_id ที่บันทึกไว้สำหรับที่อยู่นี้
+                            let savedSubdistrictId = $(`select[name="subdistrict_id[${addressType}]"]`).data('saved-value') || 0;
+                            
+                            $.each(data, function(index, subdistrict) {
+                                const selected = subdistrict.id == savedSubdistrictId ? 'selected' : '';
+                                options += `<option value="${subdistrict.id}" data-zipcode="${subdistrict.zip_code}" ${selected}>${subdistrict.name_in_thai}</option>`;
+                            });
+                        }
+                        
+                        $(`select[name="subdistrict_id[${addressType}]"]`).html(options);
+                        
+                        // อัพเดทรหัสไปรษณีย์อัตโนมัติ
+                        const zipcode = $(`select[name="subdistrict_id[${addressType}]"] option:selected`).data('zipcode');
+                        if (zipcode) {
+                            $(`input[name="zipcode[${addressType}]"]`).val(zipcode);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error loading subdistricts:', error);
                     }
-                },
-                error: function(xhr, status, error) {
-                    console.error('Error loading subdistricts:', error);
-                }
-            });
-        }
+                });
+            }
         
         // อัพเดทรหัสไปรษณีย์อัตโนมัติเมื่อเลือกตำบล
         $(document).on('change', '.subdistrict-select', function() {
