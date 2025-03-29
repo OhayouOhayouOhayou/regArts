@@ -68,6 +68,9 @@ try {
     $stmt->execute([$group]);
     $groupRegistrations = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
+    // Get first member ID for document retrieval
+    $firstMemberId = $groupRegistrations[0]['id'] ?? $registrationId;
+    
     // ดึงข้อมูลที่อยู่
     $sql = "SELECT a.*, 
                   p.name_in_thai as province_name, 
@@ -82,11 +85,15 @@ try {
     $stmt->execute([$registrationId]);
     $addresses = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    // ดึงข้อมูลเอกสาร
+    // ดึงข้อมูลเอกสารจากสมาชิกคนแรกของกลุ่ม (ที่มีเอกสารครบถ้วนที่สุด)
     $sql = "SELECT * FROM registration_documents WHERE registration_id = ?";
     $stmt = $conn->prepare($sql);
-    $stmt->execute([$registrationId]);
+    $stmt->execute([$firstMemberId]);
     $documents = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Log for debugging
+    error_log("Fetching documents for first member ID: " . $firstMemberId);
+    error_log("Documents found: " . count($documents));
     
     // ดึงข้อมูลหลักฐานการชำระเงิน
     $paymentSlip = null;

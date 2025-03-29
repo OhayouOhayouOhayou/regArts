@@ -23,9 +23,10 @@ class PaymentUploader {
         $this->db = $database->getConnection();
     }
 
-    public function upload($registrationId, $paymentDate, $file) {
+    public function upload($registrationId, $paymentDate, $file, $registrationGroup = null) {
         try {
             error_log("Processing upload for registration ID: " . $registrationId);
+            error_log("Registration group: " . $registrationGroup);
             error_log("Payment date: " . $paymentDate);
             
             // Validate registrationId
@@ -44,6 +45,13 @@ class PaymentUploader {
             // Check registration exists
             $registration = $this->checkRegistration($registrationId);
             
+            // Get group ID if not provided
+            if (!$registrationGroup) {
+                $registrationGroup = $registration['registration_group'];
+            }
+            
+            error_log("Using registration group: " . $registrationGroup);
+            
             // Validate and process file
             if (!isset($file) || !is_array($file) || $file['error'] !== UPLOAD_ERR_OK || $file['size'] <= 0) {
                 throw new Exception('ไม่พบไฟล์หลักฐานการชำระเงิน');
@@ -54,8 +62,17 @@ class PaymentUploader {
             $uploadResult = $this->processFileUpload($file);
             error_log("File uploaded to: " . $uploadResult['file_path']);
             
-            // Update database records
-            $this->updateDatabase($registrationId, $paymentDate, $uploadResult);
+            // Update database records - save file record
+            $fileId = $this->saveFileRecord($registrationId, $uploadResult);
+            
+            // Get all members of the group
+            $groupMembers = $this->getGroupMembers($registrationGroup);
+            error_log("Group members found: " . count($groupMembers));
+            
+            // Update payment status for all members
+            foreach ($groupMembers as $memberId) {
+                $this->updatePaymentStatus($memberId, $paymentDate, $fileId);
+            }
             
             // Commit transaction
             $this->db->commit();
@@ -63,7 +80,8 @@ class PaymentUploader {
             return [
                 'success' => true,
                 'message' => 'อัพโหลดหลักฐานการชำระเงินสำเร็จ',
-                'file_path' => $uploadResult['file_path']
+                'file_path' => $uploadResult['file_path'],
+                'updated_members' => count($groupMembers)
             ];
             
         } catch (Exception $e) {
@@ -162,7 +180,7 @@ class PaymentUploader {
         ];
     }
 
-    private function updateDatabase($registrationId, $paymentDate, $uploadResult) {
+    private function saveFileRecord($registrationId, $uploadResult) {
         try {
             // Get table structure
             $this->logTableStructure('registration_files');
@@ -205,6 +223,35 @@ class PaymentUploader {
             $fileId = $this->db->lastInsertId();
             error_log("Inserted file record with ID: " . $fileId);
             
+            return $fileId;
+        } catch (PDOException $e) {
+            error_log("Database error in saveFileRecord: " . $e->getMessage());
+            throw new Exception('เกิดข้อผิดพลาดในการบันทึกข้อมูล: ' . $e->getMessage());
+        }
+    }
+    
+    private function getGroupMembers($groupId) {
+        try {
+            $query = "SELECT id FROM registrations WHERE registration_group = ?";
+            $stmt = $this->db->prepare($query);
+            $stmt->execute([$groupId]);
+            
+            $members = $stmt->fetchAll(PDO::FETCH_COLUMN);
+            
+            if (empty($members)) {
+                error_log("No members found for group: " . $groupId);
+                throw new Exception('ไม่พบข้อมูลกลุ่มการลงทะเบียน');
+            }
+            
+            return $members;
+        } catch (PDOException $e) {
+            error_log("Database error in getGroupMembers: " . $e->getMessage());
+            throw new Exception('เกิดข้อผิดพลาดในการดึงข้อมูลสมาชิกกลุ่ม: ' . $e->getMessage());
+        }
+    }
+    
+    private function updatePaymentStatus($registrationId, $paymentDate, $fileId) {
+        try {
             // Check columns
             $columns = $this->getTableColumns('registrations');
             $hasPaymentDate = false;
@@ -244,8 +291,7 @@ class PaymentUploader {
             $updateQuery .= " WHERE id = ?";
             $params[] = $registrationId;
             
-            error_log("Executing update query: " . $updateQuery);
-            error_log("With parameters: " . print_r($params, true));
+            error_log("Executing update query for member {$registrationId}: " . $updateQuery);
             
             $stmt = $this->db->prepare($updateQuery);
             
@@ -262,11 +308,12 @@ class PaymentUploader {
             }
             
             $rowCount = $stmt->rowCount();
-            error_log("Updated {$rowCount} row(s) in registrations table");
+            error_log("Updated {$rowCount} row(s) in registrations table for member {$registrationId}");
             
+            return $rowCount;
         } catch (PDOException $e) {
-            error_log("Database error: " . $e->getMessage());
-            throw new Exception('เกิดข้อผิดพลาดในการบันทึกข้อมูล: ' . $e->getMessage());
+            error_log("Database error in updatePaymentStatus: " . $e->getMessage());
+            throw new Exception('เกิดข้อผิดพลาดในการอัพเดทสถานะการชำระเงิน: ' . $e->getMessage());
         }
     }
     
@@ -308,6 +355,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Debug registration ID and payment date
     $registrationId = $_POST['registration_id'] ?? null;
     $paymentDate = $_POST['payment_date'] ?? null;
+    $registrationGroup = $_POST['registration_group'] ?? null;
     
     // ถ้าไม่มีวันที่ชำระเงิน ให้ใช้วันที่ปัจจุบัน
     if (empty($paymentDate)) {
@@ -315,6 +363,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     
     error_log("Received registration_id: " . $registrationId);
+    error_log("Received registration_group: " . $registrationGroup);
     error_log("Received payment_date: " . $paymentDate);
     
     // Check if files are properly received
@@ -327,7 +376,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $result = $uploader->upload(
         $registrationId,
         $paymentDate,
-        $_FILES['payment_slip'] ?? null
+        $_FILES['payment_slip'] ?? null,
+        $registrationGroup
     );
     
     if (!$result['success']) {

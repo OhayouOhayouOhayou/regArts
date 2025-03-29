@@ -1,115 +1,106 @@
 <?php
-// แสดงข้อผิดพลาดทั้งหมด
-ini_set('display_errors', 1);
+/**
+ * Database Schema Maintenance Script
+ * 
+ * This script checks and updates the database schema for the registration system
+ * to ensure all required fields are present for multi-registrant functionality.
+ */
+
 error_reporting(E_ALL);
+ini_set('display_errors', 1);
+ini_set('log_errors', 1);
+ini_set('error_log', 'db_maintenance.log');
 
-// ตั้งค่า header ให้แสดงผลเป็นข้อความ
-header('Content-Type: text/plain');
+require_once 'config/database.php';
 
-echo "=== ตรวจสอบการเชื่อมต่อฐานข้อมูล ===\n\n";
-
-// ทดลองเชื่อมต่อด้วย PDO
-try {
-    // แสดงค่าคงที่หรือตัวแปรที่ใช้ในการเชื่อมต่อ
-    echo "กำลังพยายามเชื่อมต่อกับฐานข้อมูล (mysql)...\n";
-    
-    // ลองเชื่อมต่อด้วยชื่อบริการ Docker
-    $conn = new PDO(
-        "mysql:host=mysql;port=3306;dbname=shared_db",
-        "dbuser", 
-        "dbpassword",
-        array(PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES 'utf8'")
-    );
-    $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    
-    echo "เชื่อมต่อสำเร็จ!\n\n";
-    
-    echo "=== รายชื่อตารางทั้งหมด ===\n";
-    $stmt = $conn->query("SHOW TABLES");
-    $tables = $stmt->fetchAll(PDO::FETCH_COLUMN);
-    foreach ($tables as $table) {
-        echo "- $table\n";
-    }
-    
-    // เลือกตารางที่มีอยู่จริงและดูโครงสร้าง
-    if (in_array('registrations', $tables)) {
-        echo "\n=== โครงสร้างตาราง registrations ===\n";
-        $stmt = $conn->query("DESCRIBE registrations");
-        $columns = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        foreach ($columns as $column) {
-            echo "- {$column['Field']} ({$column['Type']})\n";
-        }
-        
-        // ดูข้อมูลตัวอย่าง
-        echo "\n=== ข้อมูลตัวอย่างในตาราง registrations (5 รายการแรก) ===\n";
-        $stmt = $conn->query("SELECT * FROM registrations LIMIT 5");
-        $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        foreach ($data as $index => $row) {
-            echo "\nรายการที่ " . ($index + 1) . ":\n";
-            foreach ($row as $key => $value) {
-                echo "  $key: $value\n";
-            }
-        }
-    }
-    
-    if (in_array('provinces', $tables)) {
-        echo "\n=== โครงสร้างตาราง provinces ===\n";
-        $stmt = $conn->query("DESCRIBE provinces");
-        $columns = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        foreach ($columns as $column) {
-            echo "- {$column['Field']} ({$column['Type']})\n";
-        }
-    }
-    
-    if (in_array('districts', $tables)) {
-        echo "\n=== โครงสร้างตาราง districts ===\n";
-        $stmt = $conn->query("DESCRIBE districts");
-        $columns = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        foreach ($columns as $column) {
-            echo "- {$column['Field']} ({$column['Type']})\n";
-        }
-    }
-    
-    if (in_array('subdistricts', $tables)) {
-        echo "\n=== โครงสร้างตาราง subdistricts ===\n";
-        $stmt = $conn->query("DESCRIBE subdistricts");
-        $columns = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        foreach ($columns as $column) {
-            echo "- {$column['Field']} ({$column['Type']})\n";
-        }
-    }
-    
-} catch(PDOException $e) {
-    echo "ข้อผิดพลาดในการเชื่อมต่อ: " . $e->getMessage() . "\n";
-    
-    // แสดงข้อมูลเพิ่มเติมเพื่อการแก้ไขปัญหา
-    echo "\nลองเชื่อมต่อด้วยพารามิเตอร์อื่น:\n";
-    
-    // ลองเชื่อมต่อกับ mysql (ชื่อบริการ Docker)
-    try {
-        echo "ทดสอบเชื่อมต่อกับ host=mysql... ";
-        new PDO("mysql:host=mysql;dbname=shared_db", "dbuser", "dbpassword");
-        echo "สำเร็จ!\n";
-    } catch(PDOException $e) {
-        echo "ล้มเหลว: " . $e->getMessage() . "\n";
-    }
-    
-    // ลองเชื่อมต่อกับ mysql-container (ชื่อคอนเทนเนอร์)
-    try {
-        echo "ทดสอบเชื่อมต่อกับ host=shared-mysql... ";
-        new PDO("mysql:host=shared-mysql;dbname=shared_db", "dbuser", "dbpassword");
-        echo "สำเร็จ!\n";
-    } catch(PDOException $e) {
-        echo "ล้มเหลว: " . $e->getMessage() . "\n";
-    }
-    
-    // ลองเชื่อมต่อกับพอร์ตที่แมปออกมา
-    try {
-        echo "ทดสอบเชื่อมต่อกับ host=localhost;port=3307... ";
-        new PDO("mysql:host=localhost;port=3307;dbname=shared_db", "dbuser", "dbpassword");
-        echo "สำเร็จ!\n";
-    } catch(PDOException $e) {
-        echo "ล้มเหลว: " . $e->getMessage() . "\n";
-    }
+// Function to check if a column exists in a table
+function columnExists($conn, $table, $column) {
+    $sql = "SHOW COLUMNS FROM {$table} LIKE '{$column}'";
+    $result = $conn->query($sql);
+    return $result->rowCount() > 0;
 }
-?>
+
+// Function to add a column if it doesn't exist
+function addColumnIfNotExists($conn, $table, $column, $definition) {
+    if (!columnExists($conn, $table, $column)) {
+        $sql = "ALTER TABLE {$table} ADD COLUMN {$column} {$definition}";
+        $conn->query($sql);
+        echo "Added column '{$column}' to table '{$table}'<br>";
+        error_log("Added column '{$column}' to table '{$table}'");
+        return true;
+    }
+    return false;
+}
+
+try {
+    // Connect to database
+    $database = new Database();
+    $conn = $database->getConnection();
+    
+    echo "<h1>Database Schema Maintenance</h1>";
+    
+    // Check registrations table
+    echo "<h2>Checking registrations table...</h2>";
+    
+    addColumnIfNotExists($conn, "registrations", "registration_group", "VARCHAR(50) NULL");
+    addColumnIfNotExists($conn, "registrations", "payment_status", "ENUM('not_paid', 'paid') NOT NULL DEFAULT 'not_paid'");
+    addColumnIfNotExists($conn, "registrations", "is_approved", "TINYINT(1) NOT NULL DEFAULT 0");
+    addColumnIfNotExists($conn, "registrations", "payment_date", "DATETIME NULL");
+    addColumnIfNotExists($conn, "registrations", "payment_slip_id", "INT NULL");
+    addColumnIfNotExists($conn, "registrations", "payment_updated_at", "DATETIME NULL");
+    
+    // Check registration_documents table
+    echo "<h2>Checking registration_documents table...</h2>";
+    
+    // First check if table exists
+    $tableExists = $conn->query("SHOW TABLES LIKE 'registration_documents'")->rowCount() > 0;
+    if (!$tableExists) {
+        $sql = "CREATE TABLE registration_documents (
+            id INT(11) NOT NULL AUTO_INCREMENT,
+            registration_id INT(11) NOT NULL,
+            file_name VARCHAR(255) NOT NULL,
+            file_path VARCHAR(255) NOT NULL,
+            file_type VARCHAR(100) NOT NULL,
+            file_size INT(11) NOT NULL,
+            document_type VARCHAR(50) NOT NULL DEFAULT 'general',
+            description TEXT NULL,
+            uploaded_at DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            KEY idx_registration_id (registration_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
+        $conn->query($sql);
+        echo "Created table 'registration_documents'<br>";
+        error_log("Created table 'registration_documents'");
+    } else {
+        addColumnIfNotExists($conn, "registration_documents", "document_type", "VARCHAR(50) NOT NULL DEFAULT 'general'");
+        addColumnIfNotExists($conn, "registration_documents", "description", "TEXT NULL");
+    }
+    
+    // Check registration_files table
+    echo "<h2>Checking registration_files table...</h2>";
+    
+    // First check if table exists
+    $tableExists = $conn->query("SHOW TABLES LIKE 'registration_files'")->rowCount() > 0;
+    if (!$tableExists) {
+        $sql = "CREATE TABLE registration_files (
+            id INT(11) NOT NULL AUTO_INCREMENT,
+            registration_id INT(11) NOT NULL,
+            file_name VARCHAR(255) NOT NULL,
+            file_path VARCHAR(255) NOT NULL,
+            file_type VARCHAR(100) NOT NULL,
+            file_size INT(11) NOT NULL,
+            uploaded_at DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            KEY idx_registration_id (registration_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
+        $conn->query($sql);
+        echo "Created table 'registration_files'<br>";
+        error_log("Created table 'registration_files'");
+    }
+    
+    echo "<h2>Schema maintenance completed successfully!</h2>";
+    
+} catch (Exception $e) {
+    echo "<h2>Error:</h2> " . $e->getMessage();
+    error_log("Schema maintenance error: " . $e->getMessage());
+}

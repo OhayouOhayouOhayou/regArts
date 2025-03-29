@@ -263,6 +263,7 @@ function createPaymentUploadForm(registration) {
                         <small class="text-muted">รองรับไฟล์ภาพ (JPG, PNG, GIF) และ PDF ขนาดไม่เกิน 5MB</small>
                     </div>
                     <input type="hidden" name="registration_id" value="${registration.id}">
+                    <input type="hidden" name="registration_group" value="${registration.registration_group}">
                     <div class="d-grid">
                         <button type="submit" class="btn btn-primary btn-lg">
                             <i class="fas fa-upload me-2"></i>อัพโหลดหลักฐาน
@@ -630,7 +631,7 @@ function displayRegistrationDetails(data) {
                 <div class="d-flex justify-content-between align-items-center">
                     <h4 class="mb-0"><i class="fas fa-user-check me-2"></i>ข้อมูลการลงทะเบียน</h4>
                     <div>
-                        <button class="btn btn-sm btn-light" onclick="printRegistrationDetails()">
+                        <button class="btn btn-sm btn-light" onclick="window.printRegistrationDetails()">
                             <i class="fas fa-print me-1"></i> พิมพ์
                         </button>
                     </div>
@@ -725,9 +726,9 @@ function initializeRegistrantTabs() {
 }
 
 /**
- * Print registration details
+ * Print registration details - Make it globally accessible
  */
-function printRegistrationDetails() {
+window.printRegistrationDetails = function() {
     const content = document.getElementById('registrantInfo').innerHTML;
     const printWindow = window.open('', '_blank');
     
@@ -821,7 +822,7 @@ function printRegistrationDetails() {
     `);
     
     printWindow.document.close();
-}
+};
 
 // ======================= PAYMENT FUNCTIONS =======================
 

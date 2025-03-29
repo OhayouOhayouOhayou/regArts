@@ -121,9 +121,9 @@ class RegistrationProcessor {
                 }
             }
             
-            // จัดการไฟล์เอกสารประกอบ (ถ้ามี) - เชื่อมโยงกับผู้ลงทะเบียนคนแรก
+            // จัดการไฟล์เอกสารประกอบ (ถ้ามี) - เชื่อมโยงกับผู้ลงทะเบียนในกลุ่ม
             if (isset($files['documents']) && $this->isValidDocumentsUpload($files['documents'])) {
-                $this->handleDocuments($conn, $firstRegId, $files['documents'], $postData);
+                $this->handleDocuments($conn, $firstRegId, $files['documents'], $postData, $groupId);
             }
             
             // จัดการไฟล์หลักฐานการชำระเงินสำหรับทุกคน (ถ้ามี)
@@ -384,7 +384,23 @@ class RegistrationProcessor {
         return false;
     }
     
-    private function handleDocuments($conn, $registrationId, $files, $postData) {
+    /**
+     * Handle document uploads and associate with all group members
+     * @param {PDO} $conn - Database connection
+     * @param {int} $firstRegId - First registrant ID
+     * @param {array} $files - Uploaded files
+     * @param {array} $postData - Form data
+     * @param {string} $groupId - Registration group ID
+     */
+    private function handleDocuments($conn, $firstRegId, $files, $postData, $groupId) {
+        // First, get all registrants in the group
+        $sql = "SELECT id FROM registrations WHERE registration_group = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([$groupId]);
+        $groupMembers = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        
+        error_log("Group members found for document association: " . print_r($groupMembers, true));
+        
         if (!isset($files['name']) || !is_array($files['name'])) {
             $documents = [];
             foreach ($files as $key => $value) {
@@ -404,6 +420,9 @@ class RegistrationProcessor {
             }
         }
         
+        // First pass: upload files and save records for the first registrant
+        $uploadedDocumentIds = [];
+        
         for ($i = 0; $i < count($documents['name']); $i++) {
             if ($documents['error'][$i] === UPLOAD_ERR_NO_FILE) {
                 continue;
@@ -413,6 +432,7 @@ class RegistrationProcessor {
                 error_log("เกิดข้อผิดพลาดในการอัพโหลดเอกสาร: " . $documents['error'][$i]);
                 continue;
             }
+            
             if ($documents['size'][$i] > 5242880) {
                 error_log("ขนาดไฟล์เอกสารใหญ่เกิน 5MB: " . $documents['name'][$i]);
                 continue;
@@ -431,6 +451,7 @@ class RegistrationProcessor {
                 $documentType = isset($documentTypes[$i]) ? $documentTypes[$i] : 'general';
                 $description = isset($documentDescriptions[$i]) ? $documentDescriptions[$i] : null;
                 
+                // Save document for the first registrant and get its ID
                 $sql = "INSERT INTO registration_documents (
                             registration_id, file_name, file_path, file_type, 
                             file_size, document_type, description, uploaded_at
@@ -438,7 +459,7 @@ class RegistrationProcessor {
                 
                 $stmt = $conn->prepare($sql);
                 $stmt->execute([
-                    $registrationId,
+                    $firstRegId,
                     $fileName,
                     $filePath,
                     $documents['type'][$i],
@@ -447,9 +468,52 @@ class RegistrationProcessor {
                     $description
                 ]);
                 
-                error_log("อัพโหลดเอกสารสำเร็จ: " . $filePath);
+                $documentId = $conn->lastInsertId();
+                if ($documentId) {
+                    $uploadedDocumentIds[] = [
+                        'id' => $documentId,
+                        'file_name' => $fileName,
+                        'file_path' => $filePath,
+                        'file_type' => $documents['type'][$i],
+                        'file_size' => $documents['size'][$i],
+                        'document_type' => $documentType,
+                        'description' => $description
+                    ];
+                }
+                
+                error_log("อัพโหลดเอกสารสำเร็จ: " . $filePath . " | document_id: " . $documentId);
             } else {
                 error_log("ไม่สามารถย้ายไฟล์อัพโหลดได้: " . $documents['name'][$i]);
+            }
+        }
+        
+        // Second pass: create document records for other group members
+        if (!empty($uploadedDocumentIds) && count($groupMembers) > 1) {
+            foreach ($groupMembers as $memberId) {
+                // Skip the first registrant since we already created records for them
+                if ($memberId == $firstRegId) {
+                    continue;
+                }
+                
+                foreach ($uploadedDocumentIds as $doc) {
+                    $sql = "INSERT INTO registration_documents (
+                                registration_id, file_name, file_path, file_type, 
+                                file_size, document_type, description, uploaded_at
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())";
+                    
+                    $stmt = $conn->prepare($sql);
+                    $stmt->execute([
+                        $memberId,
+                        $doc['file_name'],
+                        $doc['file_path'],
+                        $doc['file_type'],
+                        $doc['file_size'],
+                        $doc['document_type'],
+                        $doc['description']
+                    ]);
+                    
+                    error_log("เชื่อมโยงเอกสาร ID: " . $doc['id'] . " กับผู้ลงทะเบียน ID: " . $memberId);
+                }
             }
         }
     }
