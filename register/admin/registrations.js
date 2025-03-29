@@ -149,6 +149,75 @@ async function applyFilters() {
     }
 }
 
+
+// ฟังก์ชันลบข้อมูลการลงทะเบียน
+function deleteRegistration(id) {
+    // แสดงกล่องยืนยันการลบ
+    Swal.fire({
+        title: 'ยืนยันการลบ',
+        text: 'คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลการลงทะเบียนนี้? การกระทำนี้ไม่สามารถเปลี่ยนกลับได้',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'ใช่, ลบข้อมูล',
+        cancelButtonText: 'ยกเลิก',
+        confirmButtonColor: '#d33',
+        reverseButtons: true
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // ยืนยันอีกครั้ง
+            Swal.fire({
+                title: 'ยืนยันการลบอีกครั้ง',
+                text: 'ข้อมูลทั้งหมดรวมถึงเอกสารที่อัปโหลดจะถูกลบถาวร',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'ใช่, ลบถาวร',
+                cancelButtonText: 'ยกเลิก',
+                confirmButtonColor: '#d33',
+                reverseButtons: true
+            }).then((innerResult) => {
+                if (innerResult.isConfirmed) {
+                    // ส่งคำขอไปยัง API เพื่อลบข้อมูล
+                    fetch(`api/delete_registration.php`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: `id=${id}`
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้');
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'ลบข้อมูลสำเร็จ',
+                                text: 'ระบบได้ลบข้อมูลการลงทะเบียนเรียบร้อยแล้ว'
+                            }).then(() => {
+                                // โหลดข้อมูลใหม่
+                                applyFilters();
+                            });
+                        } else {
+                            throw new Error(data.message || 'เกิดข้อผิดพลาดในการลบข้อมูล');
+                        }
+                    })
+                    .catch(error => {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'เกิดข้อผิดพลาด',
+                            text: error.message || 'ไม่สามารถลบข้อมูลได้ กรุณาลองใหม่อีกครั้ง'
+                        });
+                    });
+                }
+            });
+        }
+    });
+}
+
+
 // ฟังก์ชันสำหรับจัดรูปแบบที่อยู่
 function formatAddress(reg) {
     const parts = [];
