@@ -965,20 +965,22 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                                     </div>
                                     
                                     <?php if($registration['payment_status'] == 'paid'): ?>
-                                    <div class="approval-timeline">
-                                        <div class="timeline-point bg-success"></div>
-                                        <div class="timeline-content">
-                                            <p class="timeline-title">ชำระเงินแล้ว</p>
-                                            <p class="timeline-date">
-                                                <?php 
-                                                    echo $registration['payment_updated_at'] 
-                                                        ? date('d/m/Y H:i', strtotime($registration['payment_updated_at'])) 
-                                                        : '-';
-                                                ?>
-                                            </p>
+                                        <div class="approval-timeline">
+                                            <div class="timeline-point bg-success"></div>
+                                            <div class="timeline-content">
+                                                <p class="timeline-title">ชำระเงินแล้ว</p>
+                                                <p class="timeline-date"><?php echo $registration['payment_updated_at'] ? date('d/m/Y H:i', strtotime($registration['payment_updated_at'])) : '-'; ?></p>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <?php endif; ?>
+                                        <?php elseif($registration['payment_status'] == 'paid_onsite'): ?>
+                                        <div class="approval-timeline">
+                                            <div class="timeline-point bg-info"></div>
+                                            <div class="timeline-content">
+                                                <p class="timeline-title">อนุมัติ (ชำระเงินที่หน้างาน)</p>
+                                                <p class="timeline-date"><?php echo $registration['payment_updated_at'] ? date('d/m/Y H:i', strtotime($registration['payment_updated_at'])) : '-'; ?></p>
+                                            </div>
+                                        </div>
+                                        <?php endif; ?>
                                     
                                     <?php if($registration['is_approved'] == 1): ?>
                                     <div class="approval-timeline">
@@ -1001,22 +1003,26 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                                     </h5>
                                 </div>
                                 <div class="card-body">
-                                    <div class="text-center mb-3">
-                                        <?php if($registration['payment_status'] == 'paid'): ?>
-                                            <span class="badge bg-success py-2 px-3 fs-6 mb-3">ชำระเงินแล้ว</span>
-                                        <?php else: ?>
-                                            <span class="badge bg-danger py-2 px-3 fs-6 mb-3">ยังไม่ชำระเงิน</span>
-                                        <?php endif; ?>
+                                <div class="text-center mb-3">
+                                    <?php if($registration['payment_status'] == 'paid'): ?>
+                                        <span class="badge bg-success py-2 px-3 fs-6 mb-3">ชำระเงินแล้ว</span>
+                                    <?php elseif($registration['payment_status'] == 'paid_onsite'): ?>
+                                        <span class="badge bg-info py-2 px-3 fs-6 mb-3">อนุมัติ (ชำระเงินที่หน้างาน)</span>
+                                    <?php else: ?>
+                                        <span class="badge bg-danger py-2 px-3 fs-6 mb-3">ยังไม่ชำระเงิน</span>
+                                    <?php endif; ?>
+  
                                         
                                         <div class="mb-3">
-                                            <label class="form-label">เปลี่ยนสถานะการชำระเงิน</label>
-                                            <select class="form-select" name="payment_status">
-                                                <option value="not_paid" <?php echo ($registration['payment_status'] == 'not_paid') ? 'selected' : ''; ?>>ยังไม่ชำระเงิน</option>
-                                                <option value="paid" <?php echo ($registration['payment_status'] == 'paid') ? 'selected' : ''; ?>>ชำระเงินแล้ว</option>
-                                            </select>
-                                        </div>
+                                    <label class="form-label">เปลี่ยนสถานะการชำระเงิน</label>
+                                    <select class="form-select" name="payment_status">
+                                        <option value="not_paid" <?php echo ($registration['payment_status'] == 'not_paid') ? 'selected' : ''; ?>>ยังไม่ชำระเงิน</option>
+                                        <option value="paid" <?php echo ($registration['payment_status'] == 'paid') ? 'selected' : ''; ?>>ชำระเงินแล้ว</option>
+                                        <option value="paid_onsite" <?php echo ($registration['payment_status'] == 'paid_onsite') ? 'selected' : ''; ?>>อนุมัติ (ชำระเงินที่หน้างาน)</option>
+                                    </select>
+                                </div>
                                     </div>
-                                    
+                                            
                                     <div class="mb-3">
                                         <label class="form-label">หลักฐานการชำระเงิน</label>
                                         <div id="payment-gallery">
