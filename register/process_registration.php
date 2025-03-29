@@ -68,6 +68,9 @@ class RegistrationProcessor {
                 throw new Exception("ไม่พบข้อมูลผู้ลงทะเบียน");
             }
             
+            // ตรวจสอบชื่อซ้ำในกลุ่มผู้สมัคร
+            $this->checkDuplicateNames($registrants);
+            
             // ประมวลผลแต่ละผู้ลงทะเบียน
             foreach ($registrants as $index => $registrantData) {
                 // ตรวจสอบข้อมูลที่จำเป็น
@@ -80,11 +83,15 @@ class RegistrationProcessor {
                 // บันทึกข้อมูลการลงทะเบียน
                 $registrationId = $this->saveRegistrationWithGroup($conn, $registrantData, $groupId);
                 $registrationIds[] = $registrationId;
-                
-                // บันทึกที่อยู่ (เฉพาะผู้ลงทะเบียนคนแรกเท่านั้น)
-                if ($index === 0) {
-                    $this->saveAddresses($conn, $registrationId, $postData);
-                }
+            }
+            
+            // บันทึกที่อยู่ (สำหรับผู้ลงทะเบียนคนแรก)
+            $firstRegId = $registrationIds[0];
+            $this->saveAddresses($conn, $firstRegId, $postData);
+            
+            // คัดลอกที่อยู่ให้กับผู้ลงทะเบียนคนอื่นๆ
+            for ($i = 1; $i < count($registrationIds); $i++) {
+                $this->copyAddresses($conn, $firstRegId, $registrationIds[$i]);
             }
             
             // จัดการไฟล์เอกสารประกอบ (ถ้ามี) - เชื่อมโยงกับผู้ลงทะเบียนคนแรก
@@ -123,6 +130,18 @@ class RegistrationProcessor {
             }
             error_log("เกิดข้อผิดพลาด: " . $e->getMessage());
             throw new Exception($e->getMessage());
+        }
+    }
+    
+    // ฟังก์ชันตรวจสอบชื่อซ้ำในกลุ่มผู้สมัคร
+    private function checkDuplicateNames($registrants) {
+        $names = [];
+        foreach ($registrants as $index => $registrant) {
+            $fullname = $registrant['fullname'];
+            if (in_array($fullname, $names)) {
+                throw new Exception("พบชื่อ-นามสกุลซ้ำกัน: {$fullname} กรุณาตรวจสอบข้อมูลและแก้ไขให้ถูกต้อง");
+            }
+            $names[] = $fullname;
         }
     }
     
@@ -204,6 +223,34 @@ class RegistrationProcessor {
                 $data[$fields['district']],
                 $data[$fields['subdistrict']],
                 $data[$fields['zipcode']]
+            ]);
+        }
+    }
+    
+    // ฟังก์ชันใหม่เพื่อคัดลอกที่อยู่จากผู้สมัครคนแรกให้กับผู้สมัครคนอื่นๆ
+    private function copyAddresses($conn, $sourceRegId, $targetRegId) {
+        // ดึงที่อยู่ของผู้สมัครคนแรก
+        $sql = "SELECT * FROM registration_addresses WHERE registration_id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([$sourceRegId]);
+        $addresses = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // คัดลอกที่อยู่ให้กับผู้สมัครคนอื่น
+        foreach ($addresses as $address) {
+            $sql = "INSERT INTO registration_addresses (
+                        registration_id, address_type, address,
+                        province_id, district_id, subdistrict_id, zipcode
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)";
+            
+            $stmt = $conn->prepare($sql);
+            $stmt->execute([
+                $targetRegId,
+                $address['address_type'],
+                $address['address'],
+                $address['province_id'],
+                $address['district_id'],
+                $address['subdistrict_id'],
+                $address['zipcode']
             ]);
         }
     }
