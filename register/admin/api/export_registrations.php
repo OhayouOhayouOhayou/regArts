@@ -30,12 +30,16 @@ $sql = "SELECT r.*,
                a.address, a.province_id, a.district_id, a.subdistrict_id, a.zipcode,
                p.name_in_thai AS province_name, 
                d.name_in_thai AS district_name, 
-               s.name_in_thai AS subdistrict_name
+               s.name_in_thai AS subdistrict_name,
+               GROUP_CONCAT(DISTINCT CONCAT(rd.document_type, ':', rd.file_path) SEPARATOR '|') AS document_paths,
+               rf.file_path AS payment_slip_path
         FROM registrations r 
-        LEFT JOIN registration_addresses a ON r.id = a.registration_id
+        LEFT JOIN registration_addresses a ON r.id = a.registration_id AND a.address_type = 'invoice'
         LEFT JOIN provinces p ON a.province_id = p.id 
         LEFT JOIN districts d ON a.district_id = d.id 
         LEFT JOIN subdistricts s ON a.subdistrict_id = s.id 
+        LEFT JOIN registration_documents rd ON r.id = rd.registration_id
+        LEFT JOIN registration_files rf ON rf.id = r.payment_slip_id
         WHERE 1=1";
 
 // สร้างเงื่อนไขและพารามิเตอร์สำหรับ Prepared Statement
@@ -66,6 +70,8 @@ if ($status === 'approved') {
     $conditions[] = "r.payment_status = 'paid'";
 } else if ($status === 'not_paid') {
     $conditions[] = "r.payment_status = 'not_paid'";
+} else if ($status === 'paid_onsite') {
+    $conditions[] = "r.payment_status = 'paid_onsite'";
 }
 if ($search) {
     $conditions[] = "(r.fullname LIKE :search OR r.email LIKE :search OR r.phone LIKE :search OR r.organization LIKE :search)";
@@ -76,7 +82,7 @@ if (!empty($conditions)) {
     $sql .= " AND " . implode(" AND ", $conditions);
 }
 
-$sql .= " ORDER BY r.created_at DESC";
+$sql .= " GROUP BY r.id ORDER BY r.created_at DESC";
 
 try {
     // รัน SQL ด้วย Prepared Statement
@@ -95,17 +101,66 @@ try {
     // กำหนดหัวคอลัมน์
     fputcsv($output, [
         'วันที่ลงทะเบียน', 'ชื่อ-นามสกุล', 'หน่วยงาน', 'ตำแหน่ง', 'เบอร์โทร', 'อีเมล', 'ไลน์ไอดี', 
-        'ที่อยู่', 'จังหวัด', 'อำเภอ', 'ตำบล', 'รหัสไปรษณีย์', 'สถานะการอนุมัติ', 'สถานะการชำระเงิน', 'วันที่ชำระเงิน'
+        'ที่อยู่', 'จังหวัด', 'อำเภอ', 'ตำบล', 'รหัสไปรษณีย์', 'สถานะการอนุมัติ', 'สถานะการชำระเงิน', 
+        'วันที่ชำระเงิน', 'หลักฐานการชำระเงิน', 'เอกสารประกอบ'
     ]);
     
     // เขียนข้อมูล
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        // แก้ปัญหาเบอร์โทรที่เลข 0 ด้านหน้าหาย โดยเพิ่มเครื่องหมาย ' ด้านหน้าเพื่อให้ Excel ทำเป็น text format
+        $phoneNumber = "'" . $row['phone'];
+        
+        // แยกเอกสารประกอบเป็นรายการ
+        $documents = '';
+        if (!empty($row['document_paths'])) {
+            $docArray = explode('|', $row['document_paths']);
+            $docLinks = [];
+            foreach ($docArray as $doc) {
+                list($type, $path) = explode(':', $doc);
+                $docType = '';
+                switch ($type) {
+                    case 'identification':
+                        $docType = 'บัตรประชาชน';
+                        break;
+                    case 'certificate':
+                        $docType = 'วุฒิบัตร';
+                        break;
+                    case 'professional':
+                        $docType = 'เอกสารวิชาชีพ';
+                        break;
+                    default:
+                        $docType = 'เอกสารอื่นๆ';
+                }
+                $baseUrl = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https://" : "http://";
+                $baseUrl .= $_SERVER['HTTP_HOST'];
+                $fullPath = $baseUrl . '/' . $path;
+                $docLinks[] = "{$docType}: {$fullPath}";
+            }
+            $documents = implode("\n", $docLinks);
+        }
+        
+        // สร้าง URL สำหรับหลักฐานการชำระเงิน
+        $paymentSlip = '';
+        if (!empty($row['payment_slip_path'])) {
+            $baseUrl = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https://" : "http://";
+            $baseUrl .= $_SERVER['HTTP_HOST'];
+            $paymentSlip = $baseUrl . '/' . $row['payment_slip_path'];
+        }
+        
+        // แปลงสถานะการชำระเงิน
+        $paymentStatus = 'ยังไม่ชำระ';
+        if ($row['payment_status'] === 'paid') {
+            $paymentStatus = 'ชำระแล้ว';
+        } elseif ($row['payment_status'] === 'paid_onsite') {
+            $paymentStatus = 'อนุมัติ (ชำระเงินที่หน้างาน)';
+        }
+        
         fputcsv($output, [
             $row['created_at'],
             $row['fullname'],
             $row['organization'],
             $row['position'],
-            $row['phone'],
+            $phoneNumber,
             $row['email'],
             $row['line_id'],
             $row['address'] ?? '',
@@ -114,8 +169,10 @@ try {
             $row['subdistrict_name'] ?? '',
             $row['zipcode'] ?? '',
             $row['is_approved'] == 1 ? 'อนุมัติแล้ว' : 'รอการอนุมัติ',
-            $row['payment_status'] === 'paid' ? 'ชำระแล้ว' : 'ยังไม่ชำระ',
-            $row['payment_date'] ?? ''
+            $paymentStatus,
+            $row['payment_date'] ?? '',
+            $paymentSlip,
+            $documents
         ]);
     }
     
