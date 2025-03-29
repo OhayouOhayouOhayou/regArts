@@ -1,103 +1,100 @@
 <?php
-// เพิ่มการเก็บ log
 error_reporting(E_ALL);
-ini_set('display_errors', 0);
+ini_set('display_errors', 1);
 ini_set('log_errors', 1);
-ini_set('error_log', 'debug.log');
+ini_set('error_log', 'check_registration.log');
 
 header('Content-Type: application/json; charset=utf-8');
 require_once 'config/database.php';
 
-try {
-    // บันทึก request ที่เข้ามา
-    error_log("Request received: " . file_get_contents('php://input'));
-    
-    $data = json_decode(file_get_contents('php://input'), true);
-    error_log("Decoded data: " . print_r($data, true));
-    
-    if (!isset($data['phone'])) {
-        throw new Exception('กรุณาระบุเบอร์โทรศัพท์');
-    }
+// ตรวจสอบว่าเป็นการเรียกแบบ POST
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    echo json_encode([
+        'success' => false,
+        'message' => 'Method Not Allowed'
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 
+// ตรวจสอบว่ามีการส่ง JSON มาหรือไม่
+$input = file_get_contents('php://input');
+$data = json_decode($input, true);
+
+// ถ้าไม่สามารถแปลง JSON ได้ ให้ใช้ $_POST
+if (json_last_error() !== JSON_ERROR_NONE) {
+    $data = $_POST;
+}
+
+// ตรวจสอบว่ามีเบอร์โทรศัพท์หรือไม่
+if (empty($data['phone'])) {
+    echo json_encode([
+        'success' => false,
+        'message' => 'กรุณาระบุเบอร์โทรศัพท์'
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+$phone = $data['phone'];
+
+try {
     $db = new Database();
     $conn = $db->getConnection();
     
-    // ปรับเปลี่ยนคำสั่ง SQL ให้ดึงผู้ลงทะเบียนจาก phone และ registration_group
-    $stmt = $conn->prepare("
-        SELECT r.* 
-        FROM registrations r 
-        WHERE r.phone = ?
-        ORDER BY r.created_at DESC
-        LIMIT 1
-    ");
+    // ค้นหาข้อมูลจากเบอร์โทรศัพท์แบบไม่ซ้ำ
+    $sql = "SELECT DISTINCT r.* 
+            FROM registrations r
+            WHERE r.phone = ?
+            ORDER BY r.created_at ASC";
     
-    error_log("Checking phone number: " . $data['phone']);
-    $stmt->execute([$data['phone']]);
-    $registration = $stmt->fetch(PDO::FETCH_ASSOC);
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$phone]);
+    $registrations = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    error_log("Query result: " . print_r($registration, true));
-    
-    $response = [];
-    if ($registration) {
-        // ถ้าพบการลงทะเบียน ให้ตรวจสอบว่ามีการลงทะเบียนกลุ่มหรือไม่
-        $registrationCount = 1;
-        $registrationGroup = $registration['registration_group'] ?? null;
-        
-        if ($registrationGroup) {
-            // นับจำนวนคนในกลุ่มเดียวกัน
-            $groupStmt = $conn->prepare("
-                SELECT COUNT(*) as count
-                FROM registrations
-                WHERE registration_group = ?
-            ");
-            $groupStmt->execute([$registrationGroup]);
-            $groupResult = $groupStmt->fetch(PDO::FETCH_ASSOC);
-            $registrationCount = $groupResult['count'];
-        }
-        
-        $response = [
-            'success' => true,
-            'status' => 'exists',
-            'message' => 'เบอร์โทรศัพท์นี้ได้ลงทะเบียนแล้ว',
-            'data' => [
-                'registration_id' => $registration['id'],
-                'payment_status' => $registration['payment_status'],
-                'registration_count' => $registrationCount,
-                'registration_group' => $registrationGroup
-            ]
-        ];
-        
-        switch ($registration['payment_status']) {
-            case 'not_paid':
-                $response['status'] = 'registered_unpaid';
-                break;
-            case 'paid':
-                if (isset($registration['is_approved']) && $registration['is_approved']) {
-                    $response['status'] = 'registration_complete';
-                } else {
-                    $response['status'] = 'pending_approval';
-                    $response['message'] = 'รอการตรวจสอบจากเจ้าหน้าที่';
-                }
-                break;
-        }
-    } else {
-        $response = [
+    // ถ้าไม่พบข้อมูล
+    if (empty($registrations)) {
+        echo json_encode([
             'success' => true,
             'status' => 'not_registered',
-            'message' => 'เบอร์โทรศัพท์นี้ยังไม่เคยลงทะเบียน'
-        ];
+            'message' => 'ไม่พบข้อมูลการลงทะเบียน'
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
     }
     
-    error_log("Sending response: " . json_encode($response, JSON_UNESCAPED_UNICODE));
-    echo json_encode($response, JSON_UNESCAPED_UNICODE);
+    // ดึงรายการแรกที่พบ (ซึ่งเป็นรายการเก่าสุด) เพื่อส่งกลับไปแสดงสถานะ
+    $firstReg = $registrations[0];
+    
+    // ตรวจสอบว่ามีผู้สมัครทั้งหมดกี่คนในกลุ่มนี้
+    $sql = "SELECT COUNT(DISTINCT id) FROM registrations WHERE registration_group = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$firstReg['registration_group']]);
+    $totalRegistrants = $stmt->fetchColumn();
+    
+    // ตรวจสอบสถานะการชำระเงิน
+    $paymentStatus = $firstReg['payment_status'] ?? 'not_paid';
+    $isApproved = $firstReg['is_approved'] ?? 0;
+    
+    // ส่งข้อมูลกลับไป
+    echo json_encode([
+        'success' => true,
+        'status' => $paymentStatus === 'paid' ? 'paid' : 'not_paid',
+        'message' => $paymentStatus === 'paid' 
+            ? ($isApproved ? 'ลงทะเบียนและชำระเงินเรียบร้อยแล้ว' : 'ชำระเงินแล้ว รอการตรวจสอบ') 
+            : 'ลงทะเบียนแล้ว รอชำระเงิน',
+        'data' => [
+            'registration_id' => $firstReg['id'],
+            'registration_group' => $firstReg['registration_group'],
+            'payment_status' => $paymentStatus,
+            'is_approved' => $isApproved,
+            'total_registrants' => $totalRegistrants
+        ]
+    ], JSON_UNESCAPED_UNICODE);
     
 } catch (Exception $e) {
-    error_log("Error occurred: " . $e->getMessage());
-    error_log("Stack trace: " . $e->getTraceAsString());
+    error_log("เกิดข้อผิดพลาดในการตรวจสอบข้อมูล: " . $e->getMessage());
     
-    http_response_code(400);
     echo json_encode([
         'success' => false,
-        'message' => $e->getMessage()
+        'message' => 'เกิดข้อผิดพลาดในการตรวจสอบข้อมูล: ' . $e->getMessage()
     ], JSON_UNESCAPED_UNICODE);
 }

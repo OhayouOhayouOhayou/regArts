@@ -1,98 +1,117 @@
 <?php
-// เพิ่มการเก็บ log
 error_reporting(E_ALL);
-ini_set('display_errors', 0);
+ini_set('display_errors', 1);
 ini_set('log_errors', 1);
-ini_set('error_log', 'debug.log');
+ini_set('error_log', 'registration_details.log');
 
 header('Content-Type: application/json; charset=utf-8');
 require_once 'config/database.php';
 
+// ตรวจสอบว่าเป็นการเรียกแบบ POST
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    echo json_encode([
+        'success' => false,
+        'message' => 'Method Not Allowed'
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// รับข้อมูล JSON
+$input = file_get_contents('php://input');
+$data = json_decode($input, true);
+
+// ถ้าไม่สามารถแปลง JSON ได้ ให้ใช้ $_POST
+if (json_last_error() !== JSON_ERROR_NONE) {
+    $data = $_POST;
+}
+
+// ตรวจสอบว่ามี registration_id หรือไม่
+if (empty($data['registration_id'])) {
+    echo json_encode([
+        'success' => false,
+        'message' => 'กรุณาระบุรหัสการลงทะเบียน'
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+$registrationId = $data['registration_id'];
+
 try {
-    // รับข้อมูลที่ส่งมา
-    $data = json_decode(file_get_contents('php://input'), true);
-    error_log("Received data: " . print_r($data, true));
-    
-    if (!isset($data['registration_id'])) {
-        throw new Exception('กรุณาระบุรหัสการลงทะเบียน');
-    }
-    
-    $registrationId = $data['registration_id'];
-    
     $db = new Database();
     $conn = $db->getConnection();
     
     // ดึงข้อมูลการลงทะเบียน
-    $stmt = $conn->prepare("
-        SELECT * FROM registrations 
-        WHERE id = ?
-    ");
+    $sql = "SELECT * FROM registrations WHERE id = ?";
+    $stmt = $conn->prepare($sql);
     $stmt->execute([$registrationId]);
     $registration = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$registration) {
-        throw new Exception('ไม่พบข้อมูลการลงทะเบียน');
+        echo json_encode([
+            'success' => false,
+            'message' => 'ไม่พบข้อมูลการลงทะเบียน'
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
     }
     
-    // ดึงข้อมูลผู้ลงทะเบียนในกลุ่มเดียวกัน
-    $groupRegistrations = [];
-    if (!empty($registration['registration_group'])) {
-        $groupStmt = $conn->prepare("
-            SELECT * FROM registrations
+    // ดึงข้อมูลกลุ่มการลงทะเบียน
+    $group = $registration['registration_group'];
+    
+    // ดึงข้อมูลผู้ลงทะเบียนทั้งหมดในกลุ่มเดียวกัน (ไม่ซ้ำกัน)
+    $sql = "SELECT DISTINCT id, title, title_other, fullname, organization, position, phone, email, line_id, 
+                   payment_status, is_approved, created_at
+            FROM registrations 
             WHERE registration_group = ?
-            ORDER BY id ASC
-        ");
-        $groupStmt->execute([$registration['registration_group']]);
-        $groupRegistrations = $groupStmt->fetchAll(PDO::FETCH_ASSOC);
-    }
+            ORDER BY created_at ASC";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$group]);
+    $groupRegistrations = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
     // ดึงข้อมูลที่อยู่
-    $stmt = $conn->prepare("
-        SELECT ra.*, 
-               p.name_in_thai as province_name, 
-               d.name_in_thai as district_name, 
-               sd.name_in_thai as subdistrict_name
-        FROM registration_addresses ra
-        LEFT JOIN provinces p ON ra.province_id = p.id
-        LEFT JOIN districts d ON ra.district_id = d.id
-        LEFT JOIN subdistricts sd ON ra.subdistrict_id = sd.id
-        WHERE ra.registration_id = ?
-    ");
+    $sql = "SELECT a.*, 
+                  p.name_in_thai as province_name, 
+                  d.name_in_thai as district_name, 
+                  s.name_in_thai as subdistrict_name
+           FROM registration_addresses a
+           LEFT JOIN provinces p ON a.province_id = p.id
+           LEFT JOIN districts d ON a.district_id = d.id
+           LEFT JOIN subdistricts s ON a.subdistrict_id = s.id
+           WHERE a.registration_id = ?";
+    $stmt = $conn->prepare($sql);
     $stmt->execute([$registrationId]);
     $addresses = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
     // ดึงข้อมูลเอกสาร
-    $stmt = $conn->prepare("
-        SELECT * FROM registration_documents
-        WHERE registration_id = ?
-    ");
+    $sql = "SELECT * FROM registration_documents WHERE registration_id = ?";
+    $stmt = $conn->prepare($sql);
     $stmt->execute([$registrationId]);
     $documents = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
     // ดึงข้อมูลหลักฐานการชำระเงิน
-    $stmt = $conn->prepare("
-        SELECT * FROM registration_files
-        WHERE registration_id = ?
-    ");
-    $stmt->execute([$registrationId]);
-    $paymentFiles = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $paymentSlip = null;
+    if ($registration['payment_slip_id']) {
+        $sql = "SELECT * FROM registration_files WHERE id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([$registration['payment_slip_id']]);
+        $paymentSlip = $stmt->fetch(PDO::FETCH_ASSOC);
+    }
     
-    // ส่งข้อมูลกลับ
+    // ส่งข้อมูลกลับไป
     echo json_encode([
         'success' => true,
         'registration' => $registration,
         'group_registrations' => $groupRegistrations,
         'addresses' => $addresses,
         'documents' => $documents,
-        'payment_files' => $paymentFiles
+        'payment_slip' => $paymentSlip
     ], JSON_UNESCAPED_UNICODE);
     
 } catch (Exception $e) {
-    error_log("Error: " . $e->getMessage());
+    error_log("เกิดข้อผิดพลาดในการดึงข้อมูล: " . $e->getMessage());
     
-    http_response_code(400);
     echo json_encode([
         'success' => false,
-        'message' => $e->getMessage()
+        'message' => 'เกิดข้อผิดพลาดในการดึงข้อมูล: ' . $e->getMessage()
     ], JSON_UNESCAPED_UNICODE);
 }

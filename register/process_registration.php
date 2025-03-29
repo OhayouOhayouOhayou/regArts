@@ -24,8 +24,9 @@ class RegistrationProcessor {
             $conn = $this->db->getConnection();
             $conn->beginTransaction();
 
-            // สร้าง registration_group_id สำหรับผู้ลงทะเบียนทั้งหมดในครั้งนี้
-            $groupId = uniqid('group_');
+            // ตรวจสอบว่ามีการลงทะเบียนจากเบอร์โทรศัพท์นี้มาก่อนหรือไม่
+            $existingGroup = $this->getExistingRegistrationGroup($postData['phone']);
+            $groupId = $existingGroup ?: uniqid('group_');
             $registrationIds = [];
             
             // ค้นหาจำนวนผู้ลงทะเบียนจริง
@@ -71,6 +72,13 @@ class RegistrationProcessor {
             // ตรวจสอบชื่อซ้ำในกลุ่มผู้สมัคร
             $this->checkDuplicateNames($registrants);
             
+            // ตรวจสอบชื่อซ้ำในฐานข้อมูล
+            foreach ($registrants as $registrant) {
+                if ($this->checkExistingRegistration($registrant['phone'], $registrant['fullname'])) {
+                    throw new Exception("ผู้สมัคร: {$registrant['fullname']} เบอร์โทร: {$registrant['phone']} ได้ลงทะเบียนไว้แล้ว");
+                }
+            }
+            
             // ประมวลผลแต่ละผู้ลงทะเบียน
             foreach ($registrants as $index => $registrantData) {
                 // ตรวจสอบข้อมูลที่จำเป็น
@@ -87,28 +95,48 @@ class RegistrationProcessor {
             
             // บันทึกที่อยู่ (สำหรับผู้ลงทะเบียนคนแรก)
             $firstRegId = $registrationIds[0];
-            $this->saveAddresses($conn, $firstRegId, $postData);
             
-            // คัดลอกที่อยู่ให้กับผู้ลงทะเบียนคนอื่นๆ
-            for ($i = 1; $i < count($registrationIds); $i++) {
-                $this->copyAddresses($conn, $firstRegId, $registrationIds[$i]);
+            // ตรวจสอบว่ามีที่อยู่อยู่แล้วหรือไม่ (กรณีกลุ่มเดิม)
+            $hasExistingAddress = false;
+            if ($existingGroup) {
+                $hasExistingAddress = $this->hasExistingAddress($conn, $firstRegId);
+            }
+            
+            // ถ้ายังไม่มีที่อยู่ ให้บันทึกที่อยู่ใหม่
+            if (!$hasExistingAddress) {
+                $this->saveAddresses($conn, $firstRegId, $postData);
+                
+                // คัดลอกที่อยู่ให้กับผู้ลงทะเบียนคนอื่นๆ
+                for ($i = 1; $i < count($registrationIds); $i++) {
+                    $this->copyAddresses($conn, $firstRegId, $registrationIds[$i]);
+                }
+            } else {
+                // ถ้ามีที่อยู่อยู่แล้ว ให้คัดลอกที่อยู่จากคนแรกให้กับคนใหม่
+                $existingAddressId = $this->getFirstRegistrationIdInGroup($conn, $groupId);
+                for ($i = 0; $i < count($registrationIds); $i++) {
+                    // ตรวจสอบว่ามีที่อยู่แล้วหรือไม่
+                    if (!$this->hasExistingAddress($conn, $registrationIds[$i])) {
+                        $this->copyAddresses($conn, $existingAddressId, $registrationIds[$i]);
+                    }
+                }
             }
             
             // จัดการไฟล์เอกสารประกอบ (ถ้ามี) - เชื่อมโยงกับผู้ลงทะเบียนคนแรก
             if (isset($files['documents']) && $this->isValidDocumentsUpload($files['documents'])) {
-                $this->handleDocuments($conn, $registrationIds[0], $files['documents'], $postData);
+                $this->handleDocuments($conn, $firstRegId, $files['documents'], $postData);
             }
             
             // จัดการไฟล์หลักฐานการชำระเงินสำหรับทุกคน (ถ้ามี)
             $hasPaymentSlip = false;
             if (isset($files['payment_slip']) && $files['payment_slip']['error'] === UPLOAD_ERR_OK) {
-                $fileId = $this->handleGroupPaymentSlip($conn, $registrationIds[0], $files['payment_slip']);
+                $fileId = $this->handleGroupPaymentSlip($conn, $firstRegId, $files['payment_slip']);
                 
                 if ($fileId) {
                     $hasPaymentSlip = true;
                     
                     // อัพเดตสถานะการชำระเงินสำหรับทุกคนในกลุ่ม
-                    foreach ($registrationIds as $regId) {
+                    $allGroupMembers = $this->getAllMembersInGroup($conn, $groupId);
+                    foreach ($allGroupMembers as $regId) {
                         $this->updatePaymentStatus($conn, $regId, $fileId, $postData['payment_date'] ?? null);
                     }
                 }
@@ -145,7 +173,64 @@ class RegistrationProcessor {
         }
     }
     
-    // เพิ่มฟังก์ชันใหม่สำหรับบันทึกการลงทะเบียนพร้อมกับ group_id
+    // ฟังก์ชันตรวจสอบว่ามีชื่อนี้ลงทะเบียนไว้แล้วหรือไม่
+    private function checkExistingRegistration($phone, $fullname) {
+        $conn = $this->db->getConnection();
+        $sql = "SELECT id FROM registrations WHERE phone = ? AND fullname = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([$phone, $fullname]);
+        
+        return $stmt->rowCount() > 0;
+    }
+    
+    // ฟังก์ชันเพื่อดึงกลุ่มที่มีอยู่แล้วสำหรับเบอร์โทรศัพท์นี้
+    private function getExistingRegistrationGroup($phone) {
+        $conn = $this->db->getConnection();
+        $sql = "SELECT registration_group FROM registrations WHERE phone = ? LIMIT 1";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([$phone]);
+        
+        if ($stmt->rowCount() > 0) {
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            return $result['registration_group'];
+        }
+        
+        return false;
+    }
+    
+    // ฟังก์ชันเพื่อดึง ID ของผู้ลงทะเบียนคนแรกในกลุ่ม
+    private function getFirstRegistrationIdInGroup($conn, $groupId) {
+        $sql = "SELECT id FROM registrations WHERE registration_group = ? ORDER BY created_at ASC LIMIT 1";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([$groupId]);
+        
+        if ($stmt->rowCount() > 0) {
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            return $result['id'];
+        }
+        
+        return false;
+    }
+    
+    // ฟังก์ชันตรวจสอบว่ามีที่อยู่แล้วหรือไม่
+    private function hasExistingAddress($conn, $registrationId) {
+        $sql = "SELECT id FROM registration_addresses WHERE registration_id = ? LIMIT 1";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([$registrationId]);
+        
+        return $stmt->rowCount() > 0;
+    }
+    
+    // ฟังก์ชันเพื่อดึง ID ของสมาชิกทั้งหมดในกลุ่ม
+    private function getAllMembersInGroup($conn, $groupId) {
+        $sql = "SELECT id FROM registrations WHERE registration_group = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([$groupId]);
+        
+        return $stmt->fetchAll(PDO::FETCH_COLUMN);
+    }
+    
+    // ฟังก์ชันใหม่สำหรับบันทึกการลงทะเบียนพร้อมกับ group_id
     private function saveRegistrationWithGroup($conn, $data, $groupId) {
         $sql = "INSERT INTO registrations (
                     title, title_other, fullname, organization, position,
@@ -229,7 +314,18 @@ class RegistrationProcessor {
     
     // ฟังก์ชันใหม่เพื่อคัดลอกที่อยู่จากผู้สมัครคนแรกให้กับผู้สมัครคนอื่นๆ
     private function copyAddresses($conn, $sourceRegId, $targetRegId) {
-        // ดึงที่อยู่ของผู้สมัครคนแรก
+        // ตรวจสอบว่ามีที่อยู่อยู่แล้วหรือไม่
+        $sql = "SELECT COUNT(*) FROM registration_addresses WHERE registration_id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([$targetRegId]);
+        $count = $stmt->fetchColumn();
+        
+        if ($count > 0) {
+            // ถ้ามีที่อยู่อยู่แล้ว ไม่ต้องคัดลอก
+            return;
+        }
+        
+        // ดึงที่อยู่ของผู้สมัครต้นทาง
         $sql = "SELECT * FROM registration_addresses WHERE registration_id = ?";
         $stmt = $conn->prepare($sql);
         $stmt->execute([$sourceRegId]);
