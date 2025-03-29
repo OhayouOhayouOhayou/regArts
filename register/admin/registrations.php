@@ -292,6 +292,41 @@ require_once '../config/database.php'; // ไฟล์เชื่อมต่�
 </head>
 <body>
     <div class="container-fluid">
+         <!-- Header -->
+    <header class="header d-flex align-items-center">
+        <button class="btn sidebar-toggler me-2" id="sidebarToggle">
+            <i class="fas fa-bars"></i>
+        </button>
+        
+        <div class="d-flex align-items-center">
+            <img src="https://arts.rmutsb.ac.th/image/logo_art_2019.png" alt="Logo" height="32" class="me-2">
+            <h5 class="mb-0 d-none d-md-block">ระบบจัดการการลงทะเบียน</h5>
+        </div>
+        
+        <div class="ms-auto d-flex align-items-center">
+            <div class="dropdown">
+                <div class="user-profile" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                    <div class="profile-avatar">
+                        <?php 
+                        $initials = mb_substr($_SESSION['admin_name'] ?? 'A', 0, 1, 'UTF-8');
+                        echo $initials;
+                        ?>
+                    </div>
+                    <div class="profile-info d-none d-md-flex">
+                        <span class="profile-name"><?php echo $_SESSION['admin_name'] ?? 'ผู้ดูแลระบบ'; ?></span>
+                        <span class="profile-role">ผู้ดูแลระบบ</span>
+                    </div>
+                    <i class="fas fa-chevron-down ms-2"></i>
+                </div>
+                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                    <li><a class="dropdown-item" href="#"><i class="fas fa-user me-2"></i>โปรไฟล์</a></li>
+                    <li><a class="dropdown-item" href="#"><i class="fas fa-cog me-2"></i>ตั้งค่า</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" href="logout.php"><i class="fas fa-sign-out-alt me-2"></i>ออกจากระบบ</a></li>
+                </ul>
+            </div>
+        </div>
+    </header>
         <div class="row">
             <!-- Sidebar -->
             <div class="col-lg-2 sidebar" id="sidebar">
