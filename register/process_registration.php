@@ -28,38 +28,28 @@ class RegistrationProcessor {
             $groupId = uniqid('group_');
             $registrationIds = [];
             
-            // หาจำนวนผู้ลงทะเบียน
-            $registrantCount = 1; // มีอย่างน้อย 1 คน
+            // ค้นหาจำนวนผู้ลงทะเบียนจริง
+            $registrants = [];
             
-            // ตรวจสอบว่ามีผู้ลงทะเบียนกี่คน โดยนับจากฟิลด์ fullname_X
-            foreach ($postData as $key => $value) {
-                if (preg_match('/^fullname_(\d+)$/', $key, $matches)) {
-                    $index = (int)$matches[1];
-                    if ($index >= $registrantCount) {
-                        $registrantCount = $index + 1;
-                    }
-                }
+            // ตรวจสอบผู้ลงทะเบียนคนแรก
+            if (!empty($postData['fullname'])) {
+                $registrants[] = [
+                    'title' => $postData['title'],
+                    'title_other' => $postData['title_other'] ?? null,
+                    'fullname' => $postData['fullname'],
+                    'organization' => $postData['organization'],
+                    'position' => $postData['position'],
+                    'phone' => $postData['phone'],
+                    'email' => $postData['email'],
+                    'line_id' => $postData['line_id'] ?? null
+                ];
             }
             
-            // ประมวลผลแต่ละผู้ลงทะเบียน
-            for ($i = 0; $i < $registrantCount; $i++) {
-                $registrantData = [];
-                
-                // จัดการข้อมูลสำหรับคนแรก (ไม่มี suffix)
-                if ($i === 0) {
-                    $registrantData = [
-                        'title' => $postData['title'],
-                        'title_other' => $postData['title_other'] ?? null,
-                        'fullname' => $postData['fullname'],
-                        'organization' => $postData['organization'],
-                        'position' => $postData['position'],
-                        'phone' => $postData['phone'],
-                        'email' => $postData['email'],
-                        'line_id' => $postData['line_id'] ?? null
-                    ];
-                } else {
-                    // จัดการข้อมูลสำหรับคนที่ 2 เป็นต้นไป (มี suffix _X)
-                    $registrantData = [
+            // ตรวจสอบผู้ลงทะเบียนคนที่ 2 เป็นต้นไป
+            $i = 1;
+            while (isset($postData["fullname_{$i}"])) {
+                if (!empty($postData["fullname_{$i}"])) {
+                    $registrants[] = [
                         'title' => $postData["title_{$i}"] ?? '',
                         'title_other' => $postData["title_other_{$i}"] ?? null,
                         'fullname' => $postData["fullname_{$i}"] ?? '',
@@ -70,17 +60,20 @@ class RegistrationProcessor {
                         'line_id' => $postData["line_id_{$i}"] ?? null
                     ];
                 }
-                
-                // ตรวจสอบว่ามีข้อมูลที่จำเป็นครบหรือไม่
-                if (empty($registrantData['fullname'])) {
-                    // ข้ามผู้ลงทะเบียนที่ไม่มีข้อมูล
-                    continue;
-                }
-                
+                $i++;
+            }
+            
+            // ตรวจสอบว่ามีผู้ลงทะเบียนอย่างน้อย 1 คน
+            if (empty($registrants)) {
+                throw new Exception("ไม่พบข้อมูลผู้ลงทะเบียน");
+            }
+            
+            // ประมวลผลแต่ละผู้ลงทะเบียน
+            foreach ($registrants as $index => $registrantData) {
                 // ตรวจสอบข้อมูลที่จำเป็น
                 foreach (['title', 'fullname', 'organization', 'position', 'email'] as $field) {
                     if (empty($registrantData[$field])) {
-                        throw new Exception("กรุณากรอก{$field}ให้ครบถ้วน");
+                        throw new Exception("กรุณากรอก{$field}ให้ครบถ้วนสำหรับผู้ลงทะเบียนทุกคน");
                     }
                 }
                 
@@ -89,7 +82,7 @@ class RegistrationProcessor {
                 $registrationIds[] = $registrationId;
                 
                 // บันทึกที่อยู่ (เฉพาะผู้ลงทะเบียนคนแรกเท่านั้น)
-                if ($i === 0) {
+                if ($index === 0) {
                     $this->saveAddresses($conn, $registrationId, $postData);
                 }
             }
