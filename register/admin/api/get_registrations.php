@@ -29,12 +29,11 @@ $phone = $_GET['phone'] ?? '';
 $status = $_GET['status'] ?? '';
 $search = $_GET['search'] ?? '';
 
-// สร้าง SQL หลัก
-$sql = "SELECT r.*, p.name_in_thai AS province_name, d.name_in_thai AS district_name, s.name_in_thai AS subdistrict_name 
+// สร้าง SQL หลักโดยไม่มี JOIN กับ subdistricts ที่มีปัญหา
+$sql = "SELECT r.*, p.name_in_thai AS province_name, d.name_in_thai AS district_name
         FROM registrations r 
         LEFT JOIN provinces p ON r.province_id = p.id 
         LEFT JOIN districts d ON r.district_id = d.id 
-        LEFT JOIN subdistricts s ON r.subdistrict_id = s.id 
         WHERE 1=1";
 
 // สร้างเงื่อนไขและพารามิเตอร์สำหรับ Prepared Statement
@@ -86,8 +85,8 @@ try {
 
     // เพิ่มการแบ่งหน้า
     $sql .= " ORDER BY r.created_at DESC LIMIT :offset, :limit";
-    $params[':offset'] = (int)$offset; // ต้องระบุเป็น integer สำหรับ LIMIT
-    $params[':limit'] = (int)$limit;   // ต้องระบุเป็น integer สำหรับ LIMIT
+    $params[':offset'] = (int)$offset;
+    $params[':limit'] = (int)$limit;
 
     // รัน SQL ด้วย Prepared Statement
     $stmt = $conn->prepare($sql);
