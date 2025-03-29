@@ -1,106 +1,132 @@
 <?php
-/**
- * Database Schema Maintenance Script
- * 
- * This script checks and updates the database schema for the registration system
- * to ensure all required fields are present for multi-registrant functionality.
- */
-
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-ini_set('log_errors', 1);
-ini_set('error_log', 'db_maintenance.log');
-
-require_once 'config/database.php';
-
-// Function to check if a column exists in a table
-function columnExists($conn, $table, $column) {
-    $sql = "SHOW COLUMNS FROM {$table} LIKE '{$column}'";
-    $result = $conn->query($sql);
-    return $result->rowCount() > 0;
-}
-
-// Function to add a column if it doesn't exist
-function addColumnIfNotExists($conn, $table, $column, $definition) {
-    if (!columnExists($conn, $table, $column)) {
-        $sql = "ALTER TABLE {$table} ADD COLUMN {$column} {$definition}";
-        $conn->query($sql);
-        echo "Added column '{$column}' to table '{$table}'<br>";
-        error_log("Added column '{$column}' to table '{$table}'");
-        return true;
-    }
-    return false;
-}
+// Database connection parameters
+$host = "mysql";
+$dbname = "shared_db";
+$username = "dbuser";
+$password = "dbpassword";
 
 try {
-    // Connect to database
-    $database = new Database();
-    $conn = $database->getConnection();
+    // Create database connection
+    $conn = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8", $username, $password);
+    $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     
-    echo "<h1>Database Schema Maintenance</h1>";
+    // Start transaction
+    $conn->beginTransaction();
     
-    // Check registrations table
-    echo "<h2>Checking registrations table...</h2>";
+    // Names of the registrants
+    $registrants = [
+        'ขวัญชัย ดวงขันเพชร',
+        'กรวิษ แสนสุพรรณ์',
+        'ธีระวรรธน์ เวชอรรถสิทธิ์'
+    ];
     
-    addColumnIfNotExists($conn, "registrations", "registration_group", "VARCHAR(50) NULL");
-    addColumnIfNotExists($conn, "registrations", "payment_status", "ENUM('not_paid', 'paid') NOT NULL DEFAULT 'not_paid'");
-    addColumnIfNotExists($conn, "registrations", "is_approved", "TINYINT(1) NOT NULL DEFAULT 0");
-    addColumnIfNotExists($conn, "registrations", "payment_date", "DATETIME NULL");
-    addColumnIfNotExists($conn, "registrations", "payment_slip_id", "INT NULL");
-    addColumnIfNotExists($conn, "registrations", "payment_updated_at", "DATETIME NULL");
-    
-    // Check registration_documents table
-    echo "<h2>Checking registration_documents table...</h2>";
-    
-    // First check if table exists
-    $tableExists = $conn->query("SHOW TABLES LIKE 'registration_documents'")->rowCount() > 0;
-    if (!$tableExists) {
-        $sql = "CREATE TABLE registration_documents (
-            id INT(11) NOT NULL AUTO_INCREMENT,
-            registration_id INT(11) NOT NULL,
-            file_name VARCHAR(255) NOT NULL,
-            file_path VARCHAR(255) NOT NULL,
-            file_type VARCHAR(100) NOT NULL,
-            file_size INT(11) NOT NULL,
-            document_type VARCHAR(50) NOT NULL DEFAULT 'general',
-            description TEXT NULL,
-            uploaded_at DATETIME NOT NULL,
-            PRIMARY KEY (id),
-            KEY idx_registration_id (registration_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
-        $conn->query($sql);
-        echo "Created table 'registration_documents'<br>";
-        error_log("Created table 'registration_documents'");
-    } else {
-        addColumnIfNotExists($conn, "registration_documents", "document_type", "VARCHAR(50) NOT NULL DEFAULT 'general'");
-        addColumnIfNotExists($conn, "registration_documents", "description", "TEXT NULL");
+    // Find registration IDs for these individuals
+    $registrationIds = [];
+    foreach ($registrants as $name) {
+        $stmt = $conn->prepare("SELECT id FROM registrations 
+                               WHERE fullname = :name 
+                               AND organization LIKE '%บ้านต้อน%' 
+                               AND phone = '0910616211'");
+        $stmt->execute(['name' => $name]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($result) {
+            $registrationIds[] = $result['id'];
+        }
     }
     
-    // Check registration_files table
-    echo "<h2>Checking registration_files table...</h2>";
-    
-    // First check if table exists
-    $tableExists = $conn->query("SHOW TABLES LIKE 'registration_files'")->rowCount() > 0;
-    if (!$tableExists) {
-        $sql = "CREATE TABLE registration_files (
-            id INT(11) NOT NULL AUTO_INCREMENT,
-            registration_id INT(11) NOT NULL,
-            file_name VARCHAR(255) NOT NULL,
-            file_path VARCHAR(255) NOT NULL,
-            file_type VARCHAR(100) NOT NULL,
-            file_size INT(11) NOT NULL,
-            uploaded_at DATETIME NOT NULL,
-            PRIMARY KEY (id),
-            KEY idx_registration_id (registration_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
-        $conn->query($sql);
-        echo "Created table 'registration_files'<br>";
-        error_log("Created table 'registration_files'");
+    if (count($registrationIds) < 3) {
+        throw new Exception("Could not find all three registrants in the database.");
     }
     
-    echo "<h2>Schema maintenance completed successfully!</h2>";
+    echo "Found " . count($registrationIds) . " registrants to update.<br>";
+    
+    // Get province, district, subdistrict IDs for หนองคาย, รัตนวาปี, บ้านต้อน
+    $provinceName = "หนองคาย";
+    $districtName = "รัตนวาปี";
+    $subdistrictName = "บ้านต้อน";
+    
+    // Get province ID
+    $stmt = $conn->prepare("SELECT id FROM provinces WHERE name_in_thai = :name");
+    $stmt->execute(['name' => $provinceName]);
+    $province = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$province) {
+        throw new Exception("Province not found: $provinceName");
+    }
+    $provinceId = $province['id'];
+    
+    // Get district ID
+    $stmt = $conn->prepare("SELECT id FROM districts WHERE name_in_thai = :name AND province_id = :province_id");
+    $stmt->execute(['name' => $districtName, 'province_id' => $provinceId]);
+    $district = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$district) {
+        throw new Exception("District not found: $districtName");
+    }
+    $districtId = $district['id'];
+    
+    // Get subdistrict ID
+    $stmt = $conn->prepare("SELECT id FROM subdistricts WHERE name_in_thai = :name AND district_id = :district_id");
+    $stmt->execute(['name' => $subdistrictName, 'district_id' => $districtId]);
+    $subdistrict = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$subdistrict) {
+        throw new Exception("Subdistrict not found: $subdistrictName");
+    }
+    $subdistrictId = $subdistrict['id'];
+    
+    // Address data to update
+    $address = "60 ม.9 อบต.บ้านต้อน";
+    $zipcode = "43120";
+    
+    // Update or insert address for each registration
+    foreach ($registrationIds as $regId) {
+        // Check if address exists
+        $stmt = $conn->prepare("SELECT id FROM registration_addresses 
+                                WHERE registration_id = :reg_id 
+                                AND address_type = 'invoice'");
+        $stmt->execute(['reg_id' => $regId]);
+        $addressExists = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($addressExists) {
+            // Update existing address
+            $stmt = $conn->prepare("UPDATE registration_addresses 
+                                   SET address = :address,
+                                       province_id = :province_id,
+                                       district_id = :district_id,
+                                       subdistrict_id = :subdistrict_id,
+                                       zipcode = :zipcode
+                                   WHERE registration_id = :reg_id
+                                   AND address_type = 'invoice'");
+        } else {
+            // Insert new address
+            $stmt = $conn->prepare("INSERT INTO registration_addresses 
+                                   (registration_id, address_type, address, 
+                                    province_id, district_id, subdistrict_id, zipcode)
+                                   VALUES 
+                                   (:reg_id, 'invoice', :address, 
+                                    :province_id, :district_id, :subdistrict_id, :zipcode)");
+        }
+        
+        $stmt->execute([
+            'reg_id' => $regId,
+            'address' => $address,
+            'province_id' => $provinceId,
+            'district_id' => $districtId,
+            'subdistrict_id' => $subdistrictId,
+            'zipcode' => $zipcode
+        ]);
+        
+        echo "Updated address for registration ID: $regId<br>";
+    }
+    
+    // Commit transaction
+    $conn->commit();
+    echo "All addresses successfully updated!";
     
 } catch (Exception $e) {
-    echo "<h2>Error:</h2> " . $e->getMessage();
-    error_log("Schema maintenance error: " . $e->getMessage());
+    // Roll back transaction on error
+    if (isset($conn) && $conn->inTransaction()) {
+        $conn->rollBack();
+    }
+    echo "Error: " . $e->getMessage();
 }
+?>
