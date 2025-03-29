@@ -128,7 +128,9 @@ async function applyFilters() {
                         <td><span class="status-badge ${reg.payment_status === 'paid' ? 'bg-success' : 'bg-danger'} text-white">${reg.payment_status === 'paid' ? 'ชำระแล้ว' : 'ยังไม่ชำระ'}</span></td>
                         <td>
                             <button class="btn btn-sm btn-primary me-1" onclick="viewRegistration(${reg.id})"><i class="fas fa-eye"></i></button>
-                            <button class="btn btn-sm btn-warning" onclick="editRegistration(${reg.id})"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteRegistration(${reg.id})" title="ลบ">
+                            <i class="fas fa-trash"></i>
+                        </button>
                         </td>
                     </tr>
                 `).join('') : 
