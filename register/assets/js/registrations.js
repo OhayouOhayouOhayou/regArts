@@ -8,6 +8,9 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('searchInput').addEventListener('keypress', function(e) {
         if (e.key === 'Enter') applyFilters();
     });
+
+    // เพิ่ม Event Listener สำหรับปุ่ม filter
+    document.getElementById('provinceFilter').addEventListener('change', loadDistricts);
 });
 
 // ฟังก์ชันโหลดข้อมูลจังหวัด
@@ -16,9 +19,18 @@ async function loadProvinces() {
         const response = await fetch('api/get_provinces.php');
         if (!response.ok) throw new Error('ไม่สามารถโหลดข้อมูลจังหวัดได้');
         const provinces = await response.json();
-        const provinceSelect = document.getElementById('provinceFilter');
-        provinceSelect.innerHTML = '<option value="">เลือกจังหวัด</option>' + 
-            provinces.map(p => `<option value="${p.id}">${p.name_in_thai}</option>`).join('');
+        
+        // ตรวจสอบว่าข้อมูลมีรูปแบบที่ถูกต้อง
+        if (!Array.isArray(provinces) && provinces.data && Array.isArray(provinces.data)) {
+            // กรณีข้อมูลอยู่ใน property data
+            populateProvinces(provinces.data);
+        } else if (Array.isArray(provinces)) {
+            // กรณีข้อมูลเป็น array โดยตรง
+            populateProvinces(provinces);
+        } else {
+            console.error('รูปแบบข้อมูลจังหวัดไม่ถูกต้อง:', provinces);
+            throw new Error('ข้อมูลจังหวัดมีรูปแบบไม่ถูกต้อง');
+        }
     } catch (error) {
         console.error('Error loading provinces:', error);
         Swal.fire({
@@ -29,21 +41,77 @@ async function loadProvinces() {
     }
 }
 
+// ฟังก์ชันสำหรับเติมข้อมูลจังหวัดลงใน dropdown
+function populateProvinces(provinces) {
+    const provinceSelect = document.getElementById('provinceFilter');
+    provinceSelect.innerHTML = '<option value="">เลือกจังหวัด</option>';
+    
+    provinces.forEach(p => {
+        provinceSelect.innerHTML += `<option value="${p.id}">${p.name_in_thai}</option>`;
+    });
+}
+
+// ฟังก์ชันโหลดข้อมูลอำเภอตามจังหวัดที่เลือก
+async function loadDistricts() {
+    const provinceId = document.getElementById('provinceFilter').value;
+    const districtSelect = document.getElementById('districtFilter');
+    
+    districtSelect.innerHTML = '<option value="">เลือกอำเภอ</option>';
+    districtSelect.disabled = true;
+    
+    if (!provinceId) return;
+    
+    try {
+        const response = await fetch(`api/get_districts.php?province_id=${provinceId}`);
+        if (!response.ok) throw new Error('ไม่สามารถโหลดข้อมูลอำเภอได้');
+        const districts = await response.json();
+        
+        if (districts.data && Array.isArray(districts.data)) {
+            districts.data.forEach(d => {
+                districtSelect.innerHTML += `<option value="${d.id}">${d.name_in_thai}</option>`;
+            });
+        } else if (Array.isArray(districts)) {
+            districts.forEach(d => {
+                districtSelect.innerHTML += `<option value="${d.id}">${d.name_in_thai}</option>`;
+            });
+        }
+        
+        districtSelect.disabled = false;
+    } catch (error) {
+        console.error('Error loading districts:', error);
+        Swal.fire({
+            icon: 'error',
+            title: 'เกิดข้อผิดพลาด',
+            text: 'ไม่สามารถโหลดข้อมูลอำเภอได้ กรุณาลองใหม่'
+        });
+    }
+}
+
 // ฟังก์ชันโหลดและกรองข้อมูลการลงทะเบียน
 async function applyFilters() {
     const province = document.getElementById('provinceFilter').value;
+    const district = document.getElementById('districtFilter').value;
     const firstName = document.getElementById('firstNameFilter').value.trim();
     const lastName = document.getElementById('lastNameFilter').value.trim();
     const phone = document.getElementById('phoneFilter').value.trim();
     const status = document.getElementById('statusFilter').value;
     const search = document.getElementById('searchInput').value.trim();
 
-    const url = `api/get_registrations.php?page=1&limit=10&province=${encodeURIComponent(province)}&firstName=${encodeURIComponent(firstName)}&lastName=${encodeURIComponent(lastName)}&phone=${encodeURIComponent(phone)}&status=${encodeURIComponent(status)}&search=${encodeURIComponent(search)}`;
+    const url = `api/get_registrations.php?page=1&limit=10&province=${encodeURIComponent(province)}&district=${encodeURIComponent(district)}&firstName=${encodeURIComponent(firstName)}&lastName=${encodeURIComponent(lastName)}&phone=${encodeURIComponent(phone)}&status=${encodeURIComponent(status)}&search=${encodeURIComponent(search)}`;
     
     try {
         const response = await fetch(url);
         if (!response.ok) throw new Error('ไม่สามารถโหลดข้อมูลการลงทะเบียนได้');
-        const result = await response.json();
+        
+        // ดึงข้อความดิบสำหรับการตรวจสอบข้อผิดพลาด
+        const text = await response.text();
+        let result;
+        try {
+            result = JSON.parse(text);
+        } catch (e) {
+            console.error('ไม่สามารถแปลงข้อมูลเป็น JSON ได้:', text);
+            throw new Error('ข้อมูลที่ส่งกลับมาไม่ใช่ JSON ที่ถูกต้อง');
+        }
         
         if (result.status === 'success') {
             const tableBody = document.getElementById('registrationsList');
@@ -55,8 +123,8 @@ async function applyFilters() {
                         <td>${reg.organization || '-'}</td>
                         <td>${reg.phone || '-'}</td>
                         <td>${reg.email || '-'}</td>
-                        <td>${reg.address ? `${reg.address} ${reg.subdistrict_name} ${reg.district_name} ${reg.province_name} ${reg.zipcode}` : '-'}</td>
-                        <td><span class="status-badge ${reg.is_approved ? 'bg-success' : 'bg-warning'} text-white">${reg.is_approved ? 'อนุมัติแล้ว' : 'รอการอนุมัติ'}</span></td>
+                        <td>${formatAddress(reg)}</td>
+                        <td><span class="status-badge ${reg.is_approved == 1 ? 'bg-success' : 'bg-warning'} text-white">${reg.is_approved == 1 ? 'อนุมัติแล้ว' : 'รอการอนุมัติ'}</span></td>
                         <td><span class="status-badge ${reg.payment_status === 'paid' ? 'bg-success' : 'bg-danger'} text-white">${reg.payment_status === 'paid' ? 'ชำระแล้ว' : 'ยังไม่ชำระ'}</span></td>
                         <td>
                             <button class="btn btn-sm btn-primary me-1" onclick="viewRegistration(${reg.id})"><i class="fas fa-eye"></i></button>
@@ -67,7 +135,7 @@ async function applyFilters() {
                 '<tr><td colspan="9" class="text-center text-muted">ไม่พบข้อมูล</td></tr>';
             renderPagination(result.data.total, 1);
         } else {
-            throw new Error(result.message);
+            throw new Error(result.message || 'เกิดข้อผิดพลาดในการโหลดข้อมูล');
         }
     } catch (error) {
         console.error('Error loading registrations:', error);
@@ -79,9 +147,23 @@ async function applyFilters() {
     }
 }
 
+// ฟังก์ชันสำหรับจัดรูปแบบที่อยู่
+function formatAddress(reg) {
+    const parts = [];
+    if (reg.address) parts.push(reg.address);
+    if (reg.subdistrict_name) parts.push(reg.subdistrict_name);
+    if (reg.district_name) parts.push(reg.district_name);
+    if (reg.province_name) parts.push(reg.province_name);
+    if (reg.zipcode) parts.push(reg.zipcode);
+    
+    return parts.length > 0 ? parts.join(' ') : '-';
+}
+
 // ฟังก์ชันรีเซ็ตฟิลเตอร์
 function resetFilters() {
     document.getElementById('provinceFilter').value = '';
+    document.getElementById('districtFilter').value = '';
+    document.getElementById('districtFilter').disabled = true;
     document.getElementById('firstNameFilter').value = '';
     document.getElementById('lastNameFilter').value = '';
     document.getElementById('phoneFilter').value = '';
@@ -119,13 +201,14 @@ function renderPagination(total, currentPage) {
 // ฟังก์ชันโหลดข้อมูลหน้าใหม่
 async function loadPage(page) {
     const province = document.getElementById('provinceFilter').value;
+    const district = document.getElementById('districtFilter').value;
     const firstName = document.getElementById('firstNameFilter').value.trim();
     const lastName = document.getElementById('lastNameFilter').value.trim();
     const phone = document.getElementById('phoneFilter').value.trim();
     const status = document.getElementById('statusFilter').value;
     const search = document.getElementById('searchInput').value.trim();
 
-    const url = `api/get_registrations.php?page=${page}&limit=10&province=${encodeURIComponent(province)}&firstName=${encodeURIComponent(firstName)}&lastName=${encodeURIComponent(lastName)}&phone=${encodeURIComponent(phone)}&status=${encodeURIComponent(status)}&search=${encodeURIComponent(search)}`;
+    const url = `api/get_registrations.php?page=${page}&limit=10&province=${encodeURIComponent(province)}&district=${encodeURIComponent(district)}&firstName=${encodeURIComponent(firstName)}&lastName=${encodeURIComponent(lastName)}&phone=${encodeURIComponent(phone)}&status=${encodeURIComponent(status)}&search=${encodeURIComponent(search)}`;
     
     try {
         const response = await fetch(url);
@@ -142,8 +225,8 @@ async function loadPage(page) {
                         <td>${reg.organization || '-'}</td>
                         <td>${reg.phone || '-'}</td>
                         <td>${reg.email || '-'}</td>
-                        <td>${reg.address ? `${reg.address} ${reg.subdistrict_name} ${reg.district_name} ${reg.province_name} ${reg.zipcode}` : '-'}</td>
-                        <td><span class="status-badge ${reg.is_approved ? 'bg-success' : 'bg-warning'} text-white">${reg.is_approved ? 'อนุมัติแล้ว' : 'รอการอนุมัติ'}</span></td>
+                        <td>${formatAddress(reg)}</td>
+                        <td><span class="status-badge ${reg.is_approved == 1 ? 'bg-success' : 'bg-warning'} text-white">${reg.is_approved == 1 ? 'อนุมัติแล้ว' : 'รอการอนุมัติ'}</span></td>
                         <td><span class="status-badge ${reg.payment_status === 'paid' ? 'bg-success' : 'bg-danger'} text-white">${reg.payment_status === 'paid' ? 'ชำระแล้ว' : 'ยังไม่ชำระ'}</span></td>
                         <td>
                             <button class="btn btn-sm btn-primary me-1" onclick="viewRegistration(${reg.id})"><i class="fas fa-eye"></i></button>
@@ -164,6 +247,21 @@ async function loadPage(page) {
             text: error.message || 'ไม่สามารถโหลดข้อมูลได้ กรุณาลองใหม่'
         });
     }
+}
+
+// ฟังก์ชันส่งออก Excel
+function exportToExcel() {
+    const province = document.getElementById('provinceFilter').value;
+    const district = document.getElementById('districtFilter').value;
+    const firstName = document.getElementById('firstNameFilter').value.trim();
+    const lastName = document.getElementById('lastNameFilter').value.trim();
+    const phone = document.getElementById('phoneFilter').value.trim();
+    const status = document.getElementById('statusFilter').value;
+    const search = document.getElementById('searchInput').value.trim();
+
+    const url = `api/export_registrations.php?province=${encodeURIComponent(province)}&district=${encodeURIComponent(district)}&firstName=${encodeURIComponent(firstName)}&lastName=${encodeURIComponent(lastName)}&phone=${encodeURIComponent(phone)}&status=${encodeURIComponent(status)}&search=${encodeURIComponent(search)}`;
+    
+    window.location.href = url;
 }
 
 // ฟังก์ชันดูรายละเอียดการลงทะเบียน

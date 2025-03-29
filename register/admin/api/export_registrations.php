@@ -1,104 +1,128 @@
 <?php
-require_once '../../config/database.php';
-require_once '../check_auth.php';
+// ตั้งค่า headers สำหรับการดาวน์โหลดไฟล์ CSV
+header('Content-Type: text/csv; charset=utf-8');
+header('Content-Disposition: attachment; filename="registrations_export.csv"');
 
-// Set headers for Excel download
-header('Content-Type: application/vnd.ms-excel');
-header('Content-Disposition: attachment; filename="registrations_export_' . date('Y-m-d') . '.xls"');
-header('Pragma: no-cache');
-header('Expires: 0');
+// สร้างการเชื่อมต่อฐานข้อมูล
+try {
+    $conn = new PDO(
+        "mysql:host=mysql;port=3306;dbname=shared_db",
+        "dbuser", 
+        "dbpassword",
+        array(PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES 'utf8'")
+    );
+    $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+} catch(PDOException $e) {
+    die("Database connection error: " . $e->getMessage());
+}
 
-// Get search parameter
-$search = isset($_GET['search']) ? $_GET['search'] : '';
+// รับพารามิเตอร์สำหรับฟิลเตอร์
+$province = $_GET['province'] ?? '';
+$district = $_GET['district'] ?? '';
+$firstName = $_GET['firstName'] ?? '';
+$lastName = $_GET['lastName'] ?? '';
+$phone = $_GET['phone'] ?? '';
+$status = $_GET['status'] ?? '';
+$search = $_GET['search'] ?? '';
+
+// สร้าง SQL หลัก
+$sql = "SELECT r.*, 
+               a.address, a.province_id, a.district_id, a.subdistrict_id, a.zipcode,
+               p.name_in_thai AS province_name, 
+               d.name_in_thai AS district_name, 
+               s.name_in_thai AS subdistrict_name
+        FROM registrations r 
+        LEFT JOIN registration_addresses a ON r.id = a.registration_id
+        LEFT JOIN provinces p ON a.province_id = p.id 
+        LEFT JOIN districts d ON a.district_id = d.id 
+        LEFT JOIN subdistricts s ON a.subdistrict_id = s.id 
+        WHERE 1=1";
+
+// สร้างเงื่อนไขและพารามิเตอร์สำหรับ Prepared Statement
+$conditions = [];
+$params = [];
+
+if ($province) {
+    $conditions[] = "a.province_id = :province";
+    $params[':province'] = $province;
+}
+if ($district) {
+    $conditions[] = "a.district_id = :district";
+    $params[':district'] = $district;
+}
+if ($firstName) {
+    $conditions[] = "r.fullname LIKE :firstName";
+    $params[':firstName'] = "%$firstName%";
+}
+if ($phone) {
+    $conditions[] = "r.phone LIKE :phone";
+    $params[':phone'] = "%$phone%";
+}
+if ($status === 'approved') {
+    $conditions[] = "r.is_approved = 1";
+} else if ($status === 'pending') {
+    $conditions[] = "r.is_approved = 0";
+} else if ($status === 'paid') {
+    $conditions[] = "r.payment_status = 'paid'";
+} else if ($status === 'not_paid') {
+    $conditions[] = "r.payment_status = 'not_paid'";
+}
+if ($search) {
+    $conditions[] = "(r.fullname LIKE :search OR r.email LIKE :search OR r.phone LIKE :search OR r.organization LIKE :search)";
+    $params[':search'] = "%$search%";
+}
+
+if (!empty($conditions)) {
+    $sql .= " AND " . implode(" AND ", $conditions);
+}
+
+$sql .= " ORDER BY r.created_at DESC";
 
 try {
-    // Create database connection
-    $database = new Database();
-    $pdo = $database->getConnection();
+    // รัน SQL ด้วย Prepared Statement
+    $stmt = $conn->prepare($sql);
+    foreach ($params as $key => $value) {
+        $stmt->bindValue($key, $value, is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR);
+    }
+    $stmt->execute();
     
-    // Build query
-    $whereClause = '';
-    $params = [];
+    // เปิดไฟล์สำหรับเขียน
+    $output = fopen('php://output', 'w');
     
-    if (!empty($search)) {
-        $whereClause = " WHERE 
-            r.fullname LIKE ? OR 
-            r.organization LIKE ? OR 
-            r.phone LIKE ? OR 
-            r.email LIKE ? OR 
-            r.line_id LIKE ?";
-        
-        $searchParam = "%{$search}%";
-        $params = [$searchParam, $searchParam, $searchParam, $searchParam, $searchParam];
+    // เขียนหัวคอลัมน์ UTF-8 BOM (ช่วยให้ Excel อ่านภาษาไทยได้ถูกต้อง)
+    fputs($output, "\xEF\xBB\xBF");
+    
+    // กำหนดหัวคอลัมน์
+    fputcsv($output, [
+        'วันที่ลงทะเบียน', 'ชื่อ-นามสกุล', 'หน่วยงาน', 'ตำแหน่ง', 'เบอร์โทร', 'อีเมล', 'ไลน์ไอดี', 
+        'ที่อยู่', 'จังหวัด', 'อำเภอ', 'ตำบล', 'รหัสไปรษณีย์', 'สถานะการอนุมัติ', 'สถานะการชำระเงิน', 'วันที่ชำระเงิน'
+    ]);
+    
+    // เขียนข้อมูล
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        fputcsv($output, [
+            $row['created_at'],
+            $row['fullname'],
+            $row['organization'],
+            $row['position'],
+            $row['phone'],
+            $row['email'],
+            $row['line_id'],
+            $row['address'] ?? '',
+            $row['province_name'] ?? '',
+            $row['district_name'] ?? '',
+            $row['subdistrict_name'] ?? '',
+            $row['zipcode'] ?? '',
+            $row['is_approved'] == 1 ? 'อนุมัติแล้ว' : 'รอการอนุมัติ',
+            $row['payment_status'] === 'paid' ? 'ชำระแล้ว' : 'ยังไม่ชำระ',
+            $row['payment_date'] ?? ''
+        ]);
     }
     
-    // Get registrations
-    $query = "SELECT 
-                r.id,
-                r.title,
-                r.title_other,
-                r.fullname,
-                r.organization,
-                r.phone,
-                r.email,
-                r.line_id,
-                DATE_FORMAT(r.created_at, '%d/%m/%Y %H:%i') as registration_date,
-                r.payment_status,
-                r.is_approved,
-                DATE_FORMAT(r.approved_at, '%d/%m/%Y %H:%i') as approval_date
-              FROM registrations r
-              $whereClause
-              ORDER BY r.created_at DESC";
-    
-    $stmt = $pdo->prepare($query);
-    
-    if (!empty($params)) {
-        $stmt->execute($params);
-    } else {
-        $stmt->execute();
-    }
-    
-    $registrations = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    // Output Excel content
-    echo '<table border="1">';
-    
-    // Header row
-    echo '<tr>';
-    echo '<th>รหัส</th>';
-    echo '<th>วันที่ลงทะเบียน</th>';
-    echo '<th>คำนำหน้า</th>';
-    echo '<th>ชื่อ-นามสกุล</th>';
-    echo '<th>หน่วยงาน</th>';
-    echo '<th>เบอร์โทร</th>';
-    echo '<th>อีเมล</th>';
-    echo '<th>Line ID</th>';
-    echo '<th>การชำระเงิน</th>';
-    echo '<th>สถานะการอนุมัติ</th>';
-    echo '<th>วันที่อนุมัติ</th>';
-    echo '</tr>';
-    
-    // Data rows
-    foreach ($registrations as $row) {
-        echo '<tr>';
-        echo '<td>' . $row['id'] . '</td>';
-        echo '<td>' . $row['registration_date'] . '</td>';
-        echo '<td>' . ($row['title'] == 'อื่นๆ' ? $row['title_other'] : $row['title']) . '</td>';
-        echo '<td>' . $row['fullname'] . '</td>';
-        echo '<td>' . $row['organization'] . '</td>';
-        echo '<td>' . $row['phone'] . '</td>';
-        echo '<td>' . $row['email'] . '</td>';
-        echo '<td>' . $row['line_id'] . '</td>';
-        echo '<td>' . ($row['payment_status'] == 'paid' ? 'ชำระแล้ว' : 'ยังไม่ชำระ') . '</td>';
-        echo '<td>' . ($row['is_approved'] ? 'อนุมัติแล้ว' : 'รอการอนุมัติ') . '</td>';
-        echo '<td>' . $row['approval_date'] . '</td>';
-        echo '</tr>';
-    }
-    
-    echo '</table>';
-    
-} catch (Exception $e) {
-    // Output error as plain text
-    header('Content-Type: text/plain');
-    echo 'Error exporting data: ' . $e->getMessage();
+    // ปิดไฟล์
+    fclose($output);
+    exit;
+} catch(Exception $e) {
+    die("Error: " . $e->getMessage());
 }
+?>
