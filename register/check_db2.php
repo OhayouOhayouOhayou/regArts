@@ -7,22 +7,43 @@ try {
     $db = new Database();
     $conn = $db->getConnection();
     
-    // Create admin_users table if it doesn't exist
-    $sql = "CREATE TABLE IF NOT EXISTS admin_users (
-        id INT(11) NOT NULL AUTO_INCREMENT,
-        username VARCHAR(50) NOT NULL UNIQUE,
-        password VARCHAR(255) NOT NULL,
-        display_name VARCHAR(100) NOT NULL,
-        role VARCHAR(20) NOT NULL DEFAULT 'staff',
-        password_change_required TINYINT(1) NOT NULL DEFAULT 1,
-        last_login DATETIME NULL,
-        status TINYINT(1) NOT NULL DEFAULT 1,
-        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY (id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+    // Check if admin_users table exists and if display_name column exists
+    $tableExists = false;
+    $displayNameExists = false;
     
-    $conn->exec($sql);
+    // Check if table exists
+    $checkTable = $conn->query("SHOW TABLES LIKE 'admin_users'");
+    $tableExists = ($checkTable->rowCount() > 0);
+    
+    if ($tableExists) {
+        // Check if display_name column exists
+        $checkColumn = $conn->query("SHOW COLUMNS FROM admin_users LIKE 'display_name'");
+        $displayNameExists = ($checkColumn->rowCount() > 0);
+        
+        // If table exists but display_name column doesn't, add it
+        if (!$displayNameExists) {
+            $conn->exec("ALTER TABLE admin_users ADD COLUMN display_name VARCHAR(100) NOT NULL AFTER password");
+            echo "Added missing 'display_name' column to admin_users table<br>";
+        }
+    } else {
+        // Create admin_users table if it doesn't exist
+        $sql = "CREATE TABLE IF NOT EXISTS admin_users (
+            id INT(11) NOT NULL AUTO_INCREMENT,
+            username VARCHAR(50) NOT NULL UNIQUE,
+            password VARCHAR(255) NOT NULL,
+            display_name VARCHAR(100) NOT NULL,
+            role VARCHAR(20) NOT NULL DEFAULT 'staff',
+            password_change_required TINYINT(1) NOT NULL DEFAULT 1,
+            last_login DATETIME NULL,
+            status TINYINT(1) NOT NULL DEFAULT 1,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+        
+        $conn->exec($sql);
+        echo "Created admin_users table<br>";
+    }
     
     // Create admin_logs table if it doesn't exist
     $sql = "CREATE TABLE IF NOT EXISTS admin_logs (
