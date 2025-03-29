@@ -7,9 +7,10 @@ try {
     $db = new Database();
     $conn = $db->getConnection();
     
-    // Check if admin_users table exists and if display_name column exists
+    // Check if admin_users table exists and if required columns exist
     $tableExists = false;
     $displayNameExists = false;
+    $passwordChangeRequiredExists = false;
     
     // Check if table exists
     $checkTable = $conn->query("SHOW TABLES LIKE 'admin_users'");
@@ -24,6 +25,16 @@ try {
         if (!$displayNameExists) {
             $conn->exec("ALTER TABLE admin_users ADD COLUMN display_name VARCHAR(100) NOT NULL AFTER password");
             echo "Added missing 'display_name' column to admin_users table<br>";
+        }
+        
+        // Check if password_change_required column exists
+        $checkColumn = $conn->query("SHOW COLUMNS FROM admin_users LIKE 'password_change_required'");
+        $passwordChangeRequiredExists = ($checkColumn->rowCount() > 0);
+        
+        // If table exists but password_change_required column doesn't, add it
+        if (!$passwordChangeRequiredExists) {
+            $conn->exec("ALTER TABLE admin_users ADD COLUMN password_change_required TINYINT(1) NOT NULL DEFAULT 1 AFTER role");
+            echo "Added missing 'password_change_required' column to admin_users table<br>";
         }
     } else {
         // Create admin_users table if it doesn't exist
