@@ -1,5 +1,16 @@
 <?php
-require_once '../../config/database.php'; // ดึงการเชื่อมต่อฐานข้อมูล ($conn)
+require_once '../../config/database.php'; // ดึงไฟล์ config database
+
+// สร้างอ็อบเจ็กต์ Database และเชื่อมต่อ
+$database = new Database();
+$conn = $database->getConnection();
+
+// ตรวจสอบว่าเชื่อมต่อสำเร็จหรือไม่
+if (!$conn) {
+    header('Content-Type: application/json');
+    echo json_encode(['status' => 'error', 'message' => 'Database connection failed: ' . $database->error]);
+    exit;
+}
 
 header('Content-Type: application/json');
 
