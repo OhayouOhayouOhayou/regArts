@@ -1,7 +1,7 @@
 <?php
-session_start(); // เรียก session_start() ที่จุดเริ่มต้นก่อนส่งข้อมูลใดๆ
-require_once 'check_auth.php';
-require_once '../config/database.php';
+session_start();
+require_once 'check_auth.php'; // ไฟล์ตรวจสอบการล็อกอิน
+require_once '../config/database.php'; // ไฟล์เชื่อมต่อฐานข้อมูล
 ?>
 <!DOCTYPE html>
 <html lang="th">
@@ -9,10 +9,12 @@ require_once '../config/database.php';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>รายการลงทะเบียนทั้งหมด - ระบบจัดการการลงทะเบียน</title>
+    <!-- External CSS Libraries -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
         :root {
@@ -225,7 +227,7 @@ require_once '../config/database.php';
             margin-right: 0.8rem;
         }
 
-        /* Responsive adjustments */
+        /* Responsive Adjustments */
         @media (max-width: 992px) {
             .sidebar {
                 position: fixed;
@@ -291,6 +293,36 @@ require_once '../config/database.php';
 <body>
     <div class="container-fluid">
         <div class="row">
+            <!-- Sidebar -->
+            <div class="col-lg-2 sidebar" id="sidebar">
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a href="dashboard.php" class="nav-link">
+                            <i class="fas fa-home"></i>
+                            <span>หน้าหลัก</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="registrations.php" class="nav-link active">
+                            <i class="fas fa-users"></i>
+                            <span>รายการลงทะเบียน</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="approved.php" class="nav-link">
+                            <i class="fas fa-check-circle"></i>
+                            <span>อนุมัติแล้ว</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#" class="nav-link">
+                            <i class="fas fa-file-alt"></i>
+                            <span>รายงาน</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <!-- Main Content -->
             <div class="col-lg-10 main-content">
                 <div class="page-header">
                     <div>
@@ -299,7 +331,8 @@ require_once '../config/database.php';
                     </div>
                     <div class="d-flex gap-2">
                         <div class="input-group">
-                            <input type="text" class="form-control" id="searchInput" placeholder="ค้นหาชื่อ, อีเมล, เบอร์โทร...">
+                            <input type="text" class="form-control" id="searchInput" 
+                                   placeholder="ค้นหาชื่อ, อีเมล, เบอร์โทร...">
                             <button class="btn btn-primary" type="button">
                                 <i class="fas fa-search"></i>
                             </button>
@@ -311,20 +344,19 @@ require_once '../config/database.php';
                     </div>
                 </div>
 
+                <!-- Filter Section -->
                 <div class="filter-section">
                     <div class="row g-3">
                         <div class="col-md-3">
                             <label for="provinceFilter" class="form-label">จังหวัด</label>
                             <select id="provinceFilter" class="form-select">
                                 <option value="">เลือกจังหวัด</option>
-                                <!-- ตัวเลือกจังหวัดจะถูกเติมด้วย JavaScript หรือ API -->
                             </select>
                         </div>
                         <div class="col-md-3">
                             <label for="districtFilter" class="form-label">อำเภอ</label>
                             <select id="districtFilter" class="form-select" disabled>
                                 <option value="">เลือกอำเภอ</option>
-                                <!-- ตัวเลือกอำเภอจะถูกเติมตามจังหวัดที่เลือก -->
                             </select>
                         </div>
                         <div class="col-md-3">
@@ -356,6 +388,7 @@ require_once '../config/database.php';
                     </div>
                 </div>
 
+                <!-- Registrations Table -->
                 <div class="card">
                     <div class="card-header">
                         <h5 class="title">
@@ -385,6 +418,7 @@ require_once '../config/database.php';
                             </table>
                         </div>
 
+                        <!-- Pagination -->
                         <nav aria-label="Page navigation" class="mt-4">
                             <ul class="pagination justify-content-center" id="pagination">
                                 <!-- จะถูกเติมด้วย JavaScript -->
@@ -396,6 +430,7 @@ require_once '../config/database.php';
         </div>
     </div>
 
+    <!-- External JavaScript Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="../assets/js/registrations.js"></script>
