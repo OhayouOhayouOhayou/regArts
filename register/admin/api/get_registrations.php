@@ -29,14 +29,16 @@ $phone = $_GET['phone'] ?? '';
 $status = $_GET['status'] ?? '';
 $search = $_GET['search'] ?? '';
 
-// สร้าง SQL หลัก - รวมตาราง registrations และ registration_addresses
-$sql = "SELECT r.*, 
+// สร้าง SQL หลัก - ใช้ DISTINCT เพื่อป้องกันการแสดงผลซ้ำซ้อน
+// กำหนด address_type เป็น 'invoice' เพื่อให้แสดงเฉพาะที่อยู่สำหรับออกใบเสร็จ
+$sql = "SELECT DISTINCT r.id, r.title, r.title_other, r.fullname, r.organization, r.position, 
+               r.phone, r.email, r.line_id, r.payment_status, r.is_approved, r.created_at,
                a.address, a.province_id, a.district_id, a.subdistrict_id, a.zipcode,
                p.name_in_thai AS province_name, 
                d.name_in_thai AS district_name, 
                s.name_in_thai AS subdistrict_name
         FROM registrations r 
-        LEFT JOIN registration_addresses a ON r.id = a.registration_id
+        LEFT JOIN registration_addresses a ON r.id = a.registration_id AND a.address_type = 'invoice'
         LEFT JOIN provinces p ON a.province_id = p.id 
         LEFT JOIN districts d ON a.district_id = d.id 
         LEFT JOIN subdistricts s ON a.subdistrict_id = s.id 
@@ -77,13 +79,20 @@ if (!empty($conditions)) {
 }
 
 try {
-    // นับจำนวนข้อมูลทั้งหมด
-    $countSql = "SELECT COUNT(*) as total FROM registrations r";
+    // นับจำนวนข้อมูลทั้งหมด - ปรับปรุงให้ตรงกับการค้นหาหลัก
+    $countSql = "SELECT COUNT(DISTINCT r.id) as total FROM registrations r";
     
     // ต้องเพิ่ม JOIN ถ้ามีเงื่อนไขที่เกี่ยวข้องกับตารางอื่น
-    if ($province) {
-        $countSql .= " LEFT JOIN registration_addresses a ON r.id = a.registration_id";
+    if ($province || in_array($status, ['approved', 'pending'])) {
+        $countSql .= " LEFT JOIN registration_addresses a ON r.id = a.registration_id AND a.address_type = 'invoice'";
+        
+        if ($province) {
+            $countSql .= " LEFT JOIN provinces p ON a.province_id = p.id";
+            $countSql .= " LEFT JOIN districts d ON a.district_id = d.id";
+            $countSql .= " LEFT JOIN subdistricts s ON a.subdistrict_id = s.id";
+        }
     }
+    
     $countSql .= " WHERE 1=1";
     
     if (!empty($conditions)) {
