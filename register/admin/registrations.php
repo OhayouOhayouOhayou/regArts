@@ -382,7 +382,7 @@ require_once '../config/database.php'; // ไฟล์เชื่อมต่�
                             </select>
                         </div>
                         <div class="col-md-12 mt-3">
-                            <button class="btn btn-primary" onclick="applyFilters()">กรองข้อมูล</button>
+                        <button class="btn btn-primary" id="filterButton">กรองข้อมูล</button>
                             <button class="btn btn-outline-secondary ms-2" onclick="resetFilters()">รีเซ็ต</button>
                         </div>
                     </div>
@@ -434,5 +434,18 @@ require_once '../config/database.php'; // ไฟล์เชื่อมต่�
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="../assets/js/registrations.js"></script>
+    <script>
+document.addEventListener('DOMContentLoaded', function() {
+    // เพิ่ม Event Listener สำหรับปุ่มค้นหา
+    document.getElementById('filterButton').addEventListener('click', function() {
+        // ตรวจสอบว่าฟังก์ชัน applyFilters มีอยู่หรือไม่
+        if (typeof applyFilters === 'function') {
+            applyFilters();
+        } else {
+            alert('ฟังก์ชัน applyFilters ไม่ถูกโหลด กรุณาตรวจสอบไฟล์ JavaScript');
+        }
+    });
+});
+</script>
 </body>
 </html>
