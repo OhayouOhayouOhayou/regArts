@@ -1,79 +1,103 @@
 <?php
-header('Content-Type: application/json; charset=utf-8');
-require_once 'check_auth.php';
 require_once '../config/database.php';
 
 try {
     $db = new Database();
     $conn = $db->getConnection();
     
-    // รับค่าและทำความสะอาดข้อมูล
     $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-    $perPage = 10;
-    $offset = ($page - 1) * $perPage;
-    $search = isset($_GET['search']) ? trim($_GET['search']) : '';
+    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
+    $offset = ($page - 1) * $limit;
     
-    // สร้างเงื่อนไขการค้นหา
-    $whereClause = '';
+    $province = $_GET['province'] ?? '';
+    $district = $_GET['district'] ?? '';
+    $firstName = $_GET['firstName'] ?? '';
+    $lastName = $_GET['lastName'] ?? '';
+    $phone = $_GET['phone'] ?? '';
+    $status = $_GET['status'] ?? '';
+    $search = $_GET['search'] ?? '';
+    
+    $whereClauses = [];
     $params = [];
     
-    if (!empty($search)) {
-        $whereClause = "WHERE fullname LIKE ? OR organization LIKE ? OR phone LIKE ? OR email LIKE ?";
-        $searchTerm = "%{$search}%";
-        $params = array_fill(0, 4, $searchTerm);
+    if ($province) {
+        $whereClauses[] = "ra.province_id = ?";
+        $params[] = $province;
     }
-    
-    // นับจำนวนทั้งหมด
-    $countQuery = "SELECT COUNT(*) FROM registrations " . $whereClause;
-    $stmt = $conn->prepare($countQuery);
-    if (!empty($params)) {
-        $stmt->execute($params);
-    } else {
-        $stmt->execute();
+    if ($district) {
+        $whereClauses[] = "ra.district_id = ?";
+        $params[] = $district;
     }
-    $totalRecords = $stmt->fetchColumn();
-    
-    // ดึงข้อมูล
-    $query = "
-        SELECT r.*, 
-               CASE 
-                   WHEN r.payment_status = 'paid' AND r.is_approved = 1 THEN 'approved'
-                   WHEN r.payment_status = 'paid' THEN 'pending_approval'
-                   ELSE 'not_paid'
-               END as status
-        FROM registrations r 
-        {$whereClause}
-        ORDER BY r.created_at DESC 
-        LIMIT :limit OFFSET :offset
-    ";
-    
-    $stmt = $conn->prepare($query);
-    $stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
-    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-    
-    if (!empty($params)) {
-        foreach ($params as $key => $value) {
-            $stmt->bindValue($key + 1, $value);
+    if ($firstName) {
+        $whereClauses[] = "r.fullname LIKE ?";
+        $params[] = "%$firstName%";
+    }
+    if ($lastName) {
+        $whereClauses[] = "r.fullname LIKE ?";
+        $params[] = "%$lastName%";
+    }
+    if ($phone) {
+        $whereClauses[] = "r.phone LIKE ?";
+        $params[] = "%$phone%";
+    }
+    if ($status) {
+        switch ($status) {
+            case 'approved':
+                $whereClauses[] = "r.is_approved = 1";
+                break;
+            case 'pending':
+                $whereClauses[] = "r.is_approved = 0";
+                break;
+            case 'paid':
+                $whereClauses[] = "r.payment_status = 'paid'";
+                break;
+            case 'not_paid':
+                $whereClauses[] = "r.payment_status = 'not_paid'";
+                break;
         }
     }
+    if ($search) {
+        $whereClauses[] = "(r.fullname LIKE ? OR r.email LIKE ? OR r.phone LIKE ?)";
+        $params[] = "%$search%";
+        $params[] = "%$search%";
+        $params[] = "%$search%";
+    }
     
-    $stmt->execute();
+    $whereSql = empty($whereClauses) ? '' : 'WHERE ' . implode(' AND ', $whereClauses);
+    
+    $stmt = $conn->prepare("
+        SELECT r.*, ra.address, p.name_in_thai as province_name, d.name_in_thai as district_name, s.name_in_thai as subdistrict_name, ra.zipcode
+        FROM registrations r
+        LEFT JOIN registration_addresses ra ON r.id = ra.registration_id
+        LEFT JOIN provinces p ON ra.province_id = p.id
+        LEFT JOIN districts d ON ra.district_id = d.id
+        LEFT JOIN subdistricts s ON ra.subdistrict_id = s.id
+        $whereSql
+        ORDER BY r.created_at DESC
+        LIMIT ? OFFSET ?
+    ");
+    $params[] = $limit;
+    $params[] = $offset;
+    $stmt->execute($params);
     $registrations = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
+    $countStmt = $conn->prepare("
+        SELECT COUNT(*) as total
+        FROM registrations r
+        LEFT JOIN registration_addresses ra ON r.id = ra.registration_id
+        $whereSql
+    ");
+    $countStmt->execute(array_slice($params, 0, -2));
+    $total = $countStmt->fetch(PDO::FETCH_ASSOC)['total'];
+    
     echo json_encode([
-        'success' => true,
+        'status' => 'success',
         'data' => [
             'registrations' => $registrations,
-            'totalPages' => ceil($totalRecords / $perPage),
-            'currentPage' => $page
+            'total' => $total
         ]
     ]);
-
 } catch (Exception $e) {
-    error_log("Error in get_registrations.php: " . $e->getMessage());
     http_response_code(500);
-    echo json_encode([
-        'success' => false,
-        'message' => 'เกิดข้อผิดพลาดในการดึงข้อมูล: ' . $e->getMessage()
-    ]);
+    echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
 }
