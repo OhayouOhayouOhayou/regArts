@@ -1,89 +1,98 @@
 <?php
-require_once '../../config/database.php';
-require_once '../check_auth.php';
+require_once 'check_auth.php'; // ตรวจสอบสิทธิ์ผู้ใช้ (ถ้ามี)
+require_once '../config/database.php'; // ดึงการเชื่อมต่อฐานข้อมูล ($conn)
 
 header('Content-Type: application/json');
 
-// Create database connection using the Database class
-$database = new Database();
-$pdo = $database->getConnection();
-
-// Get request parameters
-$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-$limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
-$search = isset($_GET['search']) ? $_GET['search'] : '';
-
-// Calculate offset
+// รับพารามิเตอร์จากคำขอ
+$page = max(1, (int)($_GET['page'] ?? 1));
+$limit = max(1, min(100, (int)($_GET['limit'] ?? 10)));
 $offset = ($page - 1) * $limit;
 
-try {
-    // Build where clause for search
-    $whereClause = '';
-    $params = [];
-    
-    if (!empty($search)) {
-        $whereClause = " WHERE 
-            r.fullname LIKE ? OR 
-            r.organization LIKE ? OR 
-            r.phone LIKE ? OR 
-            r.email LIKE ? OR 
-            r.line_id LIKE ?";
-        
-        $searchParam = "%{$search}%";
-        $params = [$searchParam, $searchParam, $searchParam, $searchParam, $searchParam];
-    }
-    
-    // Get total count
-    $countQuery = "SELECT COUNT(*) as total FROM registrations r $whereClause";
-    $countStmt = $pdo->prepare($countQuery);
-    
-    if (!empty($params)) {
-        $countStmt->execute($params);
-    } else {
-        $countStmt->execute();
-    }
-    
-    $total = $countStmt->fetchColumn();
-    
-    // Get registrations
-    $query = "SELECT 
-                r.*, 
-                DATE_FORMAT(r.created_at, '%d/%m/%Y %H:%i') as formatted_date
-              FROM registrations r
-              $whereClause
-              ORDER BY r.created_at DESC
-              LIMIT :offset, :limit";
-    
-    $stmt = $pdo->prepare($query);
-    $stmt->bindParam(':offset', $offset, PDO::PARAM_INT);
-    $stmt->bindParam(':limit', $limit, PDO::PARAM_INT);
-    
-    if (!empty($params)) {
-        $i = 1;
-        foreach ($params as $param) {
-            $stmt->bindValue($i, $param);
-            $i++;
-        }
-    }
-    
-    $stmt->execute();
-    $registrations = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    // Return success response
-    echo json_encode([
-        'status' => 'success',
-        'data' => [
-            'registrations' => $registrations,
-            'total' => $total,
-            'page' => $page,
-            'limit' => $limit
-        ]
-    ]);
-    
-} catch (Exception $e) {
-    // Return error response
-    echo json_encode([
-        'status' => 'error',
-        'message' => $e->getMessage()
-    ]);
+// รับพารามิเตอร์สำหรับฟิลเตอร์
+$province = $_GET['province'] ?? '';
+$firstName = $_GET['firstName'] ?? '';
+$status = $_GET['status'] ?? '';
+
+// สร้าง SQL หลัก
+$sql = "SELECT r.*, p.name_in_thai AS province_name, d.name_in_thai AS district_name, s.name_in_thai AS subdistrict_name 
+        FROM registrations r 
+        LEFT JOIN provinces p ON r.province_id = p.id 
+        LEFT JOIN districts d ON r.district_id = d.id 
+        LEFT JOIN subdistricts s ON r.subdistrict_id = s.id 
+        WHERE 1=1";
+
+// สร้างเงื่อนไขและพารามิเตอร์สำหรับ Prepared Statement
+$conditions = [];
+$params = [];
+$types = '';
+
+if ($province) {
+    $conditions[] = "r.province_id = ?";
+    $params[] = $province;
+    $types .= 's'; // string
 }
+if ($firstName) {
+    $conditions[] = "r.fullname LIKE ?";
+    $params[] = "%$firstName%";
+    $types .= 's';
+}
+if ($status) {
+    $conditions[] = "r.payment_status = ?";
+    $params[] = $status;
+    $types .= 's';
+}
+
+if (!empty($conditions)) {
+    $sql .= " AND " . implode(" AND ", $conditions);
+}
+
+// นับจำนวนข้อมูลทั้งหมด
+$countSql = "SELECT COUNT(*) as total FROM registrations r WHERE 1=1";
+if (!empty($conditions)) {
+    $countSql .= " AND " . implode(" AND ", $conditions);
+}
+$countStmt = $conn->prepare($countSql);
+if (!empty($params)) {
+    $countStmt->bind_param($types, ...$params);
+}
+$countStmt->execute();
+$countResult = $countStmt->get_result();
+$total = $countResult->fetch_assoc()['total'];
+
+// เพิ่มการแบ่งหน้า
+$sql .= " LIMIT ?, ?";
+$params[] = $offset;
+$params[] = $limit;
+$types .= 'ii'; // integer for offset and limit
+
+// รัน SQL ด้วย Prepared Statement
+$stmt = $conn->prepare($sql);
+if (!empty($params)) {
+    $stmt->bind_param($types, ...$params);
+}
+$stmt->execute();
+$result = $stmt->get_result();
+
+if (!$result) {
+    echo json_encode(['status' => 'error', 'message' => 'Query failed: ' . $conn->error]);
+    exit;
+}
+
+$registrations = [];
+while ($row = $result->fetch_assoc()) {
+    $registrations[] = $row;
+}
+
+// ส่งผลลัพธ์กลับในรูปแบบ JSON
+echo json_encode([
+    'status' => 'success',
+    'data' => [
+        'registrations' => $registrations,
+        'total' => (int)$total
+    ]
+]);
+
+// ปิดการเชื่อมต่อ
+$conn->close();
+?>

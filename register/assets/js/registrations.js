@@ -90,27 +90,6 @@ function resetFilters() {
     applyFilters(); // โหลดข้อมูลใหม่หลังรีเซ็ต
 }
 
-// ฟังก์ชันส่งออกเป็น Excel
-function exportToExcel() {
-    const province = document.getElementById('provinceFilter').value;
-    const firstName = document.getElementById('firstNameFilter').value.trim();
-    const lastName = document.getElementById('lastNameFilter').value.trim();
-    const phone = document.getElementById('phoneFilter').value.trim();
-    const status = document.getElementById('statusFilter').value;
-    const search = document.getElementById('searchInput').value.trim();
-
-    const queryParams = new URLSearchParams({
-        province: province,
-        firstName: firstName,
-        lastName: lastName,
-        phone: phone,
-        status: status,
-        search: search
-    }).toString();
-    
-    window.location.href = `api/export_registrations.php?${queryParams}`;
-}
-
 // ฟังก์ชันสร้าง Pagination
 function renderPagination(total, currentPage) {
     const pagination = document.getElementById('pagination');
@@ -167,7 +146,7 @@ async function loadPage(page) {
                         <td><span class="status-badge ${reg.is_approved ? 'bg-success' : 'bg-warning'} text-white">${reg.is_approved ? 'อนุมัติแล้ว' : 'รอการอนุมัติ'}</span></td>
                         <td><span class="status-badge ${reg.payment_status === 'paid' ? 'bg-success' : 'bg-danger'} text-white">${reg.payment_status === 'paid' ? 'ชำระแล้ว' : 'ยังไม่ชำระ'}</span></td>
                         <td>
-                                                        <button class="btn btn-sm btn-primary me-1" onclick="viewRegistration(${reg.id})"><i class="fas fa-eye"></i></button>
+                            <button class="btn btn-sm btn-primary me-1" onclick="viewRegistration(${reg.id})"><i class="fas fa-eye"></i></button>
                             <button class="btn btn-sm btn-warning" onclick="editRegistration(${reg.id})"><i class="fas fa-edit"></i></button>
                         </td>
                     </tr>
@@ -196,19 +175,3 @@ function viewRegistration(id) {
 function editRegistration(id) {
     window.location.href = `edit_registration.php?id=${id}`;
 }
-
-// ฟังก์ชัน debounce สำหรับการค้นหา
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
-}
-
-// เพิ่ม Event Listener สำหรับการค้นหาแบบ debounce
-document.getElementById('searchInput').addEventListener('input', debounce(applyFilters, 500));
