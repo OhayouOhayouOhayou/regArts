@@ -52,6 +52,9 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
     $addresses[$row['address_type']] = $row;
 }
 
+// Debug address data
+error_log("Address data for registration ID $registration_id: " . print_r($addresses, true));
+
 // Fetch documents
 $stmt = $pdo->prepare("
     SELECT * FROM registration_documents
@@ -137,9 +140,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ");
                     
                     $address = $_POST['address'][$address_type];
-                    $province_id = $_POST['province_id'][$address_type];
-                    $district_id = $_POST['district_id'][$address_type];
-                    $subdistrict_id = $_POST['subdistrict_id'][$address_type];
+                    $province_id = !empty($_POST['province_id'][$address_type]) ? $_POST['province_id'][$address_type] : null;
+                    $district_id = !empty($_POST['district_id'][$address_type]) ? $_POST['district_id'][$address_type] : null;
+                    $subdistrict_id = !empty($_POST['subdistrict_id'][$address_type]) ? $_POST['subdistrict_id'][$address_type] : null;
                     $zipcode = $_POST['zipcode'][$address_type];
                     
                     $address_update->execute([
@@ -789,7 +792,18 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                                     <div class="tab-content" id="addressTabContent">
                                         <?php foreach(['invoice', 'house', 'current'] as $i => $address_type): 
                                             $tab_class = ($i == 0) ? 'show active' : '';
-                                            $address_data = isset($addresses[$address_type]) ? $addresses[$address_type] : ['address' => '', 'province_id' => 0, 'district_id' => 0, 'subdistrict_id' => 0, 'zipcode' => ''];
+                                            $address_data = isset($addresses[$address_type]) ? $addresses[$address_type] : [
+                                                'address' => '', 
+                                                'province_id' => 0, 
+                                                'district_id' => 0, 
+                                                'subdistrict_id' => 0, 
+                                                'zipcode' => ''
+                                            ];
+                                            
+                                            // Convert NULL values to empty strings for data attributes
+                                            $province_id = isset($address_data['province_id']) && !is_null($address_data['province_id']) ? $address_data['province_id'] : '';
+                                            $district_id = isset($address_data['district_id']) && !is_null($address_data['district_id']) ? $address_data['district_id'] : '';
+                                            $subdistrict_id = isset($address_data['subdistrict_id']) && !is_null($address_data['subdistrict_id']) ? $address_data['subdistrict_id'] : '';
                                         ?>
                                         <div class="tab-pane fade <?php echo $tab_class; ?>" id="<?php echo $address_type; ?>" role="tabpanel">
                                             <div class="row mb-3">
@@ -805,11 +819,12 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                                                     <select class="form-select province-select" name="province_id[<?php echo $address_type; ?>]" data-address-type="<?php echo $address_type; ?>">
                                                         <option value="">--- เลือกจังหวัด ---</option>
                                                         <?php foreach($provinces as $province): ?>
-                                                            <option value="<?php echo $province['id']; ?>" <?php echo ($address_data['province_id'] == $province['id']) ? 'selected' : ''; ?>>
+                                                            <option value="<?php echo $province['id']; ?>" <?php echo ($province_id == $province['id']) ? 'selected' : ''; ?>>
                                                                 <?php echo $province['name_in_thai']; ?>
                                                             </option>
                                                         <?php endforeach; ?>
                                                     </select>
+                                                    <input type="hidden" id="saved_province_<?php echo $address_type; ?>" value="<?php echo $province_id; ?>">
                                                 </div>
                                             </div>
                                             
@@ -820,6 +835,7 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                                                         <option value="">--- เลือกอำเภอ/เขต ---</option>
                                                         <!-- จะโหลดด้วย JavaScript -->
                                                     </select>
+                                                    <input type="hidden" id="saved_district_<?php echo $address_type; ?>" value="<?php echo $district_id; ?>">
                                                 </div>
                                             </div>
                                             
@@ -830,6 +846,7 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                                                         <option value="">--- เลือกตำบล/แขวง ---</option>
                                                         <!-- จะโหลดด้วย JavaScript -->
                                                     </select>
+                                                    <input type="hidden" id="saved_subdistrict_<?php echo $address_type; ?>" value="<?php echo $subdistrict_id; ?>">
                                                 </div>
                                             </div>
                                             
@@ -1125,15 +1142,8 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
             }
         });
         
-        // โหลดอำเภอเมื่อเลือกจังหวัด
-        $('.province-select').each(function() {
-            const addressType = $(this).data('address-type');
-            const provinceId = $(this).val();
-            
-            if (provinceId) {
-                loadDistricts(provinceId, addressType);
-            }
-        });
+        // เริ่มต้นโหลดข้อมูลที่อยู่
+        initializeAddressData();
         
         // Event listener สำหรับการเปลี่ยนจังหวัด
         $('.province-select').change(function() {
@@ -1144,8 +1154,7 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                 loadDistricts(provinceId, addressType);
             } else {
                 // ล้างข้อมูลอำเภอและตำบล
-                $(`select[name="district_id[${addressType}]"]`).html('<option value="">--- เลือกอำเภอ/เขต ---</option>');
-                $(`select[name="subdistrict_id[${addressType}]"]`).html('<option value="">--- เลือกตำบล/แขวง ---</option>');
+                resetDistrictAndSubdistrict(addressType);
             }
         });
         
@@ -1158,77 +1167,9 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                 loadSubdistricts(districtId, addressType);
             } else {
                 // ล้างข้อมูลตำบล
-                $(`select[name="subdistrict_id[${addressType}]"]`).html('<option value="">--- เลือกตำบล/แขวง ---</option>');
+                resetSubdistrict(addressType);
             }
         });
-        
-        // ฟังก์ชันโหลดข้อมูลอำเภอ
-            function loadDistricts(provinceId, addressType) {
-                $.ajax({
-                    url: 'api/get_districts.php',
-                    type: 'GET',
-                    data: { province_id: provinceId },
-                    dataType: 'json',
-                    success: function(data) {
-                        let options = '<option value="">--- เลือกอำเภอ/เขต ---</option>';
-                        
-                        if (data && data.length > 0) {
-                            // ดึงค่า district_id ที่บันทึกไว้สำหรับที่อยู่นี้
-                            let savedDistrictId = $(`select[name="district_id[${addressType}]"]`).data('saved-value') || 0;
-                            
-                            $.each(data, function(index, district) {
-                                const selected = district.id == savedDistrictId ? 'selected' : '';
-                                options += `<option value="${district.id}" ${selected}>${district.name_in_thai}</option>`;
-                            });
-                        }
-                        
-                        $(`select[name="district_id[${addressType}]"]`).html(options);
-                        
-                        // โหลดข้อมูลตำบลหากมีการเลือกอำเภอ
-                        const selectedDistrictId = $(`select[name="district_id[${addressType}]"]`).val();
-                        if (selectedDistrictId) {
-                            loadSubdistricts(selectedDistrictId, addressType);
-                        }
-                    },
-                    error: function(xhr, status, error) {
-                        console.error('Error loading districts:', error);
-                    }
-                });
-            }
-
-            // ฟังก์ชันโหลดข้อมูลตำบล
-            function loadSubdistricts(districtId, addressType) {
-                $.ajax({
-                    url: 'api/get_subdistricts.php',
-                    type: 'GET',
-                    data: { district_id: districtId },
-                    dataType: 'json',
-                    success: function(data) {
-                        let options = '<option value="">--- เลือกตำบล/แขวง ---</option>';
-                        
-                        if (data && data.length > 0) {
-                            // ดึงค่า subdistrict_id ที่บันทึกไว้สำหรับที่อยู่นี้
-                            let savedSubdistrictId = $(`select[name="subdistrict_id[${addressType}]"]`).data('saved-value') || 0;
-                            
-                            $.each(data, function(index, subdistrict) {
-                                const selected = subdistrict.id == savedSubdistrictId ? 'selected' : '';
-                                options += `<option value="${subdistrict.id}" data-zipcode="${subdistrict.zip_code}" ${selected}>${subdistrict.name_in_thai}</option>`;
-                            });
-                        }
-                        
-                        $(`select[name="subdistrict_id[${addressType}]"]`).html(options);
-                        
-                        // อัพเดทรหัสไปรษณีย์อัตโนมัติ
-                        const zipcode = $(`select[name="subdistrict_id[${addressType}]"] option:selected`).data('zipcode');
-                        if (zipcode) {
-                            $(`input[name="zipcode[${addressType}]"]`).val(zipcode);
-                        }
-                    },
-                    error: function(xhr, status, error) {
-                        console.error('Error loading subdistricts:', error);
-                    }
-                });
-            }
         
         // อัพเดทรหัสไปรษณีย์อัตโนมัติเมื่อเลือกตำบล
         $(document).on('change', '.subdistrict-select', function() {
@@ -1240,27 +1181,7 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
             }
         });
         
-        // แสดง sweetalert2 ก่อนยกเลิก
-        $('.btn-cancel').click(function(e) {
-            e.preventDefault();
-            
-            Swal.fire({
-                title: 'ยืนยันการยกเลิก',
-                text: 'คุณแน่ใจหรือไม่ว่าต้องการยกเลิก? ข้อมูลที่กรอกจะไม่ถูกบันทึก',
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonText: 'ใช่, ยกเลิก',
-                cancelButtonText: 'ไม่, ทำต่อ',
-                reverseButtons: true
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    window.location.href = 'registrations.php';
-                }
-            });
-        });
-        
         // เริ่มต้นการใช้งาน Light Gallery สำหรับรูปภาพทั้งหมด
-        // สำหรับเอกสาร
         lightGallery(document.getElementById('documents-gallery'), {
             selector: '.gallery-item',
             plugins: [lgZoom, lgThumbnail],
@@ -1281,165 +1202,279 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
         });
     });
 
-// ฟังก์ชันสำหรับพิมพ์ข้อมูลการลงทะเบียน
-function printRegistration() {
-    // เตรียมหน้าสำหรับพิมพ์
-    let printWindow = window.open('', '_blank');
-    let registrationId = <?php echo $registration_id; ?>;
-    
-    // โหลดข้อมูลและแสดงในรูปแบบที่เหมาะสำหรับการพิมพ์
-    $.ajax({
-        url: 'print_registration.php',
-        type: 'GET',
-        data: { id: registrationId },
-        success: function(response) {
-            printWindow.document.write(response);
-            printWindow.document.close();
-            printWindow.focus();
-            // เริ่มการพิมพ์หลังจากโหลดเสร็จ
-            setTimeout(function() {
-                printWindow.print();
-            }, 500);
-        },
-        error: function() {
-            printWindow.close();
-            Swal.fire({
-                icon: 'error',
-                title: 'เกิดข้อผิดพลาด',
-                text: 'ไม่สามารถพิมพ์ข้อมูลได้ กรุณาลองใหม่อีกครั้ง',
-            });
-        }
-    });
-}
-
-// ฟังก์ชันสำหรับส่งอีเมลยืนยันการลงทะเบียน
-function sendConfirmation() {
-    let registrationId = <?php echo $registration_id; ?>;
-    let email = '<?php echo $registration['email']; ?>';
-    let fullname = '<?php echo $registration['fullname']; ?>';
-    let paymentStatus = '<?php echo $registration['payment_status']; ?>';
-    
-    Swal.fire({
-        title: 'ยืนยันการส่งอีเมล',
-        text: `ต้องการส่งอีเมลยืนยันไปยัง ${email} ใช่หรือไม่?`,
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonText: 'ใช่, ส่งอีเมล',
-        cancelButtonText: 'ยกเลิก',
-        reverseButtons: true
-    }).then((result) => {
-        if (result.isConfirmed) {
-            // แสดง loading
-            Swal.fire({
-                title: 'กำลังส่งอีเมล...',
-                allowOutsideClick: false,
-                didOpen: () => {
-                    Swal.showLoading();
-                }
-            });
+    // เริ่มต้นโหลดข้อมูลที่อยู่
+    function initializeAddressData() {
+        console.log("Initializing address data...");
+        // ทำซ้ำสำหรับแต่ละประเภทที่อยู่
+        ['invoice', 'house', 'current'].forEach(function(addressType) {
+            const provinceId = $(`#saved_province_${addressType}`).val();
+            console.log(`Address type: ${addressType}, Province ID: ${provinceId}`);
             
-            // ส่งคำขอไปยัง API
-            $.ajax({
-                url: 'api/send_confirmation_email.php',
-                type: 'POST',
-                data: { 
-                    id: registrationId,
-                    email: email,
-                    fullname: fullname,
-                    payment_status: paymentStatus
-                },
-                dataType: 'json',
-                success: function(response) {
-                    if (response.success) {
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'ส่งอีเมลสำเร็จ',
-                            text: 'ระบบได้ส่งอีเมลยืนยันไปยังผู้ลงทะเบียนเรียบร้อยแล้ว'
-                        });
-                    } else {
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'เกิดข้อผิดพลาด',
-                            text: response.message || 'ไม่สามารถส่งอีเมลได้ กรุณาลองใหม่อีกครั้ง'
-                        });
-                    }
-                },
-                error: function() {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'เกิดข้อผิดพลาด',
-                        text: 'ไม่สามารถเชื่อมต่อกับระบบได้ กรุณาลองใหม่อีกครั้ง'
-                    });
-                }
-            });
-        }
-    });
-}
+            if (provinceId && provinceId > 0) {
+                // โหลดข้อมูลอำเภอเมื่อเริ่มต้น
+                loadDistricts(provinceId, addressType, true);
+            }
+        });
+    }
 
-// ฟังก์ชันสำหรับลบข้อมูลการลงทะเบียน
-function deleteRegistration() {
-    let registrationId = <?php echo $registration_id; ?>;
-    
-    Swal.fire({
-        title: 'ยืนยันการลบ',
-        text: 'คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลการลงทะเบียนนี้? การกระทำนี้ไม่สามารถเปลี่ยนกลับได้',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'ใช่, ลบข้อมูล',
-        cancelButtonText: 'ยกเลิก',
-        confirmButtonColor: '#d33',
-        reverseButtons: true
-    }).then((result) => {
-        if (result.isConfirmed) {
-            // ขอยืนยันอีกครั้ง
-            Swal.fire({
-                title: 'ยืนยันการลบอีกครั้ง',
-                text: 'ข้อมูลทั้งหมดรวมถึงเอกสารที่อัปโหลดจะถูกลบถาวร',
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonText: 'ใช่, ลบถาวร',
-                cancelButtonText: 'ยกเลิก',
-                confirmButtonColor: '#d33',
-                reverseButtons: true
-            }).then((innerResult) => {
-                if (innerResult.isConfirmed) {
-                    // ส่งคำขอลบไปยัง API
-                    $.ajax({
-                        url: 'api/delete_registration.php',
-                        type: 'POST',
-                        data: { id: registrationId },
-                        dataType: 'json',
-                        success: function(response) {
-                            if (response.success) {
-                                Swal.fire({
-                                    icon: 'success',
-                                    title: 'ลบข้อมูลสำเร็จ',
-                                    text: 'ระบบได้ลบข้อมูลการลงทะเบียนเรียบร้อยแล้ว',
-                                    confirmButtonText: 'ตกลง'
-                                }).then(() => {
-                                    window.location.href = 'registrations.php';
-                                });
-                            } else {
-                                Swal.fire({
-                                    icon: 'error',
-                                    title: 'เกิดข้อผิดพลาด',
-                                    text: response.message || 'ไม่สามารถลบข้อมูลได้ กรุณาลองใหม่อีกครั้ง'
-                                });
-                            }
-                        },
-                        error: function() {
+    // ฟังก์ชันล้างข้อมูลอำเภอและตำบล
+    function resetDistrictAndSubdistrict(addressType) {
+        $(`select[name="district_id[${addressType}]"]`).html('<option value="">--- เลือกอำเภอ/เขต ---</option>');
+        resetSubdistrict(addressType);
+    }
+
+    // ฟังก์ชันล้างข้อมูลตำบล
+    function resetSubdistrict(addressType) {
+        $(`select[name="subdistrict_id[${addressType}]"]`).html('<option value="">--- เลือกตำบล/แขวง ---</option>');
+        $(`input[name="zipcode[${addressType}]"]`).val('');
+    }
+
+    // ฟังก์ชันโหลดข้อมูลอำเภอ
+    function loadDistricts(provinceId, addressType, isInitial = false) {
+        console.log(`Loading districts for province ${provinceId}, address type ${addressType}`);
+        
+        $.ajax({
+            url: 'api/get_districts.php',
+            type: 'GET',
+            data: { province_id: provinceId },
+            dataType: 'json',
+            success: function(data) {
+                let options = '<option value="">--- เลือกอำเภอ/เขต ---</option>';
+                
+                if (data && data.length > 0) {
+                    // ดึงค่า district_id ที่บันทึกไว้
+                    let savedDistrictId = $(`#saved_district_${addressType}`).val();
+                    console.log(`Saved district ID for ${addressType}: ${savedDistrictId}`);
+                    
+                    $.each(data, function(index, district) {
+                        const selected = (district.id == savedDistrictId) ? 'selected' : '';
+                        options += `<option value="${district.id}" ${selected}>${district.name_in_thai}</option>`;
+                    });
+                    
+                    $(`select[name="district_id[${addressType}]"]`).html(options);
+                    
+                    // โหลดข้อมูลตำบลหากมีการเลือกอำเภอ
+                    const selectedDistrictId = $(`select[name="district_id[${addressType}]"]`).val();
+                    
+                    if (selectedDistrictId) {
+                        loadSubdistricts(selectedDistrictId, addressType, isInitial);
+                    } else if (savedDistrictId && isInitial) {
+                        // หากไม่มีค่าที่เลือกแต่มีค่าที่บันทึกไว้และเป็นการโหลดครั้งแรก
+                        loadSubdistricts(savedDistrictId, addressType, isInitial);
+                    }
+                } else {
+                    resetSubdistrict(addressType);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error loading districts:', error);
+                console.error('Server response:', xhr.responseText);
+                resetDistrictAndSubdistrict(addressType);
+            }
+        });
+    }
+
+    // ฟังก์ชันโหลดข้อมูลตำบล
+    function loadSubdistricts(districtId, addressType, isInitial = false) {
+        console.log(`Loading subdistricts for district ${districtId}, address type ${addressType}`);
+        
+        $.ajax({
+            url: 'api/get_subdistricts.php',
+            type: 'GET',
+            data: { district_id: districtId },
+            dataType: 'json',
+            success: function(data) {
+                let options = '<option value="">--- เลือกตำบล/แขวง ---</option>';
+                
+                if (data && data.length > 0) {
+                    // ดึงค่า subdistrict_id ที่บันทึกไว้
+                    let savedSubdistrictId = $(`#saved_subdistrict_${addressType}`).val();
+                    console.log(`Saved subdistrict ID for ${addressType}: ${savedSubdistrictId}`);
+                    
+                    $.each(data, function(index, subdistrict) {
+                        const selected = (subdistrict.id == savedSubdistrictId) ? 'selected' : '';
+                        options += `<option value="${subdistrict.id}" data-zipcode="${subdistrict.zip_code}" ${selected}>${subdistrict.name_in_thai}</option>`;
+                    });
+                    
+                    $(`select[name="subdistrict_id[${addressType}]"]`).html(options);
+                    
+                    // อัพเดทรหัสไปรษณีย์อัตโนมัติหากมีการเลือกตำบล
+                    const selectedSubdistrict = $(`select[name="subdistrict_id[${addressType}]"] option:selected`);
+                    if (selectedSubdistrict.length > 0 && selectedSubdistrict.val() !== '') {
+                        const zipcode = selectedSubdistrict.data('zipcode');
+                        if (zipcode) {
+                            $(`input[name="zipcode[${addressType}]"]`).val(zipcode);
+                        }
+                    }
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error loading subdistricts:', error);
+                console.error('Server response:', xhr.responseText);
+                resetSubdistrict(addressType);
+            }
+        });
+    }
+
+    // ฟังก์ชันสำหรับพิมพ์ข้อมูลการลงทะเบียน
+    function printRegistration() {
+        // เตรียมหน้าสำหรับพิมพ์
+        let printWindow = window.open('', '_blank');
+        let registrationId = <?php echo $registration_id; ?>;
+        
+        // โหลดข้อมูลและแสดงในรูปแบบที่เหมาะสำหรับการพิมพ์
+        $.ajax({
+            url: 'print_registration.php',
+            type: 'GET',
+            data: { id: registrationId },
+            success: function(response) {
+                printWindow.document.write(response);
+                printWindow.document.close();
+                printWindow.focus();
+                // เริ่มการพิมพ์หลังจากโหลดเสร็จ
+                setTimeout(function() {
+                    printWindow.print();
+                }, 500);
+            },
+            error: function() {
+                printWindow.close();
+                Swal.fire({
+                    icon: 'error',
+                    title: 'เกิดข้อผิดพลาด',
+                    text: 'ไม่สามารถพิมพ์ข้อมูลได้ กรุณาลองใหม่อีกครั้ง',
+                });
+            }
+        });
+    }
+
+    // ฟังก์ชันสำหรับส่งอีเมลยืนยันการลงทะเบียน
+    function sendConfirmation() {
+        let registrationId = <?php echo $registration_id; ?>;
+        let email = '<?php echo $registration['email']; ?>';
+        let fullname = '<?php echo $registration['fullname']; ?>';
+        let paymentStatus = '<?php echo $registration['payment_status']; ?>';
+        
+        Swal.fire({
+            title: 'ยืนยันการส่งอีเมล',
+            text: `ต้องการส่งอีเมลยืนยันไปยัง ${email} ใช่หรือไม่?`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'ใช่, ส่งอีเมล',
+            cancelButtonText: 'ยกเลิก',
+            reverseButtons: true
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // แสดง loading
+                Swal.fire({
+                    title: 'กำลังส่งอีเมล...',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+                
+                // ส่งคำขอไปยัง API
+                $.ajax({
+                    url: 'api/send_confirmation_email.php',
+                    type: 'POST',
+                    data: { 
+                        id: registrationId,
+                        email: email,
+                        fullname: fullname,
+                        payment_status: paymentStatus
+                    },
+                    dataType: 'json',
+                    success: function(response) {
+                        if (response.success) {
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'ส่งอีเมลสำเร็จ',
+                                text: 'ระบบได้ส่งอีเมลยืนยันไปยังผู้ลงทะเบียนเรียบร้อยแล้ว'
+                            });
+                        } else {
                             Swal.fire({
                                 icon: 'error',
                                 title: 'เกิดข้อผิดพลาด',
-                                text: 'ไม่สามารถเชื่อมต่อกับระบบได้ กรุณาลองใหม่อีกครั้ง'
+                                text: response.message || 'ไม่สามารถส่งอีเมลได้ กรุณาลองใหม่อีกครั้ง'
                             });
                         }
-                    });
-                }
-            });
-        }
-    });
-}
+                    },
+                    error: function() {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'เกิดข้อผิดพลาด',
+                            text: 'ไม่สามารถเชื่อมต่อกับระบบได้ กรุณาลองใหม่อีกครั้ง'
+                        });
+                    }
+                });
+            }
+        });
+    }
+
+    // ฟังก์ชันสำหรับลบข้อมูลการลงทะเบียน
+    function deleteRegistration() {
+        let registrationId = <?php echo $registration_id; ?>;
+        
+        Swal.fire({
+            title: 'ยืนยันการลบ',
+            text: 'คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลการลงทะเบียนนี้? การกระทำนี้ไม่สามารถเปลี่ยนกลับได้',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'ใช่, ลบข้อมูล',
+            cancelButtonText: 'ยกเลิก',
+            confirmButtonColor: '#d33',
+            reverseButtons: true
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // ขอยืนยันอีกครั้ง
+                Swal.fire({
+                    title: 'ยืนยันการลบอีกครั้ง',
+                    text: 'ข้อมูลทั้งหมดรวมถึงเอกสารที่อัปโหลดจะถูกลบถาวร',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'ใช่, ลบถาวร',
+                    cancelButtonText: 'ยกเลิก',
+                    confirmButtonColor: '#d33',
+                    reverseButtons: true
+                }).then((innerResult) => {
+                    if (innerResult.isConfirmed) {
+                        // ส่งคำขอลบไปยัง API
+                        $.ajax({
+                            url: 'api/delete_registration.php',
+                            type: 'POST',
+                            data: { id: registrationId },
+                            dataType: 'json',
+                            success: function(response) {
+                                if (response.success) {
+                                    Swal.fire({
+                                        icon: 'success',
+                                        title: 'ลบข้อมูลสำเร็จ',
+                                        text: 'ระบบได้ลบข้อมูลการลงทะเบียนเรียบร้อยแล้ว',
+                                        confirmButtonText: 'ตกลง'
+                                    }).then(() => {
+                                        window.location.href = 'registrations.php';
+                                    });
+                                } else {
+                                    Swal.fire({
+                                        icon: 'error',
+                                        title: 'เกิดข้อผิดพลาด',
+                                        text: response.message || 'ไม่สามารถลบข้อมูลได้ กรุณาลองใหม่อีกครั้ง'
+                                    });
+                                }
+                            },
+                            error: function() {
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'เกิดข้อผิดพลาด',
+                                    text: 'ไม่สามารถเชื่อมต่อกับระบบได้ กรุณาลองใหม่อีกครั้ง'
+                                });
+                            }
+                        });
+                    }
+                });
+            }
+        });
+    }
     </script>
 </body>
 </html>
