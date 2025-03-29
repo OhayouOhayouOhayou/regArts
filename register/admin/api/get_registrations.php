@@ -1,6 +1,7 @@
 <?php
+
 require_once 'check_auth.php'; // ตรวจสอบสิทธิ์ผู้ใช้ (ถ้ามี)
-require_once '../config/database.php'; // ดึงการเชื่อมต่อฐานข้อมูล ($conn)
+require_once '../../config/database.php'; // ดึงการเชื่อมต่อฐานข้อมูล ($conn)
 
 header('Content-Type: application/json');
 
