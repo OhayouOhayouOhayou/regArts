@@ -62,7 +62,7 @@ async function loadDistricts() {
     if (!provinceId) return;
     
     try {
-        const response = await fetch(`api/get_districts_in.php?province_id=${provinceId}`);
+        const response = await fetch(`api/get_districts.php?province_id=${provinceId}`);
         if (!response.ok) throw new Error('ไม่สามารถโหลดข้อมูลอำเภอได้');
         const districts = await response.json();
         
@@ -149,7 +149,6 @@ async function applyFilters() {
     }
 }
 
-
 // ฟังก์ชันลบข้อมูลการลงทะเบียน
 function deleteRegistration(id) {
     // แสดงกล่องยืนยันการลบ
@@ -176,13 +175,24 @@ function deleteRegistration(id) {
                 reverseButtons: true
             }).then((innerResult) => {
                 if (innerResult.isConfirmed) {
+                    // แสดง loading
+                    Swal.fire({
+                        title: 'กำลังลบข้อมูล...',
+                        text: 'โปรดรอสักครู่',
+                        allowOutsideClick: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+                    
+                    // สร้าง FormData สำหรับส่งข้อมูล
+                    const formData = new FormData();
+                    formData.append('id', id);
+                    
                     // ส่งคำขอไปยัง API เพื่อลบข้อมูล
-                    fetch(`api/delete_registration.php`, {
+                    fetch('api/delete_registration.php', {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                        },
-                        body: `id=${id}`
+                        body: formData
                     })
                     .then(response => {
                         if (!response.ok) {
@@ -205,6 +215,7 @@ function deleteRegistration(id) {
                         }
                     })
                     .catch(error => {
+                        console.error('Delete error:', error);
                         Swal.fire({
                             icon: 'error',
                             title: 'เกิดข้อผิดพลาด',
@@ -216,7 +227,6 @@ function deleteRegistration(id) {
         }
     });
 }
-
 
 // ฟังก์ชันสำหรับจัดรูปแบบที่อยู่
 function formatAddress(reg) {
@@ -301,7 +311,9 @@ async function loadPage(page) {
                         <td><span class="status-badge ${reg.payment_status === 'paid' ? 'bg-success' : 'bg-danger'} text-white">${reg.payment_status === 'paid' ? 'ชำระแล้ว' : 'ยังไม่ชำระ'}</span></td>
                         <td>
                             <button class="btn btn-sm btn-primary me-1" onclick="viewRegistration(${reg.id})"><i class="fas fa-eye"></i></button>
-                            <button class="btn btn-sm btn-warning" onclick="editRegistration(${reg.id})"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteRegistration(${reg.id})" title="ลบ">
+                                <i class="fas fa-trash"></i>
+                            </button>
                         </td>
                     </tr>
                 `).join('') : 
