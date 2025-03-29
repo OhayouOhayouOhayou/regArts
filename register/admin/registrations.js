@@ -62,7 +62,7 @@ async function loadDistricts() {
     if (!provinceId) return;
     
     try {
-        const response = await fetch(`api/get_districts.php?province_id=${provinceId}`);
+        const response = await fetch(`api/get_districts_in.php?province_id=${provinceId}`);
         if (!response.ok) throw new Error('ไม่สามารถโหลดข้อมูลอำเภอได้');
         const districts = await response.json();
         

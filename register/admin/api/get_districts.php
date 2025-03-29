@@ -1,44 +1,36 @@
 <?php
-// ตั้งค่า header
+require_once '../../config/database.php';
+require_once '../check_auth.php';
+
 header('Content-Type: application/json');
 
-// สร้างการเชื่อมต่อฐานข้อมูลโดยตรง
-try {
-    $conn = new PDO(
-        "mysql:host=mysql;port=3306;dbname=shared_db",
-        "dbuser", 
-        "dbpassword",
-        array(PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES 'utf8'")
-    );
-    $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-} catch(PDOException $e) {
-    echo json_encode(['status' => 'error', 'message' => 'Database connection failed: ' . $e->getMessage()]);
-    exit;
-}
+// Create database connection using the Database class
+$database = new Database();
+$pdo = $database->getConnection();
 
-// รับพารามิเตอร์จาก URL
-$province_id = isset($_GET['province_id']) ? (int)$_GET['province_id'] : 0;
+// Get province ID from request
+$province_id = isset($_GET['province_id']) ? intval($_GET['province_id']) : 0;
 
-if (!$province_id) {
-    echo json_encode(['status' => 'error', 'message' => 'ต้องระบุรหัสจังหวัด']);
+if ($province_id <= 0) {
+    echo json_encode([]);
     exit;
 }
 
 try {
-    // ดึงข้อมูลอำเภอตามรหัสจังหวัด
-    $stmt = $conn->prepare("SELECT id, name_in_thai, name_in_english FROM districts WHERE province_id = :province_id ORDER BY name_in_thai");
-    $stmt->bindValue(':province_id', $province_id, PDO::PARAM_INT);
-    $stmt->execute();
+    // Get districts for the selected province
+    $stmt = $pdo->prepare("
+        SELECT id, code, name_in_thai, name_in_english
+        FROM districts
+        WHERE province_id = ?
+        ORDER BY name_in_thai
+    ");
+    
+    $stmt->execute([$province_id]);
     $districts = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    echo json_encode([
-        'status' => 'success',
-        'data' => $districts
-    ]);
-} catch(PDOException $e) {
-    echo json_encode([
-        'status' => 'error', 
-        'message' => 'Database error: ' . $e->getMessage()
-    ]);
+    
+    echo json_encode($districts);
+    
+} catch (Exception $e) {
+    // Return empty array on error
+    echo json_encode([]);
 }
-?>
