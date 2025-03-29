@@ -2,10 +2,10 @@
 // ตั้งค่า header
 header('Content-Type: application/json');
 
-// สร้างการเชื่อมต่อฐานข้อมูลโดยตรง
+// ข้อมูลการเชื่อมต่อฐานข้อมูลที่ถูกต้องสำหรับ Docker
 try {
     $conn = new PDO(
-        "mysql:host=mysql;dbname=shared_db",
+        "mysql:host=mysql;port=3306;dbname=shared_db",
         "dbuser", 
         "dbpassword",
         array(PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES 'utf8'")
@@ -29,39 +29,31 @@ $phone = $_GET['phone'] ?? '';
 $status = $_GET['status'] ?? '';
 $search = $_GET['search'] ?? '';
 
-// สร้าง SQL หลักโดยไม่มี JOIN กับ subdistricts ที่มีปัญหา
-$sql = "SELECT r.*, p.name_in_thai AS province_name, d.name_in_thai AS district_name
-        FROM registrations r 
-        LEFT JOIN provinces p ON r.province_id = p.id 
-        LEFT JOIN districts d ON r.district_id = d.id 
-        WHERE 1=1";
+// สร้าง SQL หลัก - ใช้แบบง่ายที่สุดก่อน
+$sql = "SELECT * FROM registrations WHERE 1=1";
 
 // สร้างเงื่อนไขและพารามิเตอร์สำหรับ Prepared Statement
 $conditions = [];
 $params = [];
 
 if ($province) {
-    $conditions[] = "r.province_id = :province";
+    $conditions[] = "province_id = :province";
     $params[':province'] = $province;
 }
 if ($firstName) {
-    $conditions[] = "r.fullname LIKE :firstName";
+    $conditions[] = "fullname LIKE :firstName";
     $params[':firstName'] = "%$firstName%";
 }
-if ($lastName) {
-    $conditions[] = "r.fullname LIKE :lastName";
-    $params[':lastName'] = "%$lastName%";
-}
 if ($phone) {
-    $conditions[] = "r.phone LIKE :phone";
+    $conditions[] = "phone LIKE :phone";
     $params[':phone'] = "%$phone%";
 }
 if ($status) {
-    $conditions[] = "r.payment_status = :status";
+    $conditions[] = "payment_status = :status";
     $params[':status'] = $status;
 }
 if ($search) {
-    $conditions[] = "(r.fullname LIKE :search OR r.email LIKE :search OR r.phone LIKE :search)";
+    $conditions[] = "(fullname LIKE :search OR email LIKE :search OR phone LIKE :search)";
     $params[':search'] = "%$search%";
 }
 
@@ -71,7 +63,7 @@ if (!empty($conditions)) {
 
 try {
     // นับจำนวนข้อมูลทั้งหมด
-    $countSql = "SELECT COUNT(*) as total FROM registrations r WHERE 1=1";
+    $countSql = "SELECT COUNT(*) as total FROM registrations WHERE 1=1";
     if (!empty($conditions)) {
         $countSql .= " AND " . implode(" AND ", $conditions);
     }
@@ -84,7 +76,7 @@ try {
     $total = $countStmt->fetchColumn();
 
     // เพิ่มการแบ่งหน้า
-    $sql .= " ORDER BY r.created_at DESC LIMIT :offset, :limit";
+    $sql .= " ORDER BY created_at DESC LIMIT :offset, :limit";
     $params[':offset'] = (int)$offset;
     $params[':limit'] = (int)$limit;
 
@@ -107,7 +99,7 @@ try {
 } catch(PDOException $e) {
     // ส่งข้อความผิดพลาดกลับในรูปแบบ JSON
     echo json_encode([
-        'status' => 'error',
+        'status' => 'error', 
         'message' => 'Database error: ' . $e->getMessage()
     ]);
 }
