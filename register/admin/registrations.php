@@ -433,19 +433,19 @@ require_once '../config/database.php'; // ไฟล์เชื่อมต่�
     <!-- External JavaScript Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script src="../assets/js/registrations.js"></script>
+    <script src="registrations.js"></script>
     <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // เพิ่ม Event Listener สำหรับปุ่มค้นหา
-    document.getElementById('filterButton').addEventListener('click', function() {
-        // ตรวจสอบว่าฟังก์ชัน applyFilters มีอยู่หรือไม่
-        if (typeof applyFilters === 'function') {
-            applyFilters();
-        } else {
-            alert('ฟังก์ชัน applyFilters ไม่ถูกโหลด กรุณาตรวจสอบไฟล์ JavaScript');
-        }
-    });
-});
+        document.addEventListener('DOMContentLoaded', function() {
+            // เพิ่ม Event Listener สำหรับปุ่มค้นหา
+            document.getElementById('filterButton').addEventListener('click', function() {
+                // ตรวจสอบว่าฟังก์ชัน applyFilters มีอยู่หรือไม่
+                if (typeof applyFilters === 'function') {
+                    applyFilters();
+                } else {
+                    alert('ฟังก์ชัน applyFilters ไม่ถูกโหลด กรุณาตรวจสอบไฟล์ JavaScript');
+                }
+            });
+        });
 </script>
 </body>
 </html>
