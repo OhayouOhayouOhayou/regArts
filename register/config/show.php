@@ -139,7 +139,7 @@ if ($database->error) {
                 echo '</table>';
                 
                 // Get table data with LIMIT to avoid large datasets
-                $query = "SELECT * FROM " . $table . " LIMIT 100";
+                $query = "SELECT * FROM " . $table . " ";
                 $statement = $connection->prepare($query);
                 $statement->execute();
                 $data = $statement->fetchAll(PDO::FETCH_ASSOC);
@@ -154,7 +154,7 @@ if ($database->error) {
                     }
                 }
                 
-                echo '<h4>Table Data (Limited to 100 rows)</h4>';
+                echo '<h4>Table Data</h4>';
                 echo '<div class="data-container">';
                 echo '<table>
                         <tr>';
