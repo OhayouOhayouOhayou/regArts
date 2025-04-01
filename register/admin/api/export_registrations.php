@@ -112,7 +112,7 @@ try {
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         // แก้ปัญหาเบอร์โทรที่เลข 0 ด้านหน้าหาย โดยเพิ่มเครื่องหมาย ' ด้านหน้าเพื่อให้ Excel ทำเป็น text format
         $phoneNumber = "'" . $row['phone'];
-        
+        $Line = "'" . $row['line_id'];
         // แยกเอกสารประกอบเป็นรายการ
         $documents = '';
         if (!empty($row['document_paths'])) {
@@ -166,7 +166,7 @@ try {
             $row['position'],
             $phoneNumber,
             $row['email'],
-            $row['line_id'],
+            $Line,
             $row['address'] ?? '',
             $row['province_name'] ?? '',
             $row['district_name'] ?? '',
