@@ -51,6 +51,32 @@ function populateProvinces(provinces) {
     });
 }
 
+// ฟังก์ชันกำหนดข้อความสถานะการชำระเงิน
+function getPaymentStatusText(reg) {
+    if (reg.payment_status === 'paid' || reg.payment_status === 'paid_onsite') {
+        if (reg.is_approved == 1) {
+            return 'ชำระแล้ว';
+        } else {
+            return 'ชำระแล้ว (รอตรวจสอบจากเจ้าหน้าที่)';
+        }
+    } else {
+        return 'ยังไม่ชำระ';
+    }
+}
+
+// ฟังก์ชันกำหนดสีพื้นหลังตามสถานะการชำระเงิน
+function getPaymentStatusClass(reg) {
+    if (reg.payment_status === 'paid' || reg.payment_status === 'paid_onsite') {
+        if (reg.is_approved == 1) {
+            return 'bg-success';
+        } else {
+            return 'bg-warning';
+        }
+    } else {
+        return 'bg-danger';
+    }
+}
+
 // ฟังก์ชันโหลดข้อมูลอำเภอตามจังหวัดที่เลือก
 async function loadDistricts() {
     const provinceId = document.getElementById('provinceFilter').value;
@@ -86,6 +112,7 @@ async function loadDistricts() {
         });
     }
 }
+
 
 // ฟังก์ชันโหลดและกรองข้อมูลการลงทะเบียน
 async function applyFilters() {
@@ -124,8 +151,8 @@ async function applyFilters() {
                         <td>${reg.phone || '-'}</td>
                         <td>${reg.email || '-'}</td>
                         <td>${formatAddress(reg)}</td>
-                        <td><span class="status-badge ${reg.is_approved == 1 ? 'bg-success' : 'bg-warning'} text-white">${reg.is_approved == 1 ? 'อนุมัติแล้ว' : 'รอการอนุมัติ'}</span></td>
-                        <td><span class="status-badge ${reg.payment_status === 'paid' ? 'bg-success' : 'bg-danger'} text-white">${reg.payment_status === 'paid' ? 'ชำระแล้ว' : 'ยังไม่ชำระ'}</span></td>
+                       <td><span class="status-badge ${reg.is_approved == 1 ? 'bg-success' : 'bg-warning'} text-white">${reg.is_approved == 1 ? 'อนุมัติแล้ว' : 'รอการอนุมัติ'}</span></td>
+<td><span class="status-badge ${getPaymentStatusClass(reg)} text-white">${getPaymentStatusText(reg)}</span></td>
                         <td>
                             <button class="btn btn-sm btn-primary me-1" onclick="viewRegistration(${reg.id})"><i class="fas fa-eye"></i></button>
                             <button class="btn btn-danger btn-sm" onclick="deleteRegistration(${reg.id})" title="ลบ">
