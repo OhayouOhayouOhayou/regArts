@@ -74,121 +74,14 @@ if ($registration_id <= 0 || empty($email) || empty($fullname)) {
     exit;
 }
 
-// Test network connectivity to mail servers
 try {
-    $smtp_servers = [
-        ['host' => 'smtp.gmail.com', 'port' => 587],
-        ['host' => 'smtp.gmail.com', 'port' => 465],
-        ['host' => 'mail.rmutsb.ac.th', 'port' => 25]
-    ];
-    
-    logMessage("ทดสอบการเชื่อมต่อกับเซิร์ฟเวอร์อีเมล:", 2);
-    
-    foreach ($smtp_servers as $server) {
-        logMessage("ทดสอบเชื่อมต่อกับ {$server['host']}:{$server['port']}...", 2);
-        $socket_connection = @fsockopen($server['host'], $server['port'], $errno, $errstr, 5);
-        
-        if ($socket_connection) {
-            logMessage("สามารถเชื่อมต่อกับ {$server['host']}:{$server['port']} ได้", 2);
-            fclose($socket_connection);
-        } else {
-            logMessage("ไม่สามารถเชื่อมต่อกับ {$server['host']}:{$server['port']} ได้: $errstr ($errno)", 2);
-        }
-    }
-} catch (Exception $e) {
-    logMessage("เกิดข้อผิดพลาดในการทดสอบเชื่อมต่อ: " . $e->getMessage(), 2);
-}
-
-// Improved autoloader discovery with detailed logging
-$autoloader_paths = [
-    __DIR__ . '/vendor/autoload.php',                // Current directory
-    dirname(__DIR__) . '/vendor/autoload.php',       // Parent directory
-    dirname(dirname(__DIR__)) . '/vendor/autoload.php', // Two levels up
-    // Add more potential paths if needed
-];
-
-logMessage("กำลังค้นหา Composer Autoloader...", 2);
-$autoloader_loaded = false;
-
-foreach ($autoloader_paths as $path) {
-    logMessage("ตรวจสอบ path: $path", 3);
-    
-    if (file_exists($path)) {
-        logMessage("พบ Composer autoloader ที่: $path", 2);
-        require_once $path;
-        $autoloader_loaded = true;
-        break;
-    }
-}
-
-// If autoloader not found, try PHPMailer direct inclusion with improved path discovery
-if (!$autoloader_loaded) {
-    logMessage("ไม่พบ Composer autoloader กำลังค้นหา PHPMailer โดยตรง...", 2);
-    
-    $phpmailer_paths = [
-        __DIR__ . '/PHPMailer/src/',
-        dirname(__DIR__) . '/PHPMailer/src/',
-        dirname(dirname(__DIR__)) . '/PHPMailer/src/',
-        __DIR__ . '/libraries/PHPMailer/src/',      // Alternative directory structure
-        dirname(__DIR__) . '/libraries/PHPMailer/src/',
-        __DIR__ . '/includes/PHPMailer/src/',       // Another common location
-        // Add more potential paths if needed
-    ];
-    
-    $phpmailer_loaded = false;
-    
-    foreach ($phpmailer_paths as $path) {
-        logMessage("ตรวจสอบ PHPMailer ที่: $path", 3);
-        
-        if (file_exists($path . 'PHPMailer.php')) {
-            logMessage("พบ PHPMailer ที่: $path", 2);
-            
-            // Ensure all required PHPMailer files are included
-            $required_files = ['Exception.php', 'PHPMailer.php', 'SMTP.php'];
-            $all_files_exist = true;
-            
-            foreach ($required_files as $file) {
-                if (!file_exists($path . $file)) {
-                    logMessage("ไฟล์ $file ไม่พบที่ $path", 2);
-                    $all_files_exist = false;
-                    break;
-                }
-            }
-            
-            if ($all_files_exist) {
-                require_once $path . 'Exception.php';
-                require_once $path . 'PHPMailer.php';
-                require_once $path . 'SMTP.php';
-                $phpmailer_loaded = true;
-                break;
-            }
-        }
-    }
-    
-    if (!$phpmailer_loaded) {
-        logMessage("ไม่พบ PHPMailer ไม่สามารถส่งอีเมลได้");
-        echo json_encode([
-            'success' => false, 
-            'message' => 'ไม่พบ PHPMailer ไม่สามารถส่งอีเมลได้ กรุณาติดต่อผู้ดูแลระบบ'
-        ]);
-        exit;
-    }
-}
-
-// Import PHPMailer classes
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception;
-use PHPMailer\PHPMailer\SMTP;
-
-try {
-    // Improved database config loading with error handling
+    // Load database configuration
     logMessage("กำลังโหลดการตั้งค่าฐานข้อมูล", 2);
     
     $db_config_paths = [
         dirname(__DIR__) . '/config/database.php',
         __DIR__ . '/config/database.php',
         dirname(dirname(__DIR__)) . '/config/database.php',
-        // Add more potential paths if needed
     ];
     
     $db_config_loaded = false;
@@ -251,10 +144,11 @@ try {
                 `email` varchar(255) NOT NULL,
                 `subject` varchar(255) NOT NULL,
                 `sent_at` datetime NOT NULL,
-                `status` enum('success','failed') NOT NULL DEFAULT 'success',
+                `status` enum('success','failed','pending') NOT NULL DEFAULT 'pending',
                 `error_message` text,
-                `smtp_server` varchar(255),
-                `smtp_port` int(11),
+                `method` varchar(255),
+                `response_code` int(11),
+                `response_body` text,
                 PRIMARY KEY (`id`),
                 KEY `registration_id` (`registration_id`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
@@ -264,13 +158,14 @@ try {
         } else {
             logMessage("พบตาราง email_logs แล้ว");
             
-            // Check if we need to add the smtp_server and smtp_port columns
+            // Check if we need to add additional columns
             try {
-                $columnsResult = $pdo->query("SHOW COLUMNS FROM email_logs LIKE 'smtp_server'");
+                $columnsResult = $pdo->query("SHOW COLUMNS FROM email_logs LIKE 'method'");
                 if ($columnsResult->rowCount() == 0) {
-                    $pdo->exec("ALTER TABLE email_logs ADD COLUMN smtp_server varchar(255) AFTER error_message");
-                    $pdo->exec("ALTER TABLE email_logs ADD COLUMN smtp_port int(11) AFTER smtp_server");
-                    logMessage("เพิ่มคอลัมน์ smtp_server และ smtp_port ในตาราง email_logs", 2);
+                    $pdo->exec("ALTER TABLE email_logs ADD COLUMN method varchar(255) AFTER error_message");
+                    $pdo->exec("ALTER TABLE email_logs ADD COLUMN response_code int(11) AFTER method");
+                    $pdo->exec("ALTER TABLE email_logs ADD COLUMN response_body text AFTER response_code");
+                    logMessage("เพิ่มคอลัมน์เพิ่มเติมในตาราง email_logs สำหรับ API", 2);
                 }
             } catch (PDOException $e) {
                 logMessage("ไม่สามารถตรวจสอบหรือเพิ่มคอลัมน์ในตาราง email_logs: " . $e->getMessage(), 2);
@@ -283,10 +178,10 @@ try {
     // Set email subject
     $subject = 'ยืนยันการลงทะเบียนการสัมมนา - มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ';
     
-    // Record email request in database
+    // Record initial email request in database
     try {
-        $stmt = $pdo->prepare("INSERT INTO email_logs (registration_id, email, subject, sent_at, status, error_message) 
-                               VALUES (?, ?, ?, NOW(), 'success', 'เริ่มกระบวนการส่งอีเมล')");
+        $stmt = $pdo->prepare("INSERT INTO email_logs (registration_id, email, subject, sent_at, status, method, error_message) 
+                               VALUES (?, ?, ?, NOW(), 'pending', 'Mailjet API', 'เริ่มกระบวนการส่งอีเมล')");
         $stmt->execute([$registration_id, $email, $subject]);
         $email_log_id = $pdo->lastInsertId();
         
@@ -377,194 +272,120 @@ try {
     
     logMessage("สร้างเนื้อหาอีเมลเรียบร้อย");
     
-    // Define multiple email configurations
-    $email_configs = [
-        // Option 1: University's SMTP server (if available)
-        [
-            'description' => 'เซิร์ฟเวอร์อีเมลของมหาวิทยาลัย',
-            'host' => 'mail.rmutsb.ac.th',
-            'username' => 'arts@rmutsb.ac.th',
-            'password' => 'artsrus6',
-            'secure' => '',
-            'port' => 25,
-            'auth' => true
-        ],
-        // Option 2: Gmail with STARTTLS
-        [
-            'description' => 'Gmail พอร์ต 587 (STARTTLS)',
-            'host' => 'smtp.gmail.com',
-            'username' => 'arts@rmutsb.ac.th',
-            'password' => 'artsrus6',
-            'secure' => 'tls',
-            'port' => 587,
-            'auth' => true
-        ],
-        // Option 3: Gmail with SSL
-        [
-            'description' => 'Gmail พอร์ต 465 (SSL)',
-            'host' => 'smtp.gmail.com',
-            'username' => 'arts@rmutsb.ac.th',
-            'password' => 'artsrus6',
-            'secure' => 'ssl',
-            'port' => 465,
-            'auth' => true
-        ],
-        // Option 4: PHP mail() function
-        [
-            'description' => 'ฟังก์ชัน mail() ของ PHP',
-            'host' => '',
-            'username' => '',
-            'password' => '',
-            'secure' => '',
-            'port' => 0,
-            'auth' => false,
-            'use_mail_function' => true
+    // Mailjet API configuration
+    $api_key = '829cbd1ae749929b8ae832c63f6fe511'; 
+    $api_secret = '3be69cc8ed38c1e0e5456fd5904b4465';
+    $url = 'https://api.mailjet.com/v3.1/send';
+    
+    $sender_email = 'arts@rmutsb.ac.th';
+    $sender_name = 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ';
+    
+    // Prepare the request data for Mailjet
+    $data = [
+        'Messages' => [
+            [
+                'From' => [
+                    'Email' => $sender_email,
+                    'Name' => $sender_name
+                ],
+                'To' => [
+                    [
+                        'Email' => $email,
+                        'Name' => $fullname
+                    ]
+                ],
+                'Subject' => $subject,
+                'HTMLPart' => $message,
+                'TextPart' => strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message))
+            ]
         ]
     ];
     
-    // Try each email configuration until one succeeds
-    $success = false;
-    $last_error = '';
+    logMessage("กำลังส่งอีเมลผ่าน Mailjet API ไปยัง: $email", 2);
     
-    foreach ($email_configs as $index => $config) {
-        logMessage("กำลังลองส่งอีเมลด้วยวิธีที่ " . ($index + 1) . ": " . $config['description'], 2);
-        
-        try {
-            // Initialize a new PHPMailer instance for each attempt
-            $mail = new PHPMailer(true);
-            
-            // Basic setup
-            $mail->CharSet = 'UTF-8';
-            
-            // Set email format to HTML
-            $mail->isHTML(true);
-            $mail->Subject = $subject;
-            $mail->Body = $message;
-            $mail->AltBody = strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message));
-            
-            // Check if using the mail() function or SMTP
-            if (isset($config['use_mail_function']) && $config['use_mail_function']) {
-                logMessage("ใช้ฟังก์ชัน mail() ของ PHP", 2);
-                $mail->isMail();
-                
-                // Set sender and recipient
-                $mail->setFrom('arts@rmutsb.ac.th', 'คณะศิลปศาสตร์ มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ');
-                $mail->addAddress($email, $fullname);
-                $mail->addReplyTo('arts@rmutsb.ac.th', 'คณะศิลปศาสตร์');
-            } else {
-                logMessage("ใช้ SMTP: {$config['host']}:{$config['port']}", 2);
-                $mail->isSMTP();
-                
-                // Server settings
-                $mail->Host = $config['host'];
-                $mail->SMTPAuth = $config['auth'];
-                
-                if ($config['auth']) {
-                    $mail->Username = $config['username'];
-                    $mail->Password = $config['password'];
-                }
-                
-                if (!empty($config['secure'])) {
-                    if ($config['secure'] === 'tls') {
-                        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-                    } elseif ($config['secure'] === 'ssl') {
-                        $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
-                    }
-                }
-                
-                $mail->Port = $config['port'];
-                
-                // Set additional SMTP options for more reliable connections
-                $mail->SMTPOptions = array(
-                    'ssl' => array(
-                        'verify_peer' => false,
-                        'verify_peer_name' => false,
-                        'allow_self_signed' => true
-                    )
-                );
-                
-                // Set higher timeout values
-                $mail->Timeout = 30;
-                
-                // Enable verbose debug output
-                $mail->SMTPDebug = SMTP::DEBUG_SERVER;
-                
-                // Redirect SMTP debug output to log file
-                $mail->Debugoutput = function($str, $level) use ($index) {
-                    logMessage("SMTP CONFIG[$index] DEBUG[$level]: $str", 3);
-                };
-                
-                // Set sender and recipient
-                $mail->setFrom($config['username'], 'คณะศิลปศาสตร์ มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ');
-                $mail->addAddress($email, $fullname);
-                $mail->addReplyTo($config['username'], 'คณะศิลปศาสตร์');
-            }
-            
-            // Try to send the email
-            logMessage("กำลังพยายามส่งอีเมลด้วย " . $config['description'], 2);
-            if ($mail->send()) {
-                logMessage("ส่งอีเมลสำเร็จด้วย " . $config['description'], 1);
-                $success = true;
-                
-                // Update email log
-                if (isset($email_log_id)) {
-                    $stmt = $pdo->prepare("UPDATE email_logs SET status = 'success', error_message = ?, smtp_server = ?, smtp_port = ? WHERE id = ?");
-                    $stmt->execute(["ส่งอีเมลสำเร็จด้วย " . $config['description'], $config['host'], $config['port'], $email_log_id]);
-                }
-                
-                // Return success response
-                echo json_encode([
-                    'success' => true,
-                    'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
-                    'method' => $config['description']
-                ]);
-                
-                // Exit the loop and end the script
-                break;
-            }
-        } catch (Exception $e) {
-            $error_message = $mail->ErrorInfo ?: $e->getMessage();
-            logMessage("ไม่สามารถส่งอีเมลด้วย " . $config['description'] . ": " . $error_message, 2);
-            $last_error = $error_message;
-            
-            // Continue to next configuration
-            continue;
-        }
+    // Initialize cURL request
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Content-Type: application/json'
+    ]);
+    curl_setopt($ch, CURLOPT_USERPWD, $api_key . ':' . $api_secret);
+    
+    // Execute the request
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    
+    curl_close($ch);
+    
+    // Log detailed API response
+    logMessage("Mailjet API Response Code: $httpCode", 2);
+    if (!empty($response)) {
+        logMessage("Mailjet API Response: $response", 3);
+    }
+    if (!empty($error)) {
+        logMessage("Mailjet API Error: $error", 2);
     }
     
-    // If all email configurations failed
-    if (!$success) {
-        logMessage("ไม่สามารถส่งอีเมลด้วยทุกวิธี");
-        
-        // Update email log with failure status
-        if (isset($email_log_id)) {
-            $stmt = $pdo->prepare("UPDATE email_logs SET status = 'failed', error_message = ? WHERE id = ?");
-            $stmt->execute(["ไม่สามารถส่งอีเมลด้วยทุกวิธี: " . $last_error, $email_log_id]);
+    // Parse JSON response
+    $responseData = json_decode($response, true);
+    
+    // Update email log with API response
+    try {
+        if ($httpCode >= 200 && $httpCode < 300 && isset($responseData['Messages'][0]['Status']) && $responseData['Messages'][0]['Status'] === 'success') {
+            // Success
+            $messageId = isset($responseData['Messages'][0]['To'][0]['MessageID']) ? $responseData['Messages'][0]['To'][0]['MessageID'] : '';
+            
+            $stmt = $pdo->prepare("UPDATE email_logs SET status = 'success', method = 'Mailjet API', 
+                                   response_code = ?, response_body = ?, error_message = ? 
+                                   WHERE id = ?");
+            $stmt->execute([$httpCode, $response, "ส่งอีเมลสำเร็จ, Message ID: $messageId", $email_log_id]);
+            logMessage("อัปเดตสถานะการส่งอีเมลในฐานข้อมูลเป็น success");
+            
+            echo json_encode([
+                'success' => true,
+                'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
+                'method' => 'Mailjet API',
+                'message_id' => $messageId
+            ]);
+        } else {
+            // Failure
+            $errorMessage = '';
+            
+            // Try to extract detailed error from Mailjet response
+            if (isset($responseData['Messages'][0]['Errors'])) {
+                foreach ($responseData['Messages'][0]['Errors'] as $err) {
+                    $errorMessage .= $err['ErrorMessage'] . ' ';
+                }
+            } elseif (!empty($error)) {
+                $errorMessage = $error;
+            } else {
+                $errorMessage = 'Unknown error';
+            }
+            
+            $stmt = $pdo->prepare("UPDATE email_logs SET status = 'failed', method = 'Mailjet API', 
+                                  response_code = ?, response_body = ?, error_message = ? 
+                                  WHERE id = ?");
+            $stmt->execute([$httpCode, $response, "ไม่สามารถส่งอีเมลได้: " . $errorMessage, $email_log_id]);
+            logMessage("อัปเดตสถานะการส่งอีเมลในฐานข้อมูลเป็น failed");
+            
+            echo json_encode([
+                'success' => false,
+                'message' => "ไม่สามารถส่งอีเมลได้ - กรุณาตรวจสอบการตั้งค่า Mailjet API",
+                'error' => $errorMessage
+            ]);
+            
+            // Add troubleshooting suggestions
+            logMessage("คำแนะนำในการแก้ไขปัญหา Mailjet API:");
+            logMessage("1. ตรวจสอบค่า API Key และ Secret Key ว่าถูกต้อง");
+            logMessage("2. ตรวจสอบว่าบัญชี Mailjet ของคุณยังใช้งานได้และไม่เกินโควต้า");
+            logMessage("3. ตรวจสอบว่าอีเมลผู้ส่ง (arts@rmutsb.ac.th) ได้รับการยืนยันในบัญชี Mailjet แล้ว");
+            logMessage("4. หากส่งไม่สำเร็จบ่อยครั้ง ตรวจสอบการตั้งค่า Domain Authentication ใน Mailjet");
         }
-        
-        // Get helpful error message based on error type
-        $error_suggestion = "";
-        if (strpos($last_error, 'authenticate') !== false || strpos($last_error, 'Authentication') !== false) {
-            $error_suggestion = "อาจเกิดจากรหัสผ่านไม่ถูกต้องหรือการตั้งค่าความปลอดภัยของอีเมล";
-        } elseif (strpos($last_error, 'Connection') !== false) {
-            $error_suggestion = "อาจเกิดจากปัญหาการเชื่อมต่อเครือข่ายหรือการปิดกั้นพอร์ต";
-        } elseif (strpos($last_error, 'SMTP connect() failed') !== false) {
-            $error_suggestion = "ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ SMTP ได้";
-        }
-        
-        // Return failure response
-        echo json_encode([
-            'success' => false,
-            'message' => "ไม่สามารถส่งอีเมลได้" . ($error_suggestion ? " - " . $error_suggestion : ""),
-            'error' => $last_error
-        ]);
-        
-        // Append additional troubleshooting suggestions to log
-        logMessage("คำแนะนำในการแก้ไขปัญหา:");
-        logMessage("1. ตรวจสอบรหัสผ่านอีเมลว่าถูกต้อง");
-        logMessage("2. ตรวจสอบว่าเปิดใช้งาน 'Less secure app access' หรือสร้าง App Password");
-        logMessage("3. ตรวจสอบการเชื่อมต่ออินเทอร์เน็ตและการตั้งค่าไฟร์วอลล์");
-        logMessage("4. ทดลองใช้อีเมลสำรอง หรือบริการส่งอีเมลภายนอก เช่น SendGrid หรือ Mailgun");
+    } catch (PDOException $e) {
+        logMessage("ไม่สามารถอัปเดตข้อมูลการส่งอีเมลในฐานข้อมูล: " . $e->getMessage());
     }
     
 } catch (PDOException $e) {
