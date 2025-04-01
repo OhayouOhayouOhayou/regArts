@@ -9,18 +9,32 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-// เริ่มต้นบันทึก log
-$error_log_file = __DIR__ . '/email_error.log';
-file_put_contents($error_log_file, "--- เริ่มการทำงาน " . date('Y-m-d H:i:s') . " ---\n", FILE_APPEND);
+// Define log file path and ensure directory is writable
+$log_dir = __DIR__;
+$error_log_file = $log_dir . '/email_error.log';
 
-// Required for email functionality
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception;
-use PHPMailer\PHPMailer\SMTP;
+// Test log file creation
+try {
+    if (!is_writable($log_dir)) {
+        // If directory is not writable, try to change permissions
+        @chmod($log_dir, 0755);
+        if (!is_writable($log_dir)) {
+            echo json_encode(['success' => false, 'message' => 'Directory not writable: ' . $log_dir]);
+            exit;
+        }
+    }
+    
+    // Log start of process
+    @file_put_contents($error_log_file, "--- เริ่มการทำงาน " . date('Y-m-d H:i:s') . " ---\n", FILE_APPEND);
+} catch (Exception $e) {
+    echo json_encode(['success' => false, 'message' => 'Cannot create log file: ' . $e->getMessage()]);
+    exit;
+}
 
-// Include PHPMailer via Composer's autoloader
-require_once 'vendor/autoload.php';
-require_once '../../config/database.php';
+function logMessage($message) {
+    global $error_log_file;
+    @file_put_contents($error_log_file, $message . "\n", FILE_APPEND);
+}
 
 // Get registration data from POST request
 $registration_id = isset($_POST['id']) ? intval($_POST['id']) : 0;
@@ -28,14 +42,11 @@ $email = isset($_POST['email']) ? trim($_POST['email']) : '';
 $fullname = isset($_POST['fullname']) ? trim($_POST['fullname']) : '';
 $payment_status = isset($_POST['payment_status']) ? trim($_POST['payment_status']) : '';
 
-$log_msg = "ข้อมูลที่ได้รับ: registration_id=$registration_id, email=$email, payment_status=$payment_status\n";
-file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+logMessage("ข้อมูลที่ได้รับ: registration_id=$registration_id, email=$email, payment_status=$payment_status");
 
 // Validate required fields
 if ($registration_id <= 0 || empty($email) || empty($fullname)) {
-    $log_msg = "ข้อมูลไม่ครบถ้วน\n";
-    file_put_contents($error_log_file, $log_msg, FILE_APPEND);
-    
+    logMessage("ข้อมูลไม่ครบถ้วน");
     echo json_encode([
         'success' => false,
         'message' => 'ข้อมูลไม่ครบถ้วน กรุณาระบุ ID, อีเมล และชื่อผู้ลงทะเบียน'
@@ -43,16 +54,81 @@ if ($registration_id <= 0 || empty($email) || empty($fullname)) {
     exit;
 }
 
+// Check for multiple possible autoloader locations
+$autoloader_paths = [
+    __DIR__ . '/vendor/autoload.php',           // Local in api directory
+    dirname(__DIR__) . '/vendor/autoload.php',  // In parent directory
+    dirname(dirname(__DIR__)) . '/vendor/autoload.php', // Two levels up
+];
+
+$autoloader_loaded = false;
+foreach ($autoloader_paths as $path) {
+    if (file_exists($path)) {
+        require_once $path;
+        $autoloader_loaded = true;
+        logMessage("Autoloader found at: $path");
+        break;
+    }
+}
+
+if (!$autoloader_loaded) {
+    // If autoloader not found, try manual inclusion
+    logMessage("Composer autoloader not found. Trying manual inclusion.");
+    
+    $phpmailer_paths = [
+        __DIR__ . '/PHPMailer/src/',
+        dirname(__DIR__) . '/PHPMailer/src/',
+        dirname(dirname(__DIR__)) . '/PHPMailer/src/',
+    ];
+    
+    $phpmailer_loaded = false;
+    foreach ($phpmailer_paths as $path) {
+        if (file_exists($path . 'PHPMailer.php')) {
+            require_once $path . 'Exception.php';
+            require_once $path . 'PHPMailer.php';
+            require_once $path . 'SMTP.php';
+            $phpmailer_loaded = true;
+            logMessage("PHPMailer found at: $path");
+            break;
+        }
+    }
+    
+    if (!$phpmailer_loaded) {
+        logMessage("PHPMailer not found. Email cannot be sent.");
+        echo json_encode([
+            'success' => false, 
+            'message' => 'ไม่พบ PHPMailer ไม่สามารถส่งอีเมลได้'
+        ]);
+        exit;
+    }
+}
+
+// Import PHPMailer classes
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
+use PHPMailer\PHPMailer\SMTP;
+
 try {
-    $log_msg = "กำลังเชื่อมต่อฐานข้อมูล\n";
-    file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+    // Attempt to load database config
+    try {
+        require_once dirname(__DIR__) . '/config/database.php';
+        logMessage("Database configuration loaded");
+    } catch (Exception $e) {
+        logMessage("Error loading database configuration: " . $e->getMessage());
+        echo json_encode([
+            'success' => false,
+            'message' => 'ไม่สามารถโหลดการตั้งค่าฐานข้อมูล: ' . $e->getMessage()
+        ]);
+        exit;
+    }
+    
+    logMessage("กำลังเชื่อมต่อฐานข้อมูล");
     
     // Create database connection using the Database class
     $database = new Database();
     $pdo = $database->getConnection();
     
-    $log_msg = "เชื่อมต่อฐานข้อมูลสำเร็จ\n";
-    file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+    logMessage("เชื่อมต่อฐานข้อมูลสำเร็จ");
     
     // Fetch complete registration data from database
     $stmt = $pdo->prepare("
@@ -64,9 +140,7 @@ try {
     $stmt->execute([$registration_id]);
     
     if ($stmt->rowCount() === 0) {
-        $log_msg = "ไม่พบข้อมูลการลงทะเบียน ID: $registration_id\n";
-        file_put_contents($error_log_file, $log_msg, FILE_APPEND);
-        
+        logMessage("ไม่พบข้อมูลการลงทะเบียน ID: $registration_id");
         echo json_encode([
             'success' => false,
             'message' => 'ไม่พบข้อมูลการลงทะเบียนที่ระบุ'
@@ -76,15 +150,13 @@ try {
     
     $registration = $stmt->fetch(PDO::FETCH_ASSOC);
     
-    $log_msg = "ดึงข้อมูลการลงทะเบียนสำเร็จ\n";
-    file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+    logMessage("ดึงข้อมูลการลงทะเบียนสำเร็จ");
     
     // ตรวจสอบว่ามีตาราง email_logs หรือไม่
     try {
         $stmt = $pdo->query("SHOW TABLES LIKE 'email_logs'");
         if ($stmt->rowCount() == 0) {
-            $log_msg = "ไม่พบตาราง email_logs กำลังสร้างตาราง...\n";
-            file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+            logMessage("ไม่พบตาราง email_logs กำลังสร้างตาราง...");
             
             // สร้างตาราง email_logs
             $sql = "CREATE TABLE `email_logs` (
@@ -100,32 +172,27 @@ try {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
             
             $pdo->exec($sql);
-            $log_msg = "สร้างตาราง email_logs สำเร็จ\n";
-            file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+            logMessage("สร้างตาราง email_logs สำเร็จ");
         } else {
-            $log_msg = "พบตาราง email_logs แล้ว\n";
-            file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+            logMessage("พบตาราง email_logs แล้ว");
         }
     } catch (PDOException $e) {
-        $log_msg = "เกิดข้อผิดพลาดในการตรวจสอบหรือสร้างตาราง email_logs: " . $e->getMessage() . "\n";
-        file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+        logMessage("เกิดข้อผิดพลาดในการตรวจสอบหรือสร้างตาราง email_logs: " . $e->getMessage());
     }
     
     // กำหนดหัวข้ออีเมล
     $subject = 'ยืนยันการลงทะเบียนการสัมมนา - มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ';
     
-    // บันทึกว่าได้รับคำขอส่งอีเมล (แม้จะยังไม่ได้ส่ง)
+    // บันทึกว่าได้รับคำขอส่งอีเมล
     try {
         $stmt = $pdo->prepare("INSERT INTO email_logs (registration_id, email, subject, sent_at, status, error_message) 
-                              VALUES (?, ?, ?, NOW(), 'success', 'เริ่มกระบวนการส่งอีเมล')");
+                               VALUES (?, ?, ?, NOW(), 'success', 'เริ่มกระบวนการส่งอีเมล')");
         $stmt->execute([$registration_id, $email, $subject]);
         $email_log_id = $pdo->lastInsertId();
         
-        $log_msg = "บันทึกข้อมูลการส่งอีเมลในฐานข้อมูล ID: $email_log_id\n";
-        file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+        logMessage("บันทึกข้อมูลการส่งอีเมลในฐานข้อมูล ID: $email_log_id");
     } catch (PDOException $e) {
-        $log_msg = "ไม่สามารถบันทึกข้อมูลการส่งอีเมลในฐานข้อมูล: " . $e->getMessage() . "\n";
-        file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+        logMessage("ไม่สามารถบันทึกข้อมูลการส่งอีเมลในฐานข้อมูล: " . $e->getMessage());
     }
     
     // Initialize PHPMailer
@@ -142,8 +209,13 @@ try {
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
         
-        // For debugging - uncomment if needed
-        //$mail->SMTPDebug = SMTP::DEBUG_SERVER;
+        // Enable verbose debug output
+        $mail->SMTPDebug = SMTP::DEBUG_SERVER;
+        
+        // Redirect SMTP debug output to log file
+        $mail->Debugoutput = function($str, $level) {
+            logMessage("SMTP DEBUG[$level]: $str");
+        };
         
         // Recipients
         $mail->setFrom('arts@rmutsb.ac.th', 'คณะศิลปศาสตร์ มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ');
@@ -153,7 +225,7 @@ try {
         // Set email subject
         $mail->Subject = $subject;
         
-        // กำหนดเนื้อหาอีเมล ตามรูปแบบที่ต้องการ
+        // กำหนดเนื้อหาอีเมลตามสถานะการชำระเงิน
         if ($payment_status == 'paid') {
             // กรณีชำระเงินแล้ว
             $message = '<div style="font-family: \'Sarabun\', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 5px; background-color: #ffffff;">
@@ -233,23 +305,20 @@ try {
         </div>';
         }
         
-        $log_msg = "สร้างเนื้อหาอีเมลเรียบร้อย\n";
-        file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+        logMessage("สร้างเนื้อหาอีเมลเรียบร้อย");
         
-        // Set email format to HTML and content
+        // Set email format to HTML
         $mail->isHTML(true);
         $mail->Body = $message;
         $mail->AltBody = strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message));
         
         // Send email
-        $mail->send();
+        $result = $mail->send();
+        logMessage("ผลการส่งอีเมล: " . ($result ? "สำเร็จ" : "ไม่สำเร็จ"));
         
-        $log_msg = "ส่งอีเมลสำเร็จ\n";
-        file_put_contents($error_log_file, $log_msg, FILE_APPEND);
-        
-        // บันทึกประวัติว่าส่งสำเร็จ
+        // Update email log
         if (isset($email_log_id)) {
-            $stmt = $pdo->prepare("UPDATE email_logs SET status = 'success', error_message = NULL WHERE id = ?");
+            $stmt = $pdo->prepare("UPDATE email_logs SET status = 'success', error_message = 'ส่งอีเมลสำเร็จ' WHERE id = ?");
             $stmt->execute([$email_log_id]);
         }
         
@@ -260,38 +329,53 @@ try {
         ]);
         
     } catch (Exception $e) {
-        // Log error
         $error_message = $mail->ErrorInfo;
-        $log_msg = "ส่งอีเมลไม่สำเร็จ: " . $error_message . "\n";
-        file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+        logMessage("ส่งอีเมลไม่สำเร็จ: " . $error_message);
         
-        // บันทึกประวัติว่าส่งไม่สำเร็จ
+        // Update email log
         if (isset($email_log_id)) {
             $stmt = $pdo->prepare("UPDATE email_logs SET status = 'failed', error_message = ? WHERE id = ?");
             $stmt->execute([$error_message, $email_log_id]);
         }
         
-        // Return error response
-        echo json_encode([
-            'success' => false,
-            'message' => 'ไม่สามารถส่งอีเมลได้ กรุณาลองใหม่อีกครั้ง',
-            'error' => $error_message
-        ]);
+        // Check for specific Gmail errors
+        if (strpos($error_message, 'Username and Password not accepted') !== false) {
+            $suggestion = 'อาจเกิดจากการตั้งค่าความปลอดภัยของ Gmail กรุณาลองใช้ App Password แทน';
+            logMessage($suggestion);
+            
+            echo json_encode([
+                'success' => false,
+                'message' => 'ไม่สามารถเข้าสู่ระบบอีเมลได้ - ' . $suggestion,
+                'error' => $error_message
+            ]);
+        } else {
+            echo json_encode([
+                'success' => false,
+                'message' => 'ไม่สามารถส่งอีเมลได้ กรุณาลองใหม่อีกครั้ง',
+                'error' => $error_message
+            ]);
+        }
     }
     
 } catch (PDOException $e) {
-    // Log database error
-    $log_msg = "เกิดข้อผิดพลาดกับฐานข้อมูล: " . $e->getMessage() . "\n";
-    file_put_contents($error_log_file, $log_msg, FILE_APPEND);
+    $error_message = $e->getMessage();
+    logMessage("เกิดข้อผิดพลาดกับฐานข้อมูล: " . $error_message);
     
-    // Return error response
     echo json_encode([
         'success' => false,
         'message' => 'เกิดข้อผิดพลาดกับฐานข้อมูล',
-        'error' => $e->getMessage()
+        'error' => $error_message
+    ]);
+} catch (Exception $e) {
+    $error_message = $e->getMessage();
+    logMessage("เกิดข้อผิดพลาดทั่วไป: " . $error_message);
+    
+    echo json_encode([
+        'success' => false,
+        'message' => 'เกิดข้อผิดพลาด: ' . $error_message
     ]);
 }
 
 // บันทึกการทำงานเสร็จสิ้น
-file_put_contents($error_log_file, "--- จบการทำงาน " . date('Y-m-d H:i:s') . " ---\n\n", FILE_APPEND);
+logMessage("--- จบการทำงาน " . date('Y-m-d H:i:s') . " ---\n");
 ?>
