@@ -1,6 +1,7 @@
 <?php
 // Set response header
 header('Content-Type: application/json; charset=utf-8');
+date_default_timezone_set('Asia/Bangkok');
 
 // Prevent direct access
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -9,9 +10,22 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-// Define log file path and ensure directory is writable
+// Define log directory and file paths
 $log_dir = __DIR__;
 $error_log_file = $log_dir . '/email_error.log';
+$debug_level = 2; // 1 = minimal, 2 = detailed, 3 = very detailed
+
+// Initialize logging function
+function logMessage($message, $level = 1) {
+    global $error_log_file, $debug_level;
+    if ($level <= $debug_level) {
+        @file_put_contents(
+            $error_log_file, 
+            '[' . date('Y-m-d H:i:s') . '] ' . $message . "\n", 
+            FILE_APPEND
+        );
+    }
+}
 
 // Test log file creation
 try {
@@ -25,15 +39,10 @@ try {
     }
     
     // Log start of process
-    @file_put_contents($error_log_file, "--- เริ่มการทำงาน " . date('Y-m-d H:i:s') . " ---\n", FILE_APPEND);
+    logMessage("--- เริ่มการทำงาน " . date('Y-m-d H:i:s') . " ---");
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'message' => 'Cannot create log file: ' . $e->getMessage()]);
     exit;
-}
-
-function logMessage($message) {
-    global $error_log_file;
-    @file_put_contents($error_log_file, $message . "\n", FILE_APPEND);
 }
 
 // Get registration data from POST request
@@ -54,50 +63,77 @@ if ($registration_id <= 0 || empty($email) || empty($fullname)) {
     exit;
 }
 
-// Check for multiple possible autoloader locations
+// Improved autoloader discovery with detailed logging
 $autoloader_paths = [
-    __DIR__ . '/vendor/autoload.php',           // Local in api directory
-    dirname(__DIR__) . '/vendor/autoload.php',  // In parent directory
+    __DIR__ . '/vendor/autoload.php',                // Current directory
+    dirname(__DIR__) . '/vendor/autoload.php',       // Parent directory
     dirname(dirname(__DIR__)) . '/vendor/autoload.php', // Two levels up
+    // Add more potential paths if needed
 ];
 
+logMessage("กำลังค้นหา Composer Autoloader...", 2);
 $autoloader_loaded = false;
+
 foreach ($autoloader_paths as $path) {
+    logMessage("ตรวจสอบ path: $path", 3);
+    
     if (file_exists($path)) {
+        logMessage("พบ Composer autoloader ที่: $path", 2);
         require_once $path;
         $autoloader_loaded = true;
-        logMessage("Autoloader found at: $path");
         break;
     }
 }
 
+// If autoloader not found, try PHPMailer direct inclusion with improved path discovery
 if (!$autoloader_loaded) {
-    // If autoloader not found, try manual inclusion
-    logMessage("Composer autoloader not found. Trying manual inclusion.");
+    logMessage("ไม่พบ Composer autoloader กำลังค้นหา PHPMailer โดยตรง...", 2);
     
     $phpmailer_paths = [
         __DIR__ . '/PHPMailer/src/',
         dirname(__DIR__) . '/PHPMailer/src/',
         dirname(dirname(__DIR__)) . '/PHPMailer/src/',
+        __DIR__ . '/libraries/PHPMailer/src/',      // Alternative directory structure
+        dirname(__DIR__) . '/libraries/PHPMailer/src/',
+        __DIR__ . '/includes/PHPMailer/src/',       // Another common location
+        // Add more potential paths if needed
     ];
     
     $phpmailer_loaded = false;
+    
     foreach ($phpmailer_paths as $path) {
+        logMessage("ตรวจสอบ PHPMailer ที่: $path", 3);
+        
         if (file_exists($path . 'PHPMailer.php')) {
-            require_once $path . 'Exception.php';
-            require_once $path . 'PHPMailer.php';
-            require_once $path . 'SMTP.php';
-            $phpmailer_loaded = true;
-            logMessage("PHPMailer found at: $path");
-            break;
+            logMessage("พบ PHPMailer ที่: $path", 2);
+            
+            // Ensure all required PHPMailer files are included
+            $required_files = ['Exception.php', 'PHPMailer.php', 'SMTP.php'];
+            $all_files_exist = true;
+            
+            foreach ($required_files as $file) {
+                if (!file_exists($path . $file)) {
+                    logMessage("ไฟล์ $file ไม่พบที่ $path", 2);
+                    $all_files_exist = false;
+                    break;
+                }
+            }
+            
+            if ($all_files_exist) {
+                require_once $path . 'Exception.php';
+                require_once $path . 'PHPMailer.php';
+                require_once $path . 'SMTP.php';
+                $phpmailer_loaded = true;
+                break;
+            }
         }
     }
     
     if (!$phpmailer_loaded) {
-        logMessage("PHPMailer not found. Email cannot be sent.");
+        logMessage("ไม่พบ PHPMailer ไม่สามารถส่งอีเมลได้");
         echo json_encode([
             'success' => false, 
-            'message' => 'ไม่พบ PHPMailer ไม่สามารถส่งอีเมลได้'
+            'message' => 'ไม่พบ PHPMailer ไม่สามารถส่งอีเมลได้ กรุณาติดต่อผู้ดูแลระบบ'
         ]);
         exit;
     }
@@ -109,17 +145,31 @@ use PHPMailer\PHPMailer\Exception;
 use PHPMailer\PHPMailer\SMTP;
 
 try {
-    // Attempt to load database config
-    try {
-        require_once dirname(__DIR__) . '/config/database.php';
-        logMessage("Database configuration loaded");
-    } catch (Exception $e) {
-        logMessage("Error loading database configuration: " . $e->getMessage());
-        echo json_encode([
-            'success' => false,
-            'message' => 'ไม่สามารถโหลดการตั้งค่าฐานข้อมูล: ' . $e->getMessage()
-        ]);
-        exit;
+    // Improved database config loading with error handling
+    logMessage("กำลังโหลดการตั้งค่าฐานข้อมูล", 2);
+    
+    $db_config_paths = [
+        dirname(__DIR__) . '/config/database.php',
+        __DIR__ . '/config/database.php',
+        dirname(dirname(__DIR__)) . '/config/database.php',
+        // Add more potential paths if needed
+    ];
+    
+    $db_config_loaded = false;
+    
+    foreach ($db_config_paths as $path) {
+        logMessage("ตรวจสอบไฟล์ config ที่: $path", 3);
+        
+        if (file_exists($path)) {
+            logMessage("พบไฟล์ config ที่: $path", 2);
+            require_once $path;
+            $db_config_loaded = true;
+            break;
+        }
+    }
+    
+    if (!$db_config_loaded) {
+        throw new Exception("ไม่พบไฟล์ config ฐานข้อมูล");
     }
     
     logMessage("กำลังเชื่อมต่อฐานข้อมูล");
@@ -152,13 +202,13 @@ try {
     
     logMessage("ดึงข้อมูลการลงทะเบียนสำเร็จ");
     
-    // ตรวจสอบว่ามีตาราง email_logs หรือไม่
+    // Check if email_logs table exists and create if needed
     try {
         $stmt = $pdo->query("SHOW TABLES LIKE 'email_logs'");
         if ($stmt->rowCount() == 0) {
             logMessage("ไม่พบตาราง email_logs กำลังสร้างตาราง...");
             
-            // สร้างตาราง email_logs
+            // Create email_logs table
             $sql = "CREATE TABLE `email_logs` (
                 `id` int(11) NOT NULL AUTO_INCREMENT,
                 `registration_id` int(11) NOT NULL,
@@ -180,10 +230,10 @@ try {
         logMessage("เกิดข้อผิดพลาดในการตรวจสอบหรือสร้างตาราง email_logs: " . $e->getMessage());
     }
     
-    // กำหนดหัวข้ออีเมล
+    // Set email subject
     $subject = 'ยืนยันการลงทะเบียนการสัมมนา - มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ';
     
-    // บันทึกว่าได้รับคำขอส่งอีเมล
+    // Record email request in database
     try {
         $stmt = $pdo->prepare("INSERT INTO email_logs (registration_id, email, subject, sent_at, status, error_message) 
                                VALUES (?, ?, ?, NOW(), 'success', 'เริ่มกระบวนการส่งอีเมล')");
@@ -214,7 +264,7 @@ try {
         
         // Redirect SMTP debug output to log file
         $mail->Debugoutput = function($str, $level) {
-            logMessage("SMTP DEBUG[$level]: $str");
+            logMessage("SMTP DEBUG[$level]: $str", 3);
         };
         
         // Recipients
@@ -225,9 +275,9 @@ try {
         // Set email subject
         $mail->Subject = $subject;
         
-        // กำหนดเนื้อหาอีเมลตามสถานะการชำระเงิน
+        // Set email content based on payment status
         if ($payment_status == 'paid') {
-            // กรณีชำระเงินแล้ว
+            // Email content for paid registration
             $message = '<div style="font-family: \'Sarabun\', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 5px; background-color: #ffffff;">
             <div style="text-align: center; margin-bottom: 20px;">
                 <img src="https://arts.rmutsb.ac.th/image/logo_art_2019.png" alt="Logo" style="max-width: 200px;">
@@ -258,7 +308,7 @@ try {
             </div>
         </div>';
         } else {
-            // กรณียังไม่ชำระเงิน
+            // Email content for unpaid registration
             $message = '<div style="font-family: \'Sarabun\', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 5px; background-color: #ffffff;">
             <div style="text-align: center; margin-bottom: 20px;">
                 <img src="https://arts.rmutsb.ac.th/image/logo_art_2019.png" alt="Logo" style="max-width: 200px;">
@@ -312,7 +362,8 @@ try {
         $mail->Body = $message;
         $mail->AltBody = strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message));
         
-        // Send email
+        // Send email with improved error handling
+        logMessage("กำลังส่งอีเมลไปยัง: $email", 2);
         $result = $mail->send();
         logMessage("ผลการส่งอีเมล: " . ($result ? "สำเร็จ" : "ไม่สำเร็จ"));
         
@@ -338,7 +389,7 @@ try {
             $stmt->execute([$error_message, $email_log_id]);
         }
         
-        // Check for specific Gmail errors
+        // Improved error handling with specific suggestions
         if (strpos($error_message, 'Username and Password not accepted') !== false) {
             $suggestion = 'อาจเกิดจากการตั้งค่าความปลอดภัยของ Gmail กรุณาลองใช้ App Password แทน';
             logMessage($suggestion);
@@ -346,6 +397,15 @@ try {
             echo json_encode([
                 'success' => false,
                 'message' => 'ไม่สามารถเข้าสู่ระบบอีเมลได้ - ' . $suggestion,
+                'error' => $error_message
+            ]);
+        } elseif (strpos($error_message, 'Connection refused') !== false || strpos($error_message, 'Connection timed out') !== false) {
+            $suggestion = 'อาจเกิดจากปัญหาการเชื่อมต่อเครือข่ายหรือไฟร์วอลล์';
+            logMessage($suggestion);
+            
+            echo json_encode([
+                'success' => false,
+                'message' => 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์อีเมล - ' . $suggestion,
                 'error' => $error_message
             ]);
         } else {
@@ -376,6 +436,6 @@ try {
     ]);
 }
 
-// บันทึกการทำงานเสร็จสิ้น
+// Log end of process
 logMessage("--- จบการทำงาน " . date('Y-m-d H:i:s') . " ---\n");
 ?>
