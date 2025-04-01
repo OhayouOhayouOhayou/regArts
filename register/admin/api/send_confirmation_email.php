@@ -82,6 +82,7 @@ try {
         dirname(__DIR__) . '/config/database.php',
         __DIR__ . '/config/database.php',
         dirname(dirname(__DIR__)) . '/config/database.php',
+        '../../config/database.php'
     ];
     
     $db_config_loaded = false;
