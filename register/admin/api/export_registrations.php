@@ -28,7 +28,7 @@ $search = $_GET['search'] ?? '';
 // สร้าง SQL หลัก - ใช้ ANY_VALUE() เพื่อแก้ปัญหา GROUP BY
 $sql = "SELECT r.id, r.fullname, r.organization, r.position, r.phone, 
                r.email, r.line_id, r.payment_status, r.is_approved, 
-               r.payment_date, r.created_at,
+               r.payment_date, r.created_at, r.title ,
                ANY_VALUE(a.address) AS address, 
                ANY_VALUE(a.zipcode) AS zipcode,
                ANY_VALUE(p.name_in_thai) AS province_name, 
@@ -103,7 +103,7 @@ try {
     
     // กำหนดหัวคอลัมน์
     fputcsv($output, [
-        'วันที่ลงทะเบียน', 'ชื่อ-นามสกุล', 'หน่วยงาน', 'ตำแหน่ง', 'เบอร์โทร', 'อีเมล', 'ไลน์ไอดี', 
+        'วันที่ลงทะเบียน','คำนำหน้า' , 'ชื่อ-นามสกุล', 'หน่วยงาน', 'ตำแหน่ง', 'เบอร์โทร', 'อีเมล', 'ไลน์ไอดี', 
         'ที่อยู่', 'จังหวัด', 'อำเภอ', 'ตำบล', 'รหัสไปรษณีย์', 'สถานะการอนุมัติ', 'สถานะการชำระเงิน', 
         'วันที่ชำระเงิน', 'หลักฐานการชำระเงิน', 'เอกสารประกอบ'
     ]);
@@ -160,6 +160,7 @@ try {
         
         fputcsv($output, [
             $row['created_at'],
+            $row['title'],
             $row['fullname'],
             $row['organization'],
             $row['position'],
