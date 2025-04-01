@@ -335,7 +335,7 @@ async function loadPage(page) {
                         <td>${reg.email || '-'}</td>
                         <td>${formatAddress(reg)}</td>
                         <td><span class="status-badge ${reg.is_approved == 1 ? 'bg-success' : 'bg-warning'} text-white">${reg.is_approved == 1 ? 'อนุมัติแล้ว' : 'รอการอนุมัติ'}</span></td>
-                        <td><span class="status-badge ${reg.payment_status === 'paid' ? 'bg-success' : 'bg-danger'} text-white">${reg.payment_status === 'paid' ? 'ชำระแล้ว' : 'ยังไม่ชำระ'}</span></td>
+                       <td><span class="status-badge ${getPaymentStatusClass(reg)} text-white">${getPaymentStatusText(reg)}</span></td>
                         <td>
                             <button class="btn btn-sm btn-primary me-1" onclick="viewRegistration(${reg.id})"><i class="fas fa-eye"></i></button>
                             <button class="btn btn-danger btn-sm" onclick="deleteRegistration(${reg.id})" title="ลบ">
