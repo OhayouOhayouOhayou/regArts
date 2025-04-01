@@ -132,65 +132,11 @@ try {
     
     logMessage("ดึงข้อมูลการลงทะเบียนสำเร็จ");
     
-    // Check if email_logs table exists and create if needed
-    try {
-        $stmt = $pdo->query("SHOW TABLES LIKE 'email_logs'");
-        if ($stmt->rowCount() == 0) {
-            logMessage("ไม่พบตาราง email_logs กำลังสร้างตาราง...");
-            
-            // Create email_logs table
-            $sql = "CREATE TABLE `email_logs` (
-                `id` int(11) NOT NULL AUTO_INCREMENT,
-                `registration_id` int(11) NOT NULL,
-                `email` varchar(255) NOT NULL,
-                `subject` varchar(255) NOT NULL,
-                `sent_at` datetime NOT NULL,
-                `status` enum('success','failed','pending') NOT NULL DEFAULT 'pending',
-                `error_message` text,
-                `method` varchar(255),
-                `response_code` int(11),
-                `response_body` text,
-                PRIMARY KEY (`id`),
-                KEY `registration_id` (`registration_id`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
-            
-            $pdo->exec($sql);
-            logMessage("สร้างตาราง email_logs สำเร็จ");
-        } else {
-            logMessage("พบตาราง email_logs แล้ว");
-            
-            // Check if we need to add additional columns
-            try {
-                $columnsResult = $pdo->query("SHOW COLUMNS FROM email_logs LIKE 'method'");
-                if ($columnsResult->rowCount() == 0) {
-                    $pdo->exec("ALTER TABLE email_logs ADD COLUMN method varchar(255) AFTER error_message");
-                    $pdo->exec("ALTER TABLE email_logs ADD COLUMN response_code int(11) AFTER method");
-                    $pdo->exec("ALTER TABLE email_logs ADD COLUMN response_body text AFTER response_code");
-                    logMessage("เพิ่มคอลัมน์เพิ่มเติมในตาราง email_logs สำหรับ API", 2);
-                }
-            } catch (PDOException $e) {
-                logMessage("ไม่สามารถตรวจสอบหรือเพิ่มคอลัมน์ในตาราง email_logs: " . $e->getMessage(), 2);
-            }
-        }
-    } catch (PDOException $e) {
-        logMessage("เกิดข้อผิดพลาดในการตรวจสอบหรือสร้างตาราง email_logs: " . $e->getMessage());
-    }
+    
     
     // Set email subject
     $subject = 'ยืนยันการลงทะเบียนการสัมมนา - มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ';
-    
-    // Record initial email request in database
-    try {
-        $stmt = $pdo->prepare("INSERT INTO email_logs (registration_id, email, subject, sent_at, status, method, error_message) 
-                               VALUES (?, ?, ?, NOW(), 'pending', 'Mailjet API', 'เริ่มกระบวนการส่งอีเมล')");
-        $stmt->execute([$registration_id, $email, $subject]);
-        $email_log_id = $pdo->lastInsertId();
-        
-        logMessage("บันทึกข้อมูลการส่งอีเมลในฐานข้อมูล ID: $email_log_id");
-    } catch (PDOException $e) {
-        logMessage("ไม่สามารถบันทึกข้อมูลการส่งอีเมลในฐานข้อมูล: " . $e->getMessage());
-    }
-    
+  
     // Set email content based on payment status
     if ($payment_status == 'paid') {
         // Email content for paid registration
@@ -339,11 +285,7 @@ try {
             // Success
             $messageId = isset($responseData['Messages'][0]['To'][0]['MessageID']) ? $responseData['Messages'][0]['To'][0]['MessageID'] : '';
             
-            $stmt = $pdo->prepare("UPDATE email_logs SET status = 'success', method = 'Mailjet API', 
-                                   response_code = ?, response_body = ?, error_message = ? 
-                                   WHERE id = ?");
-            $stmt->execute([$httpCode, $response, "ส่งอีเมลสำเร็จ, Message ID: $messageId", $email_log_id]);
-            logMessage("อัปเดตสถานะการส่งอีเมลในฐานข้อมูลเป็น success");
+          
             
             echo json_encode([
                 'success' => true,
@@ -366,11 +308,7 @@ try {
                 $errorMessage = 'Unknown error';
             }
             
-            $stmt = $pdo->prepare("UPDATE email_logs SET status = 'failed', method = 'Mailjet API', 
-                                  response_code = ?, response_body = ?, error_message = ? 
-                                  WHERE id = ?");
-            $stmt->execute([$httpCode, $response, "ไม่สามารถส่งอีเมลได้: " . $errorMessage, $email_log_id]);
-            logMessage("อัปเดตสถานะการส่งอีเมลในฐานข้อมูลเป็น failed");
+           
             
             echo json_encode([
                 'success' => false,
@@ -378,12 +316,7 @@ try {
                 'error' => $errorMessage
             ]);
             
-            // Add troubleshooting suggestions
-            logMessage("คำแนะนำในการแก้ไขปัญหา Mailjet API:");
-            logMessage("1. ตรวจสอบค่า API Key และ Secret Key ว่าถูกต้อง");
-            logMessage("2. ตรวจสอบว่าบัญชี Mailjet ของคุณยังใช้งานได้และไม่เกินโควต้า");
-            logMessage("3. ตรวจสอบว่าอีเมลผู้ส่ง (arts@rmutsb.ac.th) ได้รับการยืนยันในบัญชี Mailjet แล้ว");
-            logMessage("4. หากส่งไม่สำเร็จบ่อยครั้ง ตรวจสอบการตั้งค่า Domain Authentication ใน Mailjet");
+          
         }
     } catch (PDOException $e) {
         logMessage("ไม่สามารถอัปเดตข้อมูลการส่งอีเมลในฐานข้อมูล: " . $e->getMessage());
