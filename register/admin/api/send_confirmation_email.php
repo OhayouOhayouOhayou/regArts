@@ -20,7 +20,7 @@ use PHPMailer\PHPMailer\SMTP;
 
 // Include PHPMailer via Composer's autoloader
 require_once 'vendor/autoload.php';
-require_once '../config/database.php';
+require_once '../../config/database.php';
 
 // Get registration data from POST request
 $registration_id = isset($_POST['id']) ? intval($_POST['id']) : 0;
