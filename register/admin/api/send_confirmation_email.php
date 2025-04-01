@@ -13,7 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 // Define log directory and file paths
 $log_dir = __DIR__;
 $error_log_file = $log_dir . '/email_error.log';
-$debug_level = 2; // 1 = minimal, 2 = detailed, 3 = very detailed
+$debug_level = 3; // 1 = minimal, 2 = detailed, 3 = very detailed
 
 // Initialize logging function
 function logMessage($message, $level = 1) {
@@ -44,11 +44,13 @@ try {
     // Log server information for troubleshooting
     logMessage("SERVER_INFO: " . php_uname(), 2);
     logMessage("PHP_VERSION: " . phpversion(), 2);
+    logMessage("SERVER_SOFTWARE: " . (isset($_SERVER['SERVER_SOFTWARE']) ? $_SERVER['SERVER_SOFTWARE'] : 'N/A'), 2);
+    logMessage("REMOTE_ADDR: " . (isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : 'N/A'), 2);
     
     // Log POST data - sanitized to avoid sensitive info in logs
     $safe_post = $_POST;
     if (isset($safe_post['password'])) $safe_post['password'] = '******';
-    logMessage("POST_DATA: " . json_encode($safe_post), 2);
+    logMessage("POST_DATA: " . json_encode($safe_post, JSON_UNESCAPED_UNICODE), 2);
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'message' => 'Cannot create log file: ' . $e->getMessage()]);
     exit;
@@ -70,6 +72,31 @@ if ($registration_id <= 0 || empty($email) || empty($fullname)) {
         'message' => 'ข้อมูลไม่ครบถ้วน กรุณาระบุ ID, อีเมล และชื่อผู้ลงทะเบียน'
     ]);
     exit;
+}
+
+// Test network connectivity to mail servers
+try {
+    $smtp_servers = [
+        ['host' => 'smtp.gmail.com', 'port' => 587],
+        ['host' => 'smtp.gmail.com', 'port' => 465],
+        ['host' => 'mail.rmutsb.ac.th', 'port' => 25]
+    ];
+    
+    logMessage("ทดสอบการเชื่อมต่อกับเซิร์ฟเวอร์อีเมล:", 2);
+    
+    foreach ($smtp_servers as $server) {
+        logMessage("ทดสอบเชื่อมต่อกับ {$server['host']}:{$server['port']}...", 2);
+        $socket_connection = @fsockopen($server['host'], $server['port'], $errno, $errstr, 5);
+        
+        if ($socket_connection) {
+            logMessage("สามารถเชื่อมต่อกับ {$server['host']}:{$server['port']} ได้", 2);
+            fclose($socket_connection);
+        } else {
+            logMessage("ไม่สามารถเชื่อมต่อกับ {$server['host']}:{$server['port']} ได้: $errstr ($errno)", 2);
+        }
+    }
+} catch (Exception $e) {
+    logMessage("เกิดข้อผิดพลาดในการทดสอบเชื่อมต่อ: " . $e->getMessage(), 2);
 }
 
 // Improved autoloader discovery with detailed logging
@@ -226,6 +253,8 @@ try {
                 `sent_at` datetime NOT NULL,
                 `status` enum('success','failed') NOT NULL DEFAULT 'success',
                 `error_message` text,
+                `smtp_server` varchar(255),
+                `smtp_port` int(11),
                 PRIMARY KEY (`id`),
                 KEY `registration_id` (`registration_id`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
@@ -234,6 +263,18 @@ try {
             logMessage("สร้างตาราง email_logs สำเร็จ");
         } else {
             logMessage("พบตาราง email_logs แล้ว");
+            
+            // Check if we need to add the smtp_server and smtp_port columns
+            try {
+                $columnsResult = $pdo->query("SHOW COLUMNS FROM email_logs LIKE 'smtp_server'");
+                if ($columnsResult->rowCount() == 0) {
+                    $pdo->exec("ALTER TABLE email_logs ADD COLUMN smtp_server varchar(255) AFTER error_message");
+                    $pdo->exec("ALTER TABLE email_logs ADD COLUMN smtp_port int(11) AFTER smtp_server");
+                    logMessage("เพิ่มคอลัมน์ smtp_server และ smtp_port ในตาราง email_logs", 2);
+                }
+            } catch (PDOException $e) {
+                logMessage("ไม่สามารถตรวจสอบหรือเพิ่มคอลัมน์ในตาราง email_logs: " . $e->getMessage(), 2);
+            }
         }
     } catch (PDOException $e) {
         logMessage("เกิดข้อผิดพลาดในการตรวจสอบหรือสร้างตาราง email_logs: " . $e->getMessage());
@@ -254,198 +295,276 @@ try {
         logMessage("ไม่สามารถบันทึกข้อมูลการส่งอีเมลในฐานข้อมูล: " . $e->getMessage());
     }
     
-    // Initialize PHPMailer
-    $mail = new PHPMailer(true);
+    // Set email content based on payment status
+    if ($payment_status == 'paid') {
+        // Email content for paid registration
+        $message = '<div style="font-family: \'Sarabun\', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 5px; background-color: #ffffff;">
+        <div style="text-align: center; margin-bottom: 20px;">
+            <img src="https://arts.rmutsb.ac.th/image/logo_art_2019.png" alt="Logo" style="max-width: 200px;">
+            <h2 style="color: #1a237e; margin-top: 15px;">ยืนยันการลงทะเบียนสัมมนา</h2>
+        </div>
+        
+        <p style="margin-bottom: 15px;">เรียน คุณ'.$fullname.'</p>
+        
+        <p style="margin-bottom: 15px;">มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ ขอขอบคุณที่ท่านได้ลงทะเบียนเข้าร่วมการสัมมนา</p>
+        
+        <div style="background-color: #f5f7fa; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+            <p style="font-weight: bold; color: #1a237e; margin-top: 0;">สถานะการลงทะเบียน: <span style="color: #4caf50;">ลงทะเบียนและชำระเงินเรียบร้อยแล้ว</span></p>
+            <p style="margin-bottom: 0;">กรุณารอการตรวจสอบจากเจ้าหน้าที่อีกครั้ง ท่านจะได้รับอีเมลยืนยันเมื่อการลงทะเบียนได้รับการอนุมัติ</p>
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+            <h3 style="color: #1a237e; font-size: 18px; border-bottom: 1px solid #eaeaea; padding-bottom: 10px;">ข้อมูลสำคัญ</h3>
+            <ul style="padding-left: 20px;">
+                <li style="margin-bottom: 10px;">กรุณาตรวจสอบความถูกต้องของชื่อ-นามสกุลที่ใช้ในการลงทะเบียน</li>
+                <li style="margin-bottom: 10px;">กรุณาตรวจสอบความถูกต้องของที่อยู่สำหรับการออกใบเสร็จ</li>
+                <li style="margin-bottom: 10px;">ท่านสามารถสแกน QR Code เพื่อจองห้องพักโรงแรมในอัตราพิเศษสำหรับผู้เข้าร่วมสัมมนา</li>
+                <li style="margin-bottom: 10px;">เข้าร่วมกลุ่ม Line OA สำหรับรับข่าวสารและอัพเดทล่าสุดเกี่ยวกับการสัมมนา</li>
+            </ul>
+        </div>
+        
+        <div style="background-color: #1a237e; color: white; padding: 15px; border-radius: 5px; margin-top: 20px; text-align: center;">
+            <p style="margin: 0;">หากมีข้อสงสัยประการใด กรุณาติดต่อเจ้าหน้าที่ได้ที่ <a href="mailto:arts@rmutsb.ac.th" style="color: white;">arts@rmutsb.ac.th</a></p>
+        </div>
+    </div>';
+    } else {
+        // Email content for unpaid registration
+        $message = '<div style="font-family: \'Sarabun\', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 5px; background-color: #ffffff;">
+        <div style="text-align: center; margin-bottom: 20px;">
+            <img src="https://arts.rmutsb.ac.th/image/logo_art_2019.png" alt="Logo" style="max-width: 200px;">
+            <h2 style="color: #1a237e; margin-top: 15px;">ยืนยันการลงทะเบียนสัมมนา</h2>
+        </div>
+        
+        <p style="margin-bottom: 15px;">เรียน คุณ'.$fullname.'</p>
+        
+        <p style="margin-bottom: 15px;">มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ ขอขอบคุณที่ท่านได้ลงทะเบียนเข้าร่วมการสัมมนา</p>
+        
+        <div style="background-color: #f5f7fa; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+            <p style="font-weight: bold; color: #1a237e; margin-top: 0;">สถานะการลงทะเบียน: <span style="color: #ff9800;">ลงทะเบียนเรียบร้อยแล้ว (รอชำระเงิน)</span></p>
+            <p style="margin-bottom: 0;">กรุณาชำระค่าลงทะเบียนและแจ้งการชำระเงินเพื่อยืนยันการเข้าร่วมสัมมนา</p>
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+            <h3 style="color: #1a237e; font-size: 18px; border-bottom: 1px solid #eaeaea; padding-bottom: 10px;">ข้อมูลการชำระเงิน</h3>
+            <ul style="padding-left: 20px;">
+                <li style="margin-bottom: 10px;"><strong>ค่าลงทะเบียนสัมมนา:</strong> 3,900 บาท ต่อท่าน</li>
+                <li style="margin-bottom: 10px;"><strong>ช่องทางการชำระเงิน:</strong>
+                    <ul style="padding-left: 20px; margin-top: 5px;">
+                        <li style="margin-bottom: 5px;">โอนผ่านธนาคารกรุงไทย สาขาโรจนะ</li>
+                        <li style="margin-bottom: 5px;">ชื่อบัญชี: "มทร.สุวรรณภูมิ เงินรายได้"</li>
+                        <li style="margin-bottom: 5px;">เลขที่บัญชี: 128-028-9392</li>
+                    </ul>
+                </li>
+                <li style="margin-bottom: 10px;">สามารถชำระเงินหน้างานเป็นเงินสดได้</li>
+            </ul>
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+            <h3 style="color: #1a237e; font-size: 18px; border-bottom: 1px solid #eaeaea; padding-bottom: 10px;">คำแนะนำเพิ่มเติม</h3>
+            <ul style="padding-left: 20px;">
+                <li style="margin-bottom: 10px;">กรุณาตรวจสอบความถูกต้องของชื่อ-นามสกุลที่ใช้ในการลงทะเบียน</li>
+                <li style="margin-bottom: 10px;">กรุณาตรวจสอบความถูกต้องของที่อยู่สำหรับการออกใบเสร็จ</li>
+                <li style="margin-bottom: 10px;">ท่านสามารถสแกน QR Code เพื่อจองห้องพักโรงแรมในอัตราพิเศษสำหรับผู้เข้าร่วมสัมมนา</li>
+                <li style="margin-bottom: 10px;">เข้าร่วมกลุ่ม Line OA สำหรับรับข่าวสารและอัพเดทล่าสุดเกี่ยวกับการสัมมนา</li>
+            </ul>
+        </div>
+        
+        <div style="background-color: #1a237e; color: white; padding: 15px; border-radius: 5px; margin-top: 20px; text-align: center;">
+            <p style="margin: 0;">หากมีข้อสงสัยประการใด กรุณาติดต่อเจ้าหน้าที่ได้ที่ <a href="mailto:arts@rmutsb.ac.th" style="color: white;">arts@rmutsb.ac.th</a> </p>
+        </div>
+    </div>';
+    }
     
-    try {
-        // Server settings
-        $mail->CharSet = 'UTF-8';
-        $mail->isSMTP();
-        $mail->Host = 'smtp.gmail.com';
-        $mail->SMTPAuth = true;
-        $mail->Username = 'arts@rmutsb.ac.th';
-        $mail->Password = 'artsrus6';
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-        $mail->Port = 587;
+    logMessage("สร้างเนื้อหาอีเมลเรียบร้อย");
+    
+    // Define multiple email configurations
+    $email_configs = [
+        // Option 1: University's SMTP server (if available)
+        [
+            'description' => 'เซิร์ฟเวอร์อีเมลของมหาวิทยาลัย',
+            'host' => 'mail.rmutsb.ac.th',
+            'username' => 'arts@rmutsb.ac.th',
+            'password' => 'artsrus6',
+            'secure' => '',
+            'port' => 25,
+            'auth' => true
+        ],
+        // Option 2: Gmail with STARTTLS
+        [
+            'description' => 'Gmail พอร์ต 587 (STARTTLS)',
+            'host' => 'smtp.gmail.com',
+            'username' => 'arts@rmutsb.ac.th',
+            'password' => 'artsrus6',
+            'secure' => 'tls',
+            'port' => 587,
+            'auth' => true
+        ],
+        // Option 3: Gmail with SSL
+        [
+            'description' => 'Gmail พอร์ต 465 (SSL)',
+            'host' => 'smtp.gmail.com',
+            'username' => 'arts@rmutsb.ac.th',
+            'password' => 'artsrus6',
+            'secure' => 'ssl',
+            'port' => 465,
+            'auth' => true
+        ],
+        // Option 4: PHP mail() function
+        [
+            'description' => 'ฟังก์ชัน mail() ของ PHP',
+            'host' => '',
+            'username' => '',
+            'password' => '',
+            'secure' => '',
+            'port' => 0,
+            'auth' => false,
+            'use_mail_function' => true
+        ]
+    ];
+    
+    // Try each email configuration until one succeeds
+    $success = false;
+    $last_error = '';
+    
+    foreach ($email_configs as $index => $config) {
+        logMessage("กำลังลองส่งอีเมลด้วยวิธีที่ " . ($index + 1) . ": " . $config['description'], 2);
         
-        // Additional Gmail-specific settings
-        $mail->SMTPOptions = array(
-            'ssl' => array(
-                'verify_peer' => false,
-                'verify_peer_name' => false,
-                'allow_self_signed' => true
-            )
-        );
-        
-        // Enable verbose debug output
-        $mail->SMTPDebug = SMTP::DEBUG_SERVER;
-        
-        // Redirect SMTP debug output to log file
-        $mail->Debugoutput = function($str, $level) {
-            logMessage("SMTP DEBUG[$level]: $str", 3);
-        };
-        
-        // Recipients
-        $mail->setFrom('arts@rmutsb.ac.th', 'คณะศิลปศาสตร์ มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ');
-        $mail->addAddress($email, $fullname);
-        $mail->addReplyTo('arts@rmutsb.ac.th', 'คณะศิลปศาสตร์');
-        
-        // Set email subject
-        $mail->Subject = $subject;
-        
-        // Set email content based on payment status
-        if ($payment_status == 'paid') {
-            // Email content for paid registration
-            $message = '<div style="font-family: \'Sarabun\', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 5px; background-color: #ffffff;">
-            <div style="text-align: center; margin-bottom: 20px;">
-                <img src="https://arts.rmutsb.ac.th/image/logo_art_2019.png" alt="Logo" style="max-width: 200px;">
-                <h2 style="color: #1a237e; margin-top: 15px;">ยืนยันการลงทะเบียนสัมมนา</h2>
-            </div>
+        try {
+            // Initialize a new PHPMailer instance for each attempt
+            $mail = new PHPMailer(true);
             
-            <p style="margin-bottom: 15px;">เรียน คุณ'.$fullname.'</p>
+            // Basic setup
+            $mail->CharSet = 'UTF-8';
             
-            <p style="margin-bottom: 15px;">มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ ขอขอบคุณที่ท่านได้ลงทะเบียนเข้าร่วมการสัมมนา</p>
+            // Set email format to HTML
+            $mail->isHTML(true);
+            $mail->Subject = $subject;
+            $mail->Body = $message;
+            $mail->AltBody = strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message));
             
-            <div style="background-color: #f5f7fa; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-                <p style="font-weight: bold; color: #1a237e; margin-top: 0;">สถานะการลงทะเบียน: <span style="color: #4caf50;">ลงทะเบียนและชำระเงินเรียบร้อยแล้ว</span></p>
-                <p style="margin-bottom: 0;">กรุณารอการตรวจสอบจากเจ้าหน้าที่อีกครั้ง ท่านจะได้รับอีเมลยืนยันเมื่อการลงทะเบียนได้รับการอนุมัติ</p>
-            </div>
-            
-            <div style="margin-bottom: 20px;">
-                <h3 style="color: #1a237e; font-size: 18px; border-bottom: 1px solid #eaeaea; padding-bottom: 10px;">ข้อมูลสำคัญ</h3>
-                <ul style="padding-left: 20px;">
-                    <li style="margin-bottom: 10px;">กรุณาตรวจสอบความถูกต้องของชื่อ-นามสกุลที่ใช้ในการลงทะเบียน</li>
-                    <li style="margin-bottom: 10px;">กรุณาตรวจสอบความถูกต้องของที่อยู่สำหรับการออกใบเสร็จ</li>
-                    <li style="margin-bottom: 10px;">ท่านสามารถสแกน QR Code เพื่อจองห้องพักโรงแรมในอัตราพิเศษสำหรับผู้เข้าร่วมสัมมนา</li>
-                    <li style="margin-bottom: 10px;">เข้าร่วมกลุ่ม Line OA สำหรับรับข่าวสารและอัพเดทล่าสุดเกี่ยวกับการสัมมนา</li>
-                </ul>
-            </div>
-            
-            <div style="background-color: #1a237e; color: white; padding: 15px; border-radius: 5px; margin-top: 20px; text-align: center;">
-                <p style="margin: 0;">หากมีข้อสงสัยประการใด กรุณาติดต่อเจ้าหน้าที่ได้ที่ <a href="mailto:arts@rmutsb.ac.th" style="color: white;">arts@rmutsb.ac.th</a></p>
-            </div>
-        </div>';
-        } else {
-            // Email content for unpaid registration
-            $message = '<div style="font-family: \'Sarabun\', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 5px; background-color: #ffffff;">
-            <div style="text-align: center; margin-bottom: 20px;">
-                <img src="https://arts.rmutsb.ac.th/image/logo_art_2019.png" alt="Logo" style="max-width: 200px;">
-                <h2 style="color: #1a237e; margin-top: 15px;">ยืนยันการลงทะเบียนสัมมนา</h2>
-            </div>
-            
-            <p style="margin-bottom: 15px;">เรียน คุณ'.$fullname.'</p>
-            
-            <p style="margin-bottom: 15px;">มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ ขอขอบคุณที่ท่านได้ลงทะเบียนเข้าร่วมการสัมมนา</p>
-            
-            <div style="background-color: #f5f7fa; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-                <p style="font-weight: bold; color: #1a237e; margin-top: 0;">สถานะการลงทะเบียน: <span style="color: #ff9800;">ลงทะเบียนเรียบร้อยแล้ว (รอชำระเงิน)</span></p>
-                <p style="margin-bottom: 0;">กรุณาชำระค่าลงทะเบียนและแจ้งการชำระเงินเพื่อยืนยันการเข้าร่วมสัมมนา</p>
-            </div>
-            
-            <div style="margin-bottom: 20px;">
-                <h3 style="color: #1a237e; font-size: 18px; border-bottom: 1px solid #eaeaea; padding-bottom: 10px;">ข้อมูลการชำระเงิน</h3>
-                <ul style="padding-left: 20px;">
-                    <li style="margin-bottom: 10px;"><strong>ค่าลงทะเบียนสัมมนา:</strong> 3,900 บาท ต่อท่าน</li>
-                    <li style="margin-bottom: 10px;"><strong>ช่องทางการชำระเงิน:</strong>
-                        <ul style="padding-left: 20px; margin-top: 5px;">
-                            <li style="margin-bottom: 5px;">โอนผ่านธนาคารกรุงไทย สาขาโรจนะ</li>
-                            <li style="margin-bottom: 5px;">ชื่อบัญชี: "มทร.สุวรรณภูมิ เงินรายได้"</li>
-                            <li style="margin-bottom: 5px;">เลขที่บัญชี: 128-028-9392</li>
-                        </ul>
-                    </li>
-                    <li style="margin-bottom: 10px;">สามารถชำระเงินหน้างานเป็นเงินสดได้</li>
-                </ul>
-            </div>
-            
-            <div style="margin-bottom: 20px;">
-                <h3 style="color: #1a237e; font-size: 18px; border-bottom: 1px solid #eaeaea; padding-bottom: 10px;">คำแนะนำเพิ่มเติม</h3>
-                <ul style="padding-left: 20px;">
-                    <li style="margin-bottom: 10px;">กรุณาตรวจสอบความถูกต้องของชื่อ-นามสกุลที่ใช้ในการลงทะเบียน</li>
-                    <li style="margin-bottom: 10px;">กรุณาตรวจสอบความถูกต้องของที่อยู่สำหรับการออกใบเสร็จ</li>
-                    <li style="margin-bottom: 10px;">ท่านสามารถสแกน QR Code เพื่อจองห้องพักโรงแรมในอัตราพิเศษสำหรับผู้เข้าร่วมสัมมนา</li>
-                    <li style="margin-bottom: 10px;">เข้าร่วมกลุ่ม Line OA สำหรับรับข่าวสารและอัพเดทล่าสุดเกี่ยวกับการสัมมนา</li>
-                </ul>
-            </div>
-            
-            <div style="background-color: #1a237e; color: white; padding: 15px; border-radius: 5px; margin-top: 20px; text-align: center;">
-                <p style="margin: 0;">หากมีข้อสงสัยประการใด กรุณาติดต่อเจ้าหน้าที่ได้ที่ <a href="mailto:arts@rmutsb.ac.th" style="color: white;">arts@rmutsb.ac.th</a> </p>
-            </div>
-        </div>';
-        }
-        
-        logMessage("สร้างเนื้อหาอีเมลเรียบร้อย");
-        
-        // Set email format to HTML
-        $mail->isHTML(true);
-        $mail->Body = $message;
-        $mail->AltBody = strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message));
-        
-        // Send email with improved error handling
-        logMessage("กำลังส่งอีเมลไปยัง: $email", 2);
-        $result = $mail->send();
-        logMessage("ผลการส่งอีเมล: " . ($result ? "สำเร็จ" : "ไม่สำเร็จ"));
-        
-        // Update email log
-        if (isset($email_log_id)) {
-            $stmt = $pdo->prepare("UPDATE email_logs SET status = 'success', error_message = 'ส่งอีเมลสำเร็จ' WHERE id = ?");
-            $stmt->execute([$email_log_id]);
-        }
-        
-        // Return success response
-        echo json_encode([
-            'success' => true,
-            'message' => 'ส่งอีเมลยืนยันไปยัง '.$email.' เรียบร้อยแล้ว'
-        ]);
-        
-    } catch (Exception $e) {
-        $error_message = $mail->ErrorInfo;
-        logMessage("ส่งอีเมลไม่สำเร็จ: " . $error_message);
-        
-        // Update email log
-        if (isset($email_log_id)) {
-            $stmt = $pdo->prepare("UPDATE email_logs SET status = 'failed', error_message = ? WHERE id = ?");
-            $stmt->execute([$error_message, $email_log_id]);
-        }
-        
-        // Improved error handling with specific suggestions
-        if (strpos($error_message, 'Username and Password not accepted') !== false || 
-            strpos($error_message, 'Could not authenticate') !== false) {
-            
-            $suggestion = 'อาจเกิดจากการตั้งค่าความปลอดภัยของ Gmail กรุณาลองใช้ App Password แทน';
-            logMessage($suggestion);
-            
-            // Try to update the password in the email_logs table for troubleshooting
-            try {
-                if (isset($email_log_id)) {
-                    $note = "ควรตรวจสอบ: 1) เปิดใช้งาน Less secure apps 2) สร้าง App Password 3) ปิด 2FA หรือใช้ App Password";
-                    $stmt = $pdo->prepare("UPDATE email_logs SET error_message = CONCAT(error_message, ' - ', ?) WHERE id = ?");
-                    $stmt->execute([$note, $email_log_id]);
+            // Check if using the mail() function or SMTP
+            if (isset($config['use_mail_function']) && $config['use_mail_function']) {
+                logMessage("ใช้ฟังก์ชัน mail() ของ PHP", 2);
+                $mail->isMail();
+                
+                // Set sender and recipient
+                $mail->setFrom('arts@rmutsb.ac.th', 'คณะศิลปศาสตร์ มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ');
+                $mail->addAddress($email, $fullname);
+                $mail->addReplyTo('arts@rmutsb.ac.th', 'คณะศิลปศาสตร์');
+            } else {
+                logMessage("ใช้ SMTP: {$config['host']}:{$config['port']}", 2);
+                $mail->isSMTP();
+                
+                // Server settings
+                $mail->Host = $config['host'];
+                $mail->SMTPAuth = $config['auth'];
+                
+                if ($config['auth']) {
+                    $mail->Username = $config['username'];
+                    $mail->Password = $config['password'];
                 }
-            } catch (Exception $ex) {
-                logMessage("ไม่สามารถอัปเดตข้อมูลใน email_logs: " . $ex->getMessage());
+                
+                if (!empty($config['secure'])) {
+                    if ($config['secure'] === 'tls') {
+                        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+                    } elseif ($config['secure'] === 'ssl') {
+                        $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+                    }
+                }
+                
+                $mail->Port = $config['port'];
+                
+                // Set additional SMTP options for more reliable connections
+                $mail->SMTPOptions = array(
+                    'ssl' => array(
+                        'verify_peer' => false,
+                        'verify_peer_name' => false,
+                        'allow_self_signed' => true
+                    )
+                );
+                
+                // Set higher timeout values
+                $mail->Timeout = 30;
+                
+                // Enable verbose debug output
+                $mail->SMTPDebug = SMTP::DEBUG_SERVER;
+                
+                // Redirect SMTP debug output to log file
+                $mail->Debugoutput = function($str, $level) use ($index) {
+                    logMessage("SMTP CONFIG[$index] DEBUG[$level]: $str", 3);
+                };
+                
+                // Set sender and recipient
+                $mail->setFrom($config['username'], 'คณะศิลปศาสตร์ มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ');
+                $mail->addAddress($email, $fullname);
+                $mail->addReplyTo($config['username'], 'คณะศิลปศาสตร์');
             }
             
-            echo json_encode([
-                'success' => false,
-                'message' => 'ไม่สามารถเข้าสู่ระบบอีเมลได้ - ' . $suggestion,
-                'error' => $error_message
-            ]);
-        } elseif (strpos($error_message, 'Connection refused') !== false || strpos($error_message, 'Connection timed out') !== false) {
-            $suggestion = 'อาจเกิดจากปัญหาการเชื่อมต่อเครือข่ายหรือไฟร์วอลล์';
-            logMessage($suggestion);
+            // Try to send the email
+            logMessage("กำลังพยายามส่งอีเมลด้วย " . $config['description'], 2);
+            if ($mail->send()) {
+                logMessage("ส่งอีเมลสำเร็จด้วย " . $config['description'], 1);
+                $success = true;
+                
+                // Update email log
+                if (isset($email_log_id)) {
+                    $stmt = $pdo->prepare("UPDATE email_logs SET status = 'success', error_message = ?, smtp_server = ?, smtp_port = ? WHERE id = ?");
+                    $stmt->execute(["ส่งอีเมลสำเร็จด้วย " . $config['description'], $config['host'], $config['port'], $email_log_id]);
+                }
+                
+                // Return success response
+                echo json_encode([
+                    'success' => true,
+                    'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
+                    'method' => $config['description']
+                ]);
+                
+                // Exit the loop and end the script
+                break;
+            }
+        } catch (Exception $e) {
+            $error_message = $mail->ErrorInfo ?: $e->getMessage();
+            logMessage("ไม่สามารถส่งอีเมลด้วย " . $config['description'] . ": " . $error_message, 2);
+            $last_error = $error_message;
             
-            echo json_encode([
-                'success' => false,
-                'message' => 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์อีเมล - ' . $suggestion,
-                'error' => $error_message
-            ]);
-        } else {
-            echo json_encode([
-                'success' => false,
-                'message' => 'ไม่สามารถส่งอีเมลได้ กรุณาลองใหม่อีกครั้ง',
-                'error' => $error_message
-            ]);
+            // Continue to next configuration
+            continue;
         }
+    }
+    
+    // If all email configurations failed
+    if (!$success) {
+        logMessage("ไม่สามารถส่งอีเมลด้วยทุกวิธี");
+        
+        // Update email log with failure status
+        if (isset($email_log_id)) {
+            $stmt = $pdo->prepare("UPDATE email_logs SET status = 'failed', error_message = ? WHERE id = ?");
+            $stmt->execute(["ไม่สามารถส่งอีเมลด้วยทุกวิธี: " . $last_error, $email_log_id]);
+        }
+        
+        // Get helpful error message based on error type
+        $error_suggestion = "";
+        if (strpos($last_error, 'authenticate') !== false || strpos($last_error, 'Authentication') !== false) {
+            $error_suggestion = "อาจเกิดจากรหัสผ่านไม่ถูกต้องหรือการตั้งค่าความปลอดภัยของอีเมล";
+        } elseif (strpos($last_error, 'Connection') !== false) {
+            $error_suggestion = "อาจเกิดจากปัญหาการเชื่อมต่อเครือข่ายหรือการปิดกั้นพอร์ต";
+        } elseif (strpos($last_error, 'SMTP connect() failed') !== false) {
+            $error_suggestion = "ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ SMTP ได้";
+        }
+        
+        // Return failure response
+        echo json_encode([
+            'success' => false,
+            'message' => "ไม่สามารถส่งอีเมลได้" . ($error_suggestion ? " - " . $error_suggestion : ""),
+            'error' => $last_error
+        ]);
+        
+        // Append additional troubleshooting suggestions to log
+        logMessage("คำแนะนำในการแก้ไขปัญหา:");
+        logMessage("1. ตรวจสอบรหัสผ่านอีเมลว่าถูกต้อง");
+        logMessage("2. ตรวจสอบว่าเปิดใช้งาน 'Less secure app access' หรือสร้าง App Password");
+        logMessage("3. ตรวจสอบการเชื่อมต่ออินเทอร์เน็ตและการตั้งค่าไฟร์วอลล์");
+        logMessage("4. ทดลองใช้อีเมลสำรอง หรือบริการส่งอีเมลภายนอก เช่น SendGrid หรือ Mailgun");
     }
     
 } catch (PDOException $e) {
