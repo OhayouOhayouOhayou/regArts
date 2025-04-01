@@ -40,6 +40,15 @@ try {
     
     // Log start of process
     logMessage("--- เริ่มการทำงาน " . date('Y-m-d H:i:s') . " ---");
+    
+    // Log server information for troubleshooting
+    logMessage("SERVER_INFO: " . php_uname(), 2);
+    logMessage("PHP_VERSION: " . phpversion(), 2);
+    
+    // Log POST data - sanitized to avoid sensitive info in logs
+    $safe_post = $_POST;
+    if (isset($safe_post['password'])) $safe_post['password'] = '******';
+    logMessage("POST_DATA: " . json_encode($safe_post), 2);
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'message' => 'Cannot create log file: ' . $e->getMessage()]);
     exit;
@@ -259,6 +268,15 @@ try {
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
         
+        // Additional Gmail-specific settings
+        $mail->SMTPOptions = array(
+            'ssl' => array(
+                'verify_peer' => false,
+                'verify_peer_name' => false,
+                'allow_self_signed' => true
+            )
+        );
+        
         // Enable verbose debug output
         $mail->SMTPDebug = SMTP::DEBUG_SERVER;
         
@@ -390,9 +408,22 @@ try {
         }
         
         // Improved error handling with specific suggestions
-        if (strpos($error_message, 'Username and Password not accepted') !== false) {
+        if (strpos($error_message, 'Username and Password not accepted') !== false || 
+            strpos($error_message, 'Could not authenticate') !== false) {
+            
             $suggestion = 'อาจเกิดจากการตั้งค่าความปลอดภัยของ Gmail กรุณาลองใช้ App Password แทน';
             logMessage($suggestion);
+            
+            // Try to update the password in the email_logs table for troubleshooting
+            try {
+                if (isset($email_log_id)) {
+                    $note = "ควรตรวจสอบ: 1) เปิดใช้งาน Less secure apps 2) สร้าง App Password 3) ปิด 2FA หรือใช้ App Password";
+                    $stmt = $pdo->prepare("UPDATE email_logs SET error_message = CONCAT(error_message, ' - ', ?) WHERE id = ?");
+                    $stmt->execute([$note, $email_log_id]);
+                }
+            } catch (Exception $ex) {
+                logMessage("ไม่สามารถอัปเดตข้อมูลใน email_logs: " . $ex->getMessage());
+            }
             
             echo json_encode([
                 'success' => false,
