@@ -132,62 +132,7 @@ try {
     
     logMessage("ดึงข้อมูลการลงทะเบียนสำเร็จ");
     
-    // Check if email_logs table exists and create if needed
-    try {
-        $stmt = $pdo->query("SHOW TABLES LIKE 'email_logs'");
-        if ($stmt->rowCount() == 0) {
-            logMessage("ไม่พบตาราง email_logs กำลังสร้างตาราง...");
-            
-            // Create email_logs table with additional fields for SMTP2GO
-            $sql = "CREATE TABLE `email_logs` (
-                `id` int(11) NOT NULL AUTO_INCREMENT,
-                `registration_id` int(11) NOT NULL,
-                `email` varchar(255) NOT NULL,
-                `subject` varchar(255) NOT NULL,
-                `sent_at` datetime NOT NULL,
-                `status` enum('success','failed','pending') NOT NULL DEFAULT 'pending',
-                `error_message` text,
-                `method` varchar(255),
-                `response_code` int(11),
-                `response_body` text,
-                `message_id` varchar(255),
-                `email_service` varchar(50),
-                PRIMARY KEY (`id`),
-                KEY `registration_id` (`registration_id`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
-            
-            $pdo->exec($sql);
-            logMessage("สร้างตาราง email_logs สำเร็จ");
-        } else {
-            logMessage("พบตาราง email_logs แล้ว");
-            
-            // Check if we need to add additional columns for SMTP2GO
-            try {
-                $columnsResult = $pdo->query("SHOW COLUMNS FROM email_logs LIKE 'email_service'");
-                if ($columnsResult->rowCount() == 0) {
-                    $pdo->exec("ALTER TABLE email_logs ADD COLUMN message_id varchar(255) AFTER response_body");
-                    $pdo->exec("ALTER TABLE email_logs ADD COLUMN email_service varchar(50) AFTER message_id");
-                    logMessage("เพิ่มคอลัมน์เพิ่มเติมในตาราง email_logs สำหรับ SMTP2GO", 2);
-                }
-            } catch (PDOException $e) {
-                logMessage("ไม่สามารถตรวจสอบหรือเพิ่มคอลัมน์ในตาราง email_logs: " . $e->getMessage(), 2);
-            }
-        }
-    } catch (PDOException $e) {
-        logMessage("เกิดข้อผิดพลาดในการตรวจสอบหรือสร้างตาราง email_logs: " . $e->getMessage());
-    }
-    
-    // Record initial email request in database
-    try {
-        $stmt = $pdo->prepare("INSERT INTO email_logs (registration_id, email, subject, sent_at, status, method, email_service, error_message) 
-                               VALUES (?, ?, ?, NOW(), 'pending', 'API', 'SMTP2GO', 'เริ่มกระบวนการส่งอีเมล')");
-        $stmt->execute([$registration_id, $email, 'ยืนยันการลงทะเบียนการสัมมนา - มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ']);
-        $email_log_id = $pdo->lastInsertId();
-        
-        logMessage("บันทึกข้อมูลการส่งอีเมลในฐานข้อมูล ID: $email_log_id");
-    } catch (PDOException $e) {
-        logMessage("ไม่สามารถบันทึกข้อมูลการส่งอีเมลในฐานข้อมูล: " . $e->getMessage());
-    }
+  
     
     // Set email subject
     $subject = 'ยืนยันการลงทะเบียนการสัมมนา - มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ';
@@ -339,11 +284,7 @@ try {
             // Success
             $messageId = isset($responseData['data']['email_id']) ? $responseData['data']['email_id'] : '';
             
-            $stmt = $pdo->prepare("UPDATE email_logs SET status = 'success', method = 'API', email_service = 'SMTP2GO', 
-                                   response_code = ?, response_body = ?, message_id = ?, error_message = 'ส่งอีเมลสำเร็จ' 
-                                   WHERE id = ?");
-            $stmt->execute([$httpCode, $response, $messageId, $email_log_id]);
-            logMessage("อัปเดตสถานะการส่งอีเมลในฐานข้อมูลเป็น success");
+          
             
             echo json_encode([
                 'success' => true,
@@ -365,12 +306,7 @@ try {
             } else {
                 $errorMessage = 'Unknown error';
             }
-            
-            $stmt = $pdo->prepare("UPDATE email_logs SET status = 'failed', method = 'API', email_service = 'SMTP2GO', 
-                                  response_code = ?, response_body = ?, error_message = ? 
-                                  WHERE id = ?");
-            $stmt->execute([$httpCode, $response, "ไม่สามารถส่งอีเมลได้: " . $errorMessage, $email_log_id]);
-            logMessage("อัปเดตสถานะการส่งอีเมลในฐานข้อมูลเป็น failed");
+        
             
             echo json_encode([
                 'success' => false,
@@ -378,12 +314,7 @@ try {
                 'error' => $errorMessage
             ]);
             
-            // Add troubleshooting suggestions
-            logMessage("คำแนะนำในการแก้ไขปัญหา SMTP2GO API:");
-            logMessage("1. ตรวจสอบค่า API Key ว่าถูกต้อง");
-            logMessage("2. ตรวจสอบว่า Email Sender (arts@rmutsb.ac.th) ได้รับการยืนยันในบัญชี SMTP2GO แล้ว");
-            logMessage("3. ตรวจสอบว่าบัญชี SMTP2GO ของคุณยังใช้งานได้และมีโควต้าเพียงพอ");
-            logMessage("4. ตรวจสอบว่าโดเมน (rmutsb.ac.th) ได้รับการยืนยันใน SMTP2GO แล้ว");
+          
         }
     } catch (PDOException $e) {
         logMessage("ไม่สามารถอัปเดตข้อมูลการส่งอีเมลในฐานข้อมูล: " . $e->getMessage());
