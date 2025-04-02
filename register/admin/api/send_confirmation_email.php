@@ -276,7 +276,7 @@ try {
         $mail->SMTPAutoTLS = false;
         $mail->Username = 'csd@asefa.co.th'; // SMTP username
         $mail->Password = 'vk:uak2025'; // SMTP password
-        $mail->Port = 25;
+        $mail->Port = 567;
         
         // ตั้งค่าอีเมล
         $mail->setFrom('csd@asefa.co.th', 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ');
