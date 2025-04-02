@@ -224,7 +224,7 @@ try {
     $url = 'https://api.smtp2go.com/v3/email/send';
     
     $sender_email = 'arts@rmutsb.ac.th';
-    $sender_name = 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ';
+    $sender_name = 'Faculty of Liberal Arts RMUTSB';
     
     // เตรียมข้อมูลสำหรับ SMTP2GO API
     $data = [
