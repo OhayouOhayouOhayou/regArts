@@ -132,8 +132,6 @@ try {
     
     logMessage("ดึงข้อมูลการลงทะเบียนสำเร็จ");
     
-    
-    
     // Set email subject
     $subject = 'ยืนยันการลงทะเบียนการสัมมนา - มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ';
   
@@ -219,36 +217,38 @@ try {
     
     logMessage("สร้างเนื้อหาอีเมลเรียบร้อย");
     
-    // Mailjet API configuration
-    $api_key = '829cbd1ae749929b8ae832c63f6fe511'; 
-    $api_secret = '3be69cc8ed38c1e0e5456fd5904b4465';
-    $url = 'https://api.mailjet.com/v3.1/send';
+    // Plain text version of the email
+    $text_message = strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message));
     
-    $sender_email = 'arts@rmutsb.ac.th';
+    // Brevo API configuration
+    $api_key = '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';
+    $url = 'https://api.brevo.com/v3/smtp/email';
+    
+    $sender_email = 'arts@rmutsb.ac.th'; // Change to your email
     $sender_name = 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ';
     
-    // Prepare the request data for Mailjet
+    // Prepare the request data for Brevo
     $data = [
-        'Messages' => [
+        'sender' => [
+            'email' => $sender_email,
+            'name' => $sender_name
+        ],
+        'to' => [
             [
-                'From' => [
-                    'Email' => $sender_email,
-                    'Name' => $sender_name
-                ],
-                'To' => [
-                    [
-                        'Email' => $email,
-                        'Name' => $fullname
-                    ]
-                ],
-                'Subject' => $subject,
-                'HTMLPart' => $message,
-                'TextPart' => strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message))
+                'email' => $email,
+                'name' => $fullname
             ]
+        ],
+        'subject' => $subject,
+        'htmlContent' => $message,
+        'textContent' => $text_message,
+        'replyTo' => [
+            'email' => 'arts@rmutsb.ac.th',
+            'name' => 'คณะศิลปศาสตร์'
         ]
     ];
     
-    logMessage("กำลังส่งอีเมลผ่าน Mailjet API ไปยัง: $email", 2);
+    logMessage("กำลังส่งอีเมลผ่าน Brevo API ไปยัง: $email", 2);
     
     // Initialize cURL request
     $ch = curl_init($url);
@@ -256,9 +256,9 @@ try {
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Content-Type: application/json'
+        'Content-Type: application/json',
+        'api-key: ' . $api_key
     ]);
-    curl_setopt($ch, CURLOPT_USERPWD, $api_key . ':' . $api_secret);
     
     // Execute the request
     $response = curl_exec($ch);
@@ -268,58 +268,49 @@ try {
     curl_close($ch);
     
     // Log detailed API response
-    logMessage("Mailjet API Response Code: $httpCode", 2);
+    logMessage("Brevo API Response Code: $httpCode", 2);
     if (!empty($response)) {
-        logMessage("Mailjet API Response: $response", 3);
+        logMessage("Brevo API Response: $response", 3);
     }
     if (!empty($error)) {
-        logMessage("Mailjet API Error: $error", 2);
+        logMessage("Brevo API Error: $error", 2);
     }
     
     // Parse JSON response
     $responseData = json_decode($response, true);
     
-    // Update email log with API response
-    try {
-        if ($httpCode >= 200 && $httpCode < 300 && isset($responseData['Messages'][0]['Status']) && $responseData['Messages'][0]['Status'] === 'success') {
-            // Success
-            $messageId = isset($responseData['Messages'][0]['To'][0]['MessageID']) ? $responseData['Messages'][0]['To'][0]['MessageID'] : '';
-            
-          
-            
-            echo json_encode([
-                'success' => true,
-                'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
-                'method' => 'Mailjet API',
-                'message_id' => $messageId
-            ]);
+    // Check if email was sent successfully
+    if ($httpCode >= 200 && $httpCode < 300 && isset($responseData['messageId'])) {
+        // Success
+        $messageId = $responseData['messageId'];
+        logMessage("ส่งอีเมลสำเร็จ, Message ID: $messageId");
+        
+        echo json_encode([
+            'success' => true,
+            'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
+            'method' => 'Brevo API',
+            'message_id' => $messageId
+        ]);
+    } else {
+        // Failure
+        $errorMessage = '';
+        
+        // Try to extract error from Brevo response
+        if (isset($responseData['message'])) {
+            $errorMessage = $responseData['message'];
+        } elseif (!empty($error)) {
+            $errorMessage = $error;
         } else {
-            // Failure
-            $errorMessage = '';
-            
-            // Try to extract detailed error from Mailjet response
-            if (isset($responseData['Messages'][0]['Errors'])) {
-                foreach ($responseData['Messages'][0]['Errors'] as $err) {
-                    $errorMessage .= $err['ErrorMessage'] . ' ';
-                }
-            } elseif (!empty($error)) {
-                $errorMessage = $error;
-            } else {
-                $errorMessage = 'Unknown error';
-            }
-            
-           
-            
-            echo json_encode([
-                'success' => false,
-                'message' => "ไม่สามารถส่งอีเมลได้ - กรุณาตรวจสอบการตั้งค่า Mailjet API",
-                'error' => $errorMessage
-            ]);
-            
-          
+            $errorMessage = 'Unknown error';
         }
-    } catch (PDOException $e) {
-        logMessage("ไม่สามารถอัปเดตข้อมูลการส่งอีเมลในฐานข้อมูล: " . $e->getMessage());
+        
+        logMessage("ส่งอีเมลไม่สำเร็จ: $errorMessage");
+        
+        echo json_encode([
+            'success' => false,
+            'message' => "ไม่สามารถส่งอีเมลได้ - กรุณาตรวจสอบการตั้งค่า Brevo API",
+            'error' => $errorMessage
+        ]);
     }
     
 } catch (PDOException $e) {
