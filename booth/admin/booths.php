@@ -256,10 +256,6 @@ function sortUrl($column, $currentSort, $currentDirection, $filter, $search) {
     return $url;
 }
 
-// Function to format currency
-function formatCurrency($amount) {
-    return number_format($amount, 2) . ' บาท';
-}
 
 // Updated function to get status badge based on order status
 function getStatusBadge($boothStatus, $orderStatus, $hasOrder) {
