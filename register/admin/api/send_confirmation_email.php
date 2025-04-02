@@ -220,91 +220,91 @@ try {
     // Plain text version of the email
     $text_message = strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message));
     
-    // ส่วนที่แก้ไข: เปลี่ยนจาก Brevo API เป็น PHPMailer
-    logMessage("กำลังส่งอีเมลผ่าน PHPMailer ไปยัง: $email", 2);
-    
-    // ตรวจสอบว่ามีไฟล์ PHPMailer หรือไม่ และ require ถ้ามี
+    // Attempt to send with PHPMailer
     $phpmailer_paths = [
-        dirname(__DIR__) . '/vendor/autoload.php',
-        __DIR__ . '/vendor/autoload.php',
-        dirname(dirname(__DIR__)) . '/vendor/autoload.php',
-        '../../vendor/autoload.php'
+        __DIR__ . '/PHPMailer/src/',
+        __DIR__ . '/vendor/phpmailer/phpmailer/src/',
+        dirname(__DIR__) . '/vendor/phpmailer/phpmailer/src/',
+        '/var/www/html/vendor/phpmailer/phpmailer/src/'
     ];
     
-    $phpmailer_loaded = false;
+    $phpmailer_available = false;
     
     foreach ($phpmailer_paths as $path) {
-        if (file_exists($path)) {
-            require_once $path;
-            $phpmailer_loaded = true;
-            logMessage("โหลด PHPMailer จาก: $path", 2);
+        if (file_exists($path . 'PHPMailer.php')) {
+            require_once $path . 'Exception.php';
+            require_once $path . 'PHPMailer.php';
+            require_once $path . 'SMTP.php';
+            $phpmailer_available = true;
+            logMessage("PHPMailer found at: $path", 2);
             break;
         }
     }
     
-    if (!$phpmailer_loaded) {
-        // ถ้าไม่พบไฟล์ autoload ให้ลอง require ไฟล์โดยตรง
-        $direct_paths = [
-            dirname(__DIR__) . '/lib/phpmailer/PHPMailer.php',
-            __DIR__ . '/lib/phpmailer/PHPMailer.php',
-            dirname(dirname(__DIR__)) . '/lib/phpmailer/PHPMailer.php',
-            '../../lib/phpmailer/PHPMailer.php'
-        ];
-        
-        foreach ($direct_paths as $path) {
-            if (file_exists($path)) {
-                require_once $path;
-                $phpmailer_loaded = true;
-                logMessage("โหลด PHPMailer โดยตรงจาก: $path", 2);
-                break;
+    // Send email using PHPMailer if available
+    if ($phpmailer_available) {
+        try {
+            // สิ่งสำคัญ: ต้องใช้อีเมล SMTP สำหรับทั้ง Login และ From address
+            $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+            $mail->CharSet = 'UTF-8';
+            $mail->isSMTP();
+            $mail->Host = 'smtp-relay.brevo.com';
+            $mail->SMTPAuth = true;
+            $mail->Username = '89606e001@smtp-brevo.com';  // อีเมลสำหรับล็อกอิน
+            $mail->Password = 'SagC4Lpy5qK96NUk';
+            $mail->SMTPSecure = 'tls';
+            $mail->Port = 587;
+            
+            // Enable verbose debug output
+            $mail->SMTPDebug = 2;
+            $mail->Debugoutput = function($str, $level) {
+                logMessage("SMTP DEBUG[$level]: $str", 3);
+            };
+            
+            // สิ่งสำคัญ: ต้องตั้งค่า From เป็นอีเมลเดียวกับที่ใช้ Login
+            $mail->setFrom('89606e001@smtp-brevo.com', 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ');
+            $mail->addReplyTo('arts@rmutsb.ac.th', 'คณะศิลปศาสตร์');
+            
+            // Add recipient
+            $mail->addAddress($email, $fullname);
+            
+            // Set email subject and body
+            $mail->Subject = $subject;
+            $mail->isHTML(true);
+            $mail->Body = $message;
+            $mail->AltBody = $text_message;
+            
+            // Send the email
+            $result = $mail->send();
+            
+            if ($result) {
+                logMessage("ส่งอีเมลสำเร็จ");
+                
+                echo json_encode([
+                    'success' => true,
+                    'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
+                    'method' => 'Brevo SMTP via PHPMailer'
+                ]);
+            } else {
+                throw new Exception($mail->ErrorInfo);
             }
+        } catch (Exception $e) {
+            $errorMessage = $e->getMessage();
+            logMessage("PHPMailer error: $errorMessage", 2);
+            
+            echo json_encode([
+                'success' => false,
+                'message' => "ไม่สามารถส่งอีเมลได้ - " . $errorMessage,
+                'error' => $errorMessage
+            ]);
         }
-    }
-    
-    if (!$phpmailer_loaded) {
-        throw new Exception("ไม่พบไฟล์ PHPMailer กรุณาติดตั้ง PHPMailer");
-    }
-    
-    // เริ่มใช้งาน PHPMailer
-    $mail = new PHPMailer\PHPMailer\PHPMailer(true);
-    
-    try {
-        // ตั้งค่า SMTP
-        $mail->CharSet = "UTF-8";
-        $mail->Host = 'mail.asefa.co.th'; // SMTP server
-        $mail->SMTPAuth = true;
-        $mail->SMTPAutoTLS = false;
-        $mail->Username = 'csd@asefa.co.th'; // SMTP username
-        $mail->Password = 'vk:uak2025'; // SMTP password
-        $mail->Port = 567;
-        
-        // ตั้งค่าอีเมล
-        $mail->setFrom('csd@asefa.co.th', 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ');
-        $mail->addReplyTo('arts@rmutsb.ac.th', 'คณะศิลปศาสตร์');
-        $mail->addAddress($email, $fullname);
-        $mail->Subject = $subject;
-        $mail->isHTML(true);
-        $mail->Body = $message;
-        $mail->AltBody = $text_message;
-        
-        // ส่งอีเมล
-        $mail->send();
-        
-        logMessage("ส่งอีเมลสำเร็จ");
-        
-        echo json_encode([
-            'success' => true,
-            'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
-            'method' => 'PHPMailer'
-        ]);
-    } catch (Exception $e) {
-        $errorMessage = $mail->ErrorInfo;
-        logMessage("ส่งอีเมลไม่สำเร็จ: $errorMessage");
+    } else {
+        logMessage("PHPMailer not found", 2);
         
         echo json_encode([
             'success' => false,
-            'message' => "ไม่สามารถส่งอีเมลได้",
-            'error' => $errorMessage
+            'message' => "ไม่พบ PHPMailer ไม่สามารถส่งอีเมลได้",
+            'error' => "PHPMailer library not found"
         ]);
     }
     
