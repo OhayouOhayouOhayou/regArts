@@ -220,97 +220,164 @@ try {
     // Plain text version of the email
     $text_message = strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message));
     
-    // Brevo API configuration
-    $api_key = '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';
-    $url = 'https://api.brevo.com/v3/smtp/email';
-    
-    $sender_email = 'arts@rmutsb.ac.th'; // Change to your email
+    // Directly send email using mail() function
     $sender_name = 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ';
+    $sender_email = 'arts@rmutsb.ac.th'; // This will be the Reply-To address
     
-    // Prepare the request data for Brevo
-    $data = [
-        'sender' => [
-            'email' => $sender_email,
-            'name' => $sender_name
-        ],
-        'to' => [
-            [
-                'email' => $email,
-                'name' => $fullname
-            ]
-        ],
-        'subject' => $subject,
-        'htmlContent' => $message,
-        'textContent' => $text_message,
-        'replyTo' => [
-            'email' => 'arts@rmutsb.ac.th',
-            'name' => 'คณะศิลปศาสตร์'
-        ]
+    // Prepare mail headers
+    $headers = [
+        'MIME-Version: 1.0',
+        'Content-type: text/html; charset=utf-8',
+        'From: ' . $sender_name . ' <89606e001@smtp-brevo.com>', // Using Brevo SMTP credentials for From
+        'Reply-To: ' . $sender_email,
+        'X-Mailer: PHP/' . phpversion()
     ];
     
-    logMessage("กำลังส่งอีเมลผ่าน Brevo API ไปยัง: $email", 2);
+    logMessage("กำลังส่งอีเมลไปยัง: $email", 2);
+
+    // For Brevo SMTP with PHP mail() function, we need to use the mail() function directly
+    // But first, we need to set the mail configuration to use SMTP
     
-    // Initialize cURL request
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Content-Type: application/json',
-        'api-key: ' . $api_key
-    ]);
+    // Configure PHP mail to use SMTP
+    ini_set('SMTP', 'smtp-relay.brevo.com');
+    ini_set('smtp_port', 587);
+    ini_set('sendmail_from', '89606e001@smtp-brevo.com');
     
-    // Execute the request
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $error = curl_error($ch);
+    // Set additional SMTP authentication parameters if needed
+    putenv('SMTPAUTH=LOGIN');
+    putenv('SMTPAUTHUSER=89606e001@smtp-brevo.com');
+    putenv('SMTPAUTHPASS=SagC4Lpy5qK96NUk');
     
-    curl_close($ch);
+    // Fallback to using PHPMailer if available
+    $phpmailer_paths = [
+        __DIR__ . '/PHPMailer/src/',
+        __DIR__ . '/vendor/phpmailer/phpmailer/src/',
+        dirname(__DIR__) . '/vendor/phpmailer/phpmailer/src/',
+    ];
     
-    // Log detailed API response
-    logMessage("Brevo API Response Code: $httpCode", 2);
-    if (!empty($response)) {
-        logMessage("Brevo API Response: $response", 3);
-    }
-    if (!empty($error)) {
-        logMessage("Brevo API Error: $error", 2);
-    }
+    $phpmailer_available = false;
     
-    // Parse JSON response
-    $responseData = json_decode($response, true);
-    
-    // Check if email was sent successfully
-    if ($httpCode >= 200 && $httpCode < 300 && isset($responseData['messageId'])) {
-        // Success
-        $messageId = $responseData['messageId'];
-        logMessage("ส่งอีเมลสำเร็จ, Message ID: $messageId");
-        
-        echo json_encode([
-            'success' => true,
-            'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
-            'method' => 'Brevo API',
-            'message_id' => $messageId
-        ]);
-    } else {
-        // Failure
-        $errorMessage = '';
-        
-        // Try to extract error from Brevo response
-        if (isset($responseData['message'])) {
-            $errorMessage = $responseData['message'];
-        } elseif (!empty($error)) {
-            $errorMessage = $error;
-        } else {
-            $errorMessage = 'Unknown error';
+    foreach ($phpmailer_paths as $path) {
+        if (file_exists($path . 'PHPMailer.php')) {
+            require_once $path . 'Exception.php';
+            require_once $path . 'PHPMailer.php';
+            require_once $path . 'SMTP.php';
+            $phpmailer_available = true;
+            logMessage("PHPMailer found at: $path", 2);
+            break;
         }
+    }
+    
+    // Send email using PHPMailer if available, otherwise try PHP mail()
+    if ($phpmailer_available) {
+        try {
+            logMessage("Sending with PHPMailer via Brevo SMTP", 2);
+            
+            $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+            $mail->CharSet = 'UTF-8';
+            $mail->isSMTP();
+            $mail->Host = 'smtp-relay.brevo.com';
+            $mail->SMTPAuth = true;
+            $mail->Username = '89606e001@smtp-brevo.com';
+            $mail->Password = 'SagC4Lpy5qK96NUk';
+            $mail->SMTPSecure = 'tls';
+            $mail->Port = 587;
+            
+            // Enable verbose debug output
+            $mail->SMTPDebug = 2;
+            
+            // Redirect SMTP debug output to log file
+            $mail->Debugoutput = function($str, $level) {
+                logMessage("SMTP DEBUG[$level]: $str", 3);
+            };
+            
+            // Set sender
+            $mail->setFrom('89606e001@smtp-brevo.com', $sender_name);
+            $mail->addReplyTo($sender_email, $sender_name);
+            
+            // Add recipient
+            $mail->addAddress($email, $fullname);
+            
+            // Set email subject and body
+            $mail->Subject = $subject;
+            $mail->isHTML(true);
+            $mail->Body = $message;
+            $mail->AltBody = $text_message;
+            
+            // Send the email
+            $result = $mail->send();
+            
+            logMessage("PHPMailer result: " . ($result ? "Success" : "Failed"), 2);
+            
+            if ($result) {
+                logMessage("ส่งอีเมลสำเร็จ");
+                
+                echo json_encode([
+                    'success' => true,
+                    'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
+                    'method' => 'Brevo SMTP via PHPMailer'
+                ]);
+            } else {
+                throw new Exception($mail->ErrorInfo);
+            }
+        } catch (Exception $e) {
+            $errorMessage = $e->getMessage();
+            logMessage("PHPMailer error: $errorMessage", 2);
+            
+            // Fall back to PHP mail() if PHPMailer fails
+            logMessage("Falling back to PHP mail()", 2);
+            
+            // Try PHP's mail() function as a fallback
+            $mail_sent = mail($email, $subject, $message, implode("\r\n", $headers));
+            
+            if ($mail_sent) {
+                logMessage("ส่งอีเมลสำเร็จผ่าน mail() function");
+                
+                echo json_encode([
+                    'success' => true,
+                    'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
+                    'method' => 'PHP mail()'
+                ]);
+            } else {
+                logMessage("ส่งอีเมลไม่สำเร็จผ่าน mail() function");
+                
+                echo json_encode([
+                    'success' => false,
+                    'message' => "ไม่สามารถส่งอีเมลได้",
+                    'error' => error_get_last()['message'] ?? 'Unknown error'
+                ]);
+            }
+        }
+    } else {
+        // PHPMailer not available, try PHP mail() directly
+        logMessage("PHPMailer not found, using PHP mail() directly", 2);
         
-        logMessage("ส่งอีเมลไม่สำเร็จ: $errorMessage");
-        
-        echo json_encode([
-            'success' => false,
-            'message' => "ไม่สามารถส่งอีเมลได้ - กรุณาตรวจสอบการตั้งค่า Brevo API",
-            'error' => $errorMessage
-        ]);
+        try {
+            // Try PHP's mail() function
+            $mail_sent = mail($email, $subject, $message, implode("\r\n", $headers));
+            
+            if ($mail_sent) {
+                logMessage("ส่งอีเมลสำเร็จผ่าน mail() function");
+                
+                echo json_encode([
+                    'success' => true,
+                    'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
+                    'method' => 'PHP mail()'
+                ]);
+            } else {
+                $error = error_get_last();
+                throw new Exception($error['message'] ?? 'Unknown error');
+            }
+        } catch (Exception $e) {
+            $errorMessage = $e->getMessage();
+            logMessage("ส่งอีเมลไม่สำเร็จ: $errorMessage");
+            
+            echo json_encode([
+                'success' => false,
+                'message' => "ไม่สามารถส่งอีเมลได้",
+                'error' => $errorMessage
+            ]);
+        }
     }
     
 } catch (PDOException $e) {
