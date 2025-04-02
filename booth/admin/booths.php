@@ -122,20 +122,281 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
     // Delete booth
     elseif (isset($_POST['action']) && $_POST['action'] === 'delete_booth') {
-        // ... existing delete booth code ...
+        $id = $_POST['id'];
+        
+        // Check if booth is reserved
+        $checkStmt = $conn->prepare("SELECT status FROM booths WHERE id = ?");
+        $checkStmt->bind_param("i", $id);
+        $checkStmt->execute();
+        $checkResult = $checkStmt->get_result();
+        $boothStatus = $checkResult->fetch_assoc()['status'];
+        
+        if ($boothStatus !== 'available') {
+            $message = "ไม่สามารถลบบูธที่มีการจองแล้วได้";
+            $messageType = "danger";
+        } else {
+            $stmt = $conn->prepare("DELETE FROM booths WHERE id = ?");
+            $stmt->bind_param("i", $id);
+            
+            if ($stmt->execute()) {
+                $message = "ลบบูธเรียบร้อยแล้ว";
+                $messageType = "success";
+            } else {
+                $message = "เกิดข้อผิดพลาด: " . $conn->error;
+                $messageType = "danger";
+            }
+        }
     }
-    
     // Reset booth status (make available)
     elseif (isset($_POST['action']) && $_POST['action'] === 'reset_booth') {
-        // ... existing reset booth code ...
-    }
-    // Update payment status
+        $id = $_POST['id'];
+        
+        // เริ่ม transaction
+        $conn->begin_transaction();
+        
+        try {
+            // ตรวจสอบว่ามีข้อมูลใน order_items หรือไม่
+            $getOrderStmt = $conn->prepare("
+                SELECT oi.order_id, b.booth_number, b.zone, b.floor, b.status,
+                       o.customer_name, o.customer_phone, o.customer_email, o.created_at
+                FROM booths b
+                LEFT JOIN order_items oi ON b.id = oi.booth_id
+                LEFT JOIN orders o ON oi.order_id = o.id
+                WHERE b.id = ?
+            ");
+            $getOrderStmt->bind_param("i", $id);
+            $getOrderStmt->execute();
+            $result = $getOrderStmt->get_result();
+            $boothData = $result->fetch_assoc();
+            
+            if ($boothData) {
+                // บันทึกข้อมูลการยกเลิกไว้ในประวัติ
+                if (!empty($boothData['customer_name'])) {
+                    $cancelledBy = 'admin';
+                    $reason = 'รีเซ็ตโดยผู้ดูแลระบบ';
+                    
+                    $logStmt = $conn->prepare("INSERT INTO cancellation_logs 
+                        (booth_id, booth_number, zone, floor, customer_name, customer_phone, customer_email, reserved_at, cancelled_by, cancellation_reason) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                    $logStmt->bind_param("iississsss", 
+                        $id, 
+                        $boothData['booth_number'], 
+                        $boothData['zone'], 
+                        $boothData['floor'], 
+                        $boothData['customer_name'], 
+                        $boothData['customer_phone'], 
+                        $boothData['customer_email'], 
+                        $boothData['created_at'], 
+                        $cancelledBy, 
+                        $reason
+                    );
+                    $logStmt->execute();
+                }
+                
+                // อัพเดตสถานะใน orders ถ้ามี
+                if (!empty($boothData['order_id'])) {
+                    $orderId = $boothData['order_id'];
+                    
+                    // ตรวจสอบจำนวนบูธในออเดอร์นี้
+                    $countBoothsStmt = $conn->prepare("SELECT COUNT(*) as count FROM order_items WHERE order_id = ?");
+                    $countBoothsStmt->bind_param("i", $orderId);
+                    $countBoothsStmt->execute();
+                    $boothCount = $countBoothsStmt->get_result()->fetch_assoc()['count'];
+                    
+                    if ($boothCount <= 1) {
+                        // ถ้าเป็นบูธเดียวในออเดอร์ ให้อัพเดตสถานะออเดอร์เป็น cancelled
+                        $updateOrderStmt = $conn->prepare("
+                            UPDATE orders 
+                            SET payment_status = 'cancelled', 
+                                note = CONCAT(IFNULL(note, ''), '\nยกเลิกโดยแอดมินเมื่อ ', NOW()) 
+                            WHERE id = ?
+                        ");
+                        $updateOrderStmt->bind_param("i", $orderId);
+                        $updateOrderStmt->execute();
+                        
+                        // ลบรายการใน order_items
+                        $deleteItemsStmt = $conn->prepare("DELETE FROM order_items WHERE order_id = ? AND booth_id = ?");
+                        $deleteItemsStmt->bind_param("ii", $orderId, $id);
+                        $deleteItemsStmt->execute();
+                    } else {
+                        // ถ้ามีหลายบูธในออเดอร์เดียวกัน ให้ลบเฉพาะบูธที่ต้องการรีเซ็ต
+                        $deleteItemStmt = $conn->prepare("DELETE FROM order_items WHERE order_id = ? AND booth_id = ?");
+                        $deleteItemStmt->bind_param("ii", $orderId, $id);
+                        $deleteItemStmt->execute();
+                    }
+                }
+            }
+            
+            // รีเซ็ตสถานะบูธ
+            $resetBoothStmt = $conn->prepare("
+                UPDATE booths 
+                SET status = 'available', 
+                    payment_status = 'unpaid',
+                    reserved_by = NULL,
+                    note = CONCAT(IFNULL(note, ''), '\nรีเซ็ตโดยผู้ดูแลระบบเมื่อ ', NOW()) 
+                WHERE id = ?
+            ");
+            $resetBoothStmt->bind_param("i", $id);
+            $resetBoothStmt->execute();
+            
+            // ยืนยัน transaction
+            $conn->commit();
+            
+            $message = "รีเซ็ตสถานะบูธเรียบร้อยแล้ว";
+            $messageType = "success";
+        } catch (Exception $e) {
+            // ยกเลิก transaction หากเกิดข้อผิดพลาด
+            $conn->rollback();
+            
+            $message = "เกิดข้อผิดพลาด: " . $e->getMessage();
+            $messageType = "danger";
+        }
+    }// เพิ่มการประมวลผลสำหรับการอัพเดตสถานะการชำระเงิน
     elseif (isset($_POST['action']) && $_POST['action'] === 'update_payment_status') {
-        // ... existing update payment status code ...
+        $boothId = $_POST['booth_id'];
+        $paymentStatus = $_POST['payment_status'];
+        
+        // เริ่ม transaction
+        $conn->begin_transaction();
+        
+        try {
+            // ดึงข้อมูลบูธและคำสั่งซื้อที่เกี่ยวข้อง
+            $getDataStmt = $conn->prepare("
+                SELECT oi.order_id, b.status
+                FROM booths b
+                LEFT JOIN order_items oi ON b.id = oi.booth_id
+                WHERE b.id = ?
+            ");
+            $getDataStmt->bind_param("i", $boothId);
+            $getDataStmt->execute();
+            $result = $getDataStmt->get_result();
+            $data = $result->fetch_assoc();
+            
+            if (!$data) {
+                throw new Exception("ไม่พบข้อมูลบูธ");
+            }
+            
+            // อัพเดตสถานะบูธ
+            $boothStatus = ($paymentStatus === 'paid') ? 'paid' : (($paymentStatus === 'pending') ? 'pending_payment' : 'reserved');
+            $updateBoothStmt = $conn->prepare("
+                UPDATE booths 
+                SET status = ?, 
+                    payment_status = ?,
+                    note = CONCAT(IFNULL(note, ''), '\nอัพเดตสถานะการชำระเงินเป็น ', ? ,' โดยแอดมินเมื่อ ', NOW()) 
+                WHERE id = ?
+            ");
+            $updateBoothStmt->bind_param("sssi", $boothStatus, $paymentStatus, $paymentStatus, $boothId);
+            $updateBoothStmt->execute();
+            
+            // อัพเดตสถานะคำสั่งซื้อถ้ามี
+            if (!empty($data['order_id'])) {
+                $orderId = $data['order_id'];
+                
+                $updateOrderStmt = $conn->prepare("
+                    UPDATE orders 
+                    SET payment_status = ?, 
+                        note = CONCAT(IFNULL(note, ''), '\nอัพเดตสถานะการชำระเงินเป็น ', ? ,' โดยแอดมินเมื่อ ', NOW()) 
+                    WHERE id = ?
+                ");
+                $updateOrderStmt->bind_param("ssi", $paymentStatus, $paymentStatus, $orderId);
+                $updateOrderStmt->execute();
+            }
+            
+            // ยืนยัน transaction
+            $conn->commit();
+            
+            $message = "อัพเดตสถานะการชำระเงินเป็น " . ucfirst($paymentStatus) . " เรียบร้อยแล้ว";
+            $messageType = "success";
+        } catch (Exception $e) {
+            // ยกเลิก transaction หากเกิดข้อผิดพลาด
+            $conn->rollback();
+            
+            $message = "เกิดข้อผิดพลาด: " . $e->getMessage();
+            $messageType = "danger";
+        }
     }
     // Bulk operations
     elseif (isset($_POST['action']) && $_POST['action'] === 'bulk_action') {
-        // ... existing bulk operations code ...
+        if (isset($_POST['booth_ids']) && !empty($_POST['booth_ids'])) {
+            $boothIds = $_POST['booth_ids'];
+            $bulkAction = $_POST['bulk_action'];
+            
+            // Count successfully processed booths
+            $successCount = 0;
+            
+            if ($bulkAction === 'delete') {
+                foreach ($boothIds as $id) {
+                    // Check if booth is reserved
+                    $checkStmt = $conn->prepare("SELECT status FROM booths WHERE id = ?");
+                    $checkStmt->bind_param("i", $id);
+                    $checkStmt->execute();
+                    $checkResult = $checkStmt->get_result();
+                    $boothStatus = $checkResult->fetch_assoc()['status'];
+                    
+                    if ($boothStatus === 'available') {
+                        $stmt = $conn->prepare("DELETE FROM booths WHERE id = ?");
+                        $stmt->bind_param("i", $id);
+                        
+                        if ($stmt->execute()) {
+                            $successCount++;
+                        }
+                    }
+                }
+                
+                $message = "ลบบูธจำนวน $successCount รายการเรียบร้อยแล้ว";
+                $messageType = "success";
+            }
+            elseif ($bulkAction === 'reset') {
+                foreach ($boothIds as $id) {
+                    $stmt = $conn->prepare("UPDATE booths SET status = 'available', customer_name = NULL, customer_email = NULL, customer_phone = NULL, customer_company = NULL, reserved_at = NULL, payment_status = 'unpaid', payment_method = NULL, payment_reference = NULL, payment_amount = 0, payment_date = NULL, note = CONCAT(IFNULL(note, ''), '\nรีเซ็ตโดยผู้ดูแลระบบเมื่อ ', NOW()) WHERE id = ?");
+                    $stmt->bind_param("i", $id);
+                    
+                    if ($stmt->execute()) {
+                        $successCount++;
+                        
+                        // Log cancellation
+                        $getBoothStmt = $conn->prepare("SELECT booth_number, zone, floor, customer_name, customer_phone, customer_email, reserved_at FROM booths WHERE id = ?");
+                        $getBoothStmt->bind_param("i", $id);
+                        $getBoothStmt->execute();
+                        $boothData = $getBoothStmt->get_result()->fetch_assoc();
+                        
+                        if (!empty($boothData['customer_name'])) {
+                            $cancelledBy = 'admin';
+                            $reason = 'รีเซ็ตโดยผู้ดูแลระบบ (การดำเนินการแบบกลุ่ม)';
+                            
+                            $logStmt = $conn->prepare("INSERT INTO cancellation_logs (booth_id, booth_number, zone, floor, customer_name, customer_phone, customer_email, reserved_at, cancelled_by, cancellation_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                            $logStmt->bind_param("iississsss", $id, $boothData['booth_number'], $boothData['zone'], $boothData['floor'], $boothData['customer_name'], $boothData['customer_phone'], $boothData['customer_email'], $boothData['reserved_at'], $cancelledBy, $reason);
+                            $logStmt->execute();
+                        }
+                    }
+                }
+                
+                $message = "รีเซ็ตสถานะบูธจำนวน $successCount รายการเรียบร้อยแล้ว";
+                $messageType = "success";
+            }elseif ($bulkAction === 'update_price') {
+                $newPrice = $_POST['bulk_price'];
+                
+                if (!empty($newPrice) && is_numeric($newPrice)) {
+                    foreach ($boothIds as $id) {
+                        $stmt = $conn->prepare("UPDATE booths SET price = ? WHERE id = ?");
+                        $stmt->bind_param("di", $newPrice, $id);
+                        
+                        if ($stmt->execute()) {
+                            $successCount++;
+                        }
+                    }
+                    
+                    $message = "อัปเดตราคาบูธจำนวน $successCount รายการเรียบร้อยแล้ว";
+                    $messageType = "success";
+                } else {
+                    $message = "กรุณาระบุราคาที่ถูกต้อง";
+                    $messageType = "danger";
+                }
+            }
+        } else {
+            $message = "กรุณาเลือกบูธที่ต้องการดำเนินการ";
+            $messageType = "warning";
+        }
     }
 }
 
@@ -145,11 +406,11 @@ $params = [];
 $types = "";
 
 if ($filter === 'available') {
-    $whereClause = "WHERE b.status = 'available'";
+    $whereClause = "WHERE oi.booth_id IS NULL";
 } elseif ($filter === 'reserved') {
-    $whereClause = "WHERE b.status IN ('reserved', 'pending_payment')";
+    $whereClause = "WHERE oi.booth_id IS NOT NULL AND o.payment_status IN ('unpaid', 'pending')";
 } elseif ($filter === 'paid') {
-    $whereClause = "WHERE b.status = 'paid'";
+    $whereClause = "WHERE oi.booth_id IS NOT NULL AND o.payment_status = 'paid'";
 } elseif ($filter === 'zone_a') {
     $whereClause = "WHERE b.zone = 'A'";
 } elseif ($filter === 'zone_b') {
@@ -208,7 +469,7 @@ $totalPages = ceil($totalCount / $limit);
 $query = "SELECT b.*, oi.order_id, o.payment_status as order_payment_status, 
           o.customer_name, o.customer_email, o.customer_phone, o.customer_company, 
           o.created_at as order_created_at, o.payment_method, o.payment_reference, 
-          o.payment_amount, o.payment_date
+          o.total_amount, o.payment_date
           FROM booths b
           LEFT JOIN order_items oi ON b.id = oi.booth_id
           LEFT JOIN orders o ON oi.order_id = o.id
@@ -255,7 +516,6 @@ function sortUrl($column, $currentSort, $currentDirection, $filter, $search) {
     if (!empty($search)) $url .= "&search=" . urlencode($search);
     return $url;
 }
-
 
 // Updated function to get status badge based on order status
 function getStatusBadge($boothStatus, $orderStatus, $hasOrder) {
@@ -702,7 +962,7 @@ function getStatusBadge($boothStatus, $orderStatus, $hasOrder) {
                                     data-booth-number="โซน <?php echo htmlspecialchars($booth['zone']); ?> หมายเลข <?php echo htmlspecialchars($booth['booth_number']); ?>"
                                     data-customer-name="<?php echo htmlspecialchars($booth['customer_name']); ?>"
                                     data-payment-date="<?php echo formatDateTime($booth['payment_date']); ?>"
-                                    data-payment-amount="<?php echo formatCurrency($booth['payment_amount']); ?>"
+                                    data-payment-amount="<?php echo formatCurrency($booth['total_amount']); ?>"
                                     data-payment-method="<?php echo htmlspecialchars($booth['payment_method']); ?>"
                                     title="คลิกเพื่อดูหลักฐานการชำระเงิน">
                                     </i>
