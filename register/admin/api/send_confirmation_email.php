@@ -132,7 +132,7 @@ try {
     
     logMessage("ดึงข้อมูลการลงทะเบียนสำเร็จ");
     
-  
+    
     
     // Set email subject
     $subject = 'ยืนยันการลงทะเบียนการสัมมนา - มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ';
@@ -219,34 +219,36 @@ try {
     
     logMessage("สร้างเนื้อหาอีเมลเรียบร้อย");
     
-    // SMTP2GO API configuration
-    $api_key = 'api-0B74F21D2CA14971AA12C2828ABD4F5C'; 
-    $url = 'https://api.smtp2go.com/v3/email/send';
+    // Mailjet API configuration
+    $api_key = '829cbd1ae749929b8ae832c63f6fe511'; 
+    $api_secret = '3be69cc8ed38c1e0e5456fd5904b4465';
+    $url = 'https://api.mailjet.com/v3.1/send';
     
     $sender_email = 'arts@rmutsb.ac.th';
-    $sender_name = 'Faculty of Liberal Arts RMUTSB';
+    $sender_name = 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ';
     
-    // เตรียมข้อมูลสำหรับ SMTP2GO API
+    // Prepare the request data for Mailjet
     $data = [
-        'api_key' => $api_key,
-        'to' => ["$fullname <$email>"],
-        'sender' => "$sender_name <$sender_email>",
-        'subject' => $subject,
-        'html_body' => $message,
-        'text_body' => strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message)),
-        'custom_headers' => [
+        'Messages' => [
             [
-                'header' => 'Reply-To',
-                'value' => $sender_email
-            ],
-            [
-                'header' => 'X-Registration-ID',
-                'value' => (string)$registration_id
+                'From' => [
+                    'Email' => $sender_email,
+                    'Name' => $sender_name
+                ],
+                'To' => [
+                    [
+                        'Email' => $email,
+                        'Name' => $fullname
+                    ]
+                ],
+                'Subject' => $subject,
+                'HTMLPart' => $message,
+                'TextPart' => strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message))
             ]
         ]
     ];
     
-    logMessage("กำลังส่งอีเมลผ่าน SMTP2GO API ไปยัง: $email", 2);
+    logMessage("กำลังส่งอีเมลผ่าน Mailjet API ไปยัง: $email", 2);
     
     // Initialize cURL request
     $ch = curl_init($url);
@@ -256,8 +258,7 @@ try {
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'Content-Type: application/json'
     ]);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30); // เพิ่มระยะเวลาให้นานขึ้น
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // สำหรับการทดสอบเท่านั้น ควรเปิดใช้ในโหมดการผลิต
+    curl_setopt($ch, CURLOPT_USERPWD, $api_key . ':' . $api_secret);
     
     // Execute the request
     $response = curl_exec($ch);
@@ -267,12 +268,12 @@ try {
     curl_close($ch);
     
     // Log detailed API response
-    logMessage("SMTP2GO API Response Code: $httpCode", 2);
+    logMessage("Mailjet API Response Code: $httpCode", 2);
     if (!empty($response)) {
-        logMessage("SMTP2GO API Response: $response", 3);
+        logMessage("Mailjet API Response: $response", 3);
     }
     if (!empty($error)) {
-        logMessage("SMTP2GO API Error: $error", 2);
+        logMessage("Mailjet API Error: $error", 2);
     }
     
     // Parse JSON response
@@ -280,37 +281,38 @@ try {
     
     // Update email log with API response
     try {
-        if ($httpCode >= 200 && $httpCode < 300 && isset($responseData['data']['succeeded']) && $responseData['data']['succeeded'] > 0) {
+        if ($httpCode >= 200 && $httpCode < 300 && isset($responseData['Messages'][0]['Status']) && $responseData['Messages'][0]['Status'] === 'success') {
             // Success
-            $messageId = isset($responseData['data']['email_id']) ? $responseData['data']['email_id'] : '';
+            $messageId = isset($responseData['Messages'][0]['To'][0]['MessageID']) ? $responseData['Messages'][0]['To'][0]['MessageID'] : '';
             
           
             
             echo json_encode([
                 'success' => true,
                 'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
-                'method' => 'SMTP2GO API',
+                'method' => 'Mailjet API',
                 'message_id' => $messageId
             ]);
         } else {
             // Failure
             $errorMessage = '';
             
-            // Try to extract detailed error from SMTP2GO response
-            if (isset($responseData['data']['error'])) {
-                $errorMessage = $responseData['data']['error'];
-            } elseif (isset($responseData['error_code'])) {
-                $errorMessage = "Error code: " . $responseData['error_code'] . " - " . ($responseData['error'] ?? 'Unknown error');
+            // Try to extract detailed error from Mailjet response
+            if (isset($responseData['Messages'][0]['Errors'])) {
+                foreach ($responseData['Messages'][0]['Errors'] as $err) {
+                    $errorMessage .= $err['ErrorMessage'] . ' ';
+                }
             } elseif (!empty($error)) {
                 $errorMessage = $error;
             } else {
                 $errorMessage = 'Unknown error';
             }
-        
+            
+           
             
             echo json_encode([
                 'success' => false,
-                'message' => "ไม่สามารถส่งอีเมลได้ - กรุณาตรวจสอบการตั้งค่า SMTP2GO API",
+                'message' => "ไม่สามารถส่งอีเมลได้ - กรุณาตรวจสอบการตั้งค่า Mailjet API",
                 'error' => $errorMessage
             ]);
             
