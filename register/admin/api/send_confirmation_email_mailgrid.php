@@ -132,62 +132,7 @@ try {
     
     logMessage("ดึงข้อมูลการลงทะเบียนสำเร็จ");
     
-    // Check if email_logs table exists and create if needed
-    try {
-        $stmt = $pdo->query("SHOW TABLES LIKE 'email_logs'");
-        if ($stmt->rowCount() == 0) {
-            logMessage("ไม่พบตาราง email_logs กำลังสร้างตาราง...");
-            
-            // Create email_logs table with additional fields for SMTP2GO
-            $sql = "CREATE TABLE `email_logs` (
-                `id` int(11) NOT NULL AUTO_INCREMENT,
-                `registration_id` int(11) NOT NULL,
-                `email` varchar(255) NOT NULL,
-                `subject` varchar(255) NOT NULL,
-                `sent_at` datetime NOT NULL,
-                `status` enum('success','failed','pending') NOT NULL DEFAULT 'pending',
-                `error_message` text,
-                `method` varchar(255),
-                `response_code` int(11),
-                `response_body` text,
-                `message_id` varchar(255),
-                `email_service` varchar(50),
-                PRIMARY KEY (`id`),
-                KEY `registration_id` (`registration_id`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
-            
-            $pdo->exec($sql);
-            logMessage("สร้างตาราง email_logs สำเร็จ");
-        } else {
-            logMessage("พบตาราง email_logs แล้ว");
-            
-            // Check if we need to add additional columns for SMTP2GO
-            try {
-                $columnsResult = $pdo->query("SHOW COLUMNS FROM email_logs LIKE 'email_service'");
-                if ($columnsResult->rowCount() == 0) {
-                    $pdo->exec("ALTER TABLE email_logs ADD COLUMN message_id varchar(255) AFTER response_body");
-                    $pdo->exec("ALTER TABLE email_logs ADD COLUMN email_service varchar(50) AFTER message_id");
-                    logMessage("เพิ่มคอลัมน์เพิ่มเติมในตาราง email_logs สำหรับ SMTP2GO", 2);
-                }
-            } catch (PDOException $e) {
-                logMessage("ไม่สามารถตรวจสอบหรือเพิ่มคอลัมน์ในตาราง email_logs: " . $e->getMessage(), 2);
-            }
-        }
-    } catch (PDOException $e) {
-        logMessage("เกิดข้อผิดพลาดในการตรวจสอบหรือสร้างตาราง email_logs: " . $e->getMessage());
-    }
     
-    // Record initial email request in database
-    try {
-        $stmt = $pdo->prepare("INSERT INTO email_logs (registration_id, email, subject, sent_at, status, method, email_service, error_message) 
-                               VALUES (?, ?, ?, NOW(), 'pending', 'API', 'SMTP2GO', 'เริ่มกระบวนการส่งอีเมล')");
-        $stmt->execute([$registration_id, $email, 'ยืนยันการลงทะเบียนการสัมมนา - มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ']);
-        $email_log_id = $pdo->lastInsertId();
-        
-        logMessage("บันทึกข้อมูลการส่งอีเมลในฐานข้อมูล ID: $email_log_id");
-    } catch (PDOException $e) {
-        logMessage("ไม่สามารถบันทึกข้อมูลการส่งอีเมลในฐานข้อมูล: " . $e->getMessage());
-    }
     
     // Set email subject
     $subject = 'ยืนยันการลงทะเบียนการสัมมนา - มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ';
@@ -274,34 +219,36 @@ try {
     
     logMessage("สร้างเนื้อหาอีเมลเรียบร้อย");
     
-    // SMTP2GO API configuration
-    $api_key = 'api-0B74F21D2CA14971AA12C2828ABD4F5C'; 
-    $url = 'https://api.smtp2go.com/v3/email/send';
+    // Mailjet API configuration
+    $api_key = '829cbd1ae749929b8ae832c63f6fe511'; 
+    $api_secret = '3be69cc8ed38c1e0e5456fd5904b4465';
+    $url = 'https://api.mailjet.com/v3.1/send';
     
     $sender_email = 'arts@rmutsb.ac.th';
     $sender_name = 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ';
     
-    // เตรียมข้อมูลสำหรับ SMTP2GO API
+    // Prepare the request data for Mailjet
     $data = [
-        'api_key' => $api_key,
-        'to' => ["$fullname <$email>"],
-        'sender' => "$sender_name <$sender_email>",
-        'subject' => $subject,
-        'html_body' => $message,
-        'text_body' => strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message)),
-        'custom_headers' => [
+        'Messages' => [
             [
-                'header' => 'Reply-To',
-                'value' => $sender_email
-            ],
-            [
-                'header' => 'X-Registration-ID',
-                'value' => (string)$registration_id
+                'From' => [
+                    'Email' => $sender_email,
+                    'Name' => $sender_name
+                ],
+                'To' => [
+                    [
+                        'Email' => $email,
+                        'Name' => $fullname
+                    ]
+                ],
+                'Subject' => $subject,
+                'HTMLPart' => $message,
+                'TextPart' => strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message))
             ]
         ]
     ];
     
-    logMessage("กำลังส่งอีเมลผ่าน SMTP2GO API ไปยัง: $email", 2);
+    logMessage("กำลังส่งอีเมลผ่าน Mailjet API ไปยัง: $email", 2);
     
     // Initialize cURL request
     $ch = curl_init($url);
@@ -311,8 +258,7 @@ try {
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'Content-Type: application/json'
     ]);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30); // เพิ่มระยะเวลาให้นานขึ้น
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // สำหรับการทดสอบเท่านั้น ควรเปิดใช้ในโหมดการผลิต
+    curl_setopt($ch, CURLOPT_USERPWD, $api_key . ':' . $api_secret);
     
     // Execute the request
     $response = curl_exec($ch);
@@ -322,12 +268,12 @@ try {
     curl_close($ch);
     
     // Log detailed API response
-    logMessage("SMTP2GO API Response Code: $httpCode", 2);
+    logMessage("Mailjet API Response Code: $httpCode", 2);
     if (!empty($response)) {
-        logMessage("SMTP2GO API Response: $response", 3);
+        logMessage("Mailjet API Response: $response", 3);
     }
     if (!empty($error)) {
-        logMessage("SMTP2GO API Error: $error", 2);
+        logMessage("Mailjet API Error: $error", 2);
     }
     
     // Parse JSON response
@@ -335,55 +281,42 @@ try {
     
     // Update email log with API response
     try {
-        if ($httpCode >= 200 && $httpCode < 300 && isset($responseData['data']['succeeded']) && $responseData['data']['succeeded'] > 0) {
+        if ($httpCode >= 200 && $httpCode < 300 && isset($responseData['Messages'][0]['Status']) && $responseData['Messages'][0]['Status'] === 'success') {
             // Success
-            $messageId = isset($responseData['data']['email_id']) ? $responseData['data']['email_id'] : '';
+            $messageId = isset($responseData['Messages'][0]['To'][0]['MessageID']) ? $responseData['Messages'][0]['To'][0]['MessageID'] : '';
             
-            $stmt = $pdo->prepare("UPDATE email_logs SET status = 'success', method = 'API', email_service = 'SMTP2GO', 
-                                   response_code = ?, response_body = ?, message_id = ?, error_message = 'ส่งอีเมลสำเร็จ' 
-                                   WHERE id = ?");
-            $stmt->execute([$httpCode, $response, $messageId, $email_log_id]);
-            logMessage("อัปเดตสถานะการส่งอีเมลในฐานข้อมูลเป็น success");
+          
             
             echo json_encode([
                 'success' => true,
                 'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
-                'method' => 'SMTP2GO API',
+                'method' => 'Mailjet API',
                 'message_id' => $messageId
             ]);
         } else {
             // Failure
             $errorMessage = '';
             
-            // Try to extract detailed error from SMTP2GO response
-            if (isset($responseData['data']['error'])) {
-                $errorMessage = $responseData['data']['error'];
-            } elseif (isset($responseData['error_code'])) {
-                $errorMessage = "Error code: " . $responseData['error_code'] . " - " . ($responseData['error'] ?? 'Unknown error');
+            // Try to extract detailed error from Mailjet response
+            if (isset($responseData['Messages'][0]['Errors'])) {
+                foreach ($responseData['Messages'][0]['Errors'] as $err) {
+                    $errorMessage .= $err['ErrorMessage'] . ' ';
+                }
             } elseif (!empty($error)) {
                 $errorMessage = $error;
             } else {
                 $errorMessage = 'Unknown error';
             }
             
-            $stmt = $pdo->prepare("UPDATE email_logs SET status = 'failed', method = 'API', email_service = 'SMTP2GO', 
-                                  response_code = ?, response_body = ?, error_message = ? 
-                                  WHERE id = ?");
-            $stmt->execute([$httpCode, $response, "ไม่สามารถส่งอีเมลได้: " . $errorMessage, $email_log_id]);
-            logMessage("อัปเดตสถานะการส่งอีเมลในฐานข้อมูลเป็น failed");
+           
             
             echo json_encode([
                 'success' => false,
-                'message' => "ไม่สามารถส่งอีเมลได้ - กรุณาตรวจสอบการตั้งค่า SMTP2GO API",
+                'message' => "ไม่สามารถส่งอีเมลได้ - กรุณาตรวจสอบการตั้งค่า Mailjet API",
                 'error' => $errorMessage
             ]);
             
-            // Add troubleshooting suggestions
-            logMessage("คำแนะนำในการแก้ไขปัญหา SMTP2GO API:");
-            logMessage("1. ตรวจสอบค่า API Key ว่าถูกต้อง");
-            logMessage("2. ตรวจสอบว่า Email Sender (arts@rmutsb.ac.th) ได้รับการยืนยันในบัญชี SMTP2GO แล้ว");
-            logMessage("3. ตรวจสอบว่าบัญชี SMTP2GO ของคุณยังใช้งานได้และมีโควต้าเพียงพอ");
-            logMessage("4. ตรวจสอบว่าโดเมน (rmutsb.ac.th) ได้รับการยืนยันใน SMTP2GO แล้ว");
+          
         }
     } catch (PDOException $e) {
         logMessage("ไม่สามารถอัปเดตข้อมูลการส่งอีเมลในฐานข้อมูล: " . $e->getMessage());
