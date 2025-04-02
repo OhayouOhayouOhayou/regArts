@@ -220,39 +220,12 @@ try {
     // Plain text version of the email
     $text_message = strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message));
     
-    // Directly send email using mail() function
-    $sender_name = 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ';
-    $sender_email = 'arts@rmutsb.ac.th'; // This will be the Reply-To address
-    
-    // Prepare mail headers
-    $headers = [
-        'MIME-Version: 1.0',
-        'Content-type: text/html; charset=utf-8',
-        'From: ' . $sender_name . ' <89606e001@smtp-brevo.com>', // Using Brevo SMTP credentials for From
-        'Reply-To: ' . $sender_email,
-        'X-Mailer: PHP/' . phpversion()
-    ];
-    
-    logMessage("กำลังส่งอีเมลไปยัง: $email", 2);
-
-    // For Brevo SMTP with PHP mail() function, we need to use the mail() function directly
-    // But first, we need to set the mail configuration to use SMTP
-    
-    // Configure PHP mail to use SMTP
-    ini_set('SMTP', 'smtp-relay.brevo.com');
-    ini_set('smtp_port', 587);
-    ini_set('sendmail_from', '89606e001@smtp-brevo.com');
-    
-    // Set additional SMTP authentication parameters if needed
-    putenv('SMTPAUTH=LOGIN');
-    putenv('SMTPAUTHUSER=89606e001@smtp-brevo.com');
-    putenv('SMTPAUTHPASS=SagC4Lpy5qK96NUk');
-    
-    // Fallback to using PHPMailer if available
+    // Attempt to send with PHPMailer
     $phpmailer_paths = [
         __DIR__ . '/PHPMailer/src/',
         __DIR__ . '/vendor/phpmailer/phpmailer/src/',
         dirname(__DIR__) . '/vendor/phpmailer/phpmailer/src/',
+        '/var/www/html/vendor/phpmailer/phpmailer/src/'
     ];
     
     $phpmailer_available = false;
@@ -268,32 +241,29 @@ try {
         }
     }
     
-    // Send email using PHPMailer if available, otherwise try PHP mail()
+    // Send email using PHPMailer if available
     if ($phpmailer_available) {
         try {
-            logMessage("Sending with PHPMailer via Brevo SMTP", 2);
-            
+            // สิ่งสำคัญ: ต้องใช้อีเมล SMTP สำหรับทั้ง Login และ From address
             $mail = new PHPMailer\PHPMailer\PHPMailer(true);
             $mail->CharSet = 'UTF-8';
             $mail->isSMTP();
             $mail->Host = 'smtp-relay.brevo.com';
             $mail->SMTPAuth = true;
-            $mail->Username = '89606e001@smtp-brevo.com';
+            $mail->Username = '89606e001@smtp-brevo.com';  // อีเมลสำหรับล็อกอิน
             $mail->Password = 'SagC4Lpy5qK96NUk';
             $mail->SMTPSecure = 'tls';
             $mail->Port = 587;
             
             // Enable verbose debug output
             $mail->SMTPDebug = 2;
-            
-            // Redirect SMTP debug output to log file
             $mail->Debugoutput = function($str, $level) {
                 logMessage("SMTP DEBUG[$level]: $str", 3);
             };
             
-            // Set sender
-            $mail->setFrom('89606e001@smtp-brevo.com', $sender_name);
-            $mail->addReplyTo($sender_email, $sender_name);
+            // สิ่งสำคัญ: ต้องตั้งค่า From เป็นอีเมลเดียวกับที่ใช้ Login
+            $mail->setFrom('89606e001@smtp-brevo.com', 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ');
+            $mail->addReplyTo('arts@rmutsb.ac.th', 'คณะศิลปศาสตร์');
             
             // Add recipient
             $mail->addAddress($email, $fullname);
@@ -306,8 +276,6 @@ try {
             
             // Send the email
             $result = $mail->send();
-            
-            logMessage("PHPMailer result: " . ($result ? "Success" : "Failed"), 2);
             
             if ($result) {
                 logMessage("ส่งอีเมลสำเร็จ");
@@ -324,60 +292,20 @@ try {
             $errorMessage = $e->getMessage();
             logMessage("PHPMailer error: $errorMessage", 2);
             
-            // Fall back to PHP mail() if PHPMailer fails
-            logMessage("Falling back to PHP mail()", 2);
-            
-            // Try PHP's mail() function as a fallback
-            $mail_sent = mail($email, $subject, $message, implode("\r\n", $headers));
-            
-            if ($mail_sent) {
-                logMessage("ส่งอีเมลสำเร็จผ่าน mail() function");
-                
-                echo json_encode([
-                    'success' => true,
-                    'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
-                    'method' => 'PHP mail()'
-                ]);
-            } else {
-                logMessage("ส่งอีเมลไม่สำเร็จผ่าน mail() function");
-                
-                echo json_encode([
-                    'success' => false,
-                    'message' => "ไม่สามารถส่งอีเมลได้",
-                    'error' => error_get_last()['message'] ?? 'Unknown error'
-                ]);
-            }
-        }
-    } else {
-        // PHPMailer not available, try PHP mail() directly
-        logMessage("PHPMailer not found, using PHP mail() directly", 2);
-        
-        try {
-            // Try PHP's mail() function
-            $mail_sent = mail($email, $subject, $message, implode("\r\n", $headers));
-            
-            if ($mail_sent) {
-                logMessage("ส่งอีเมลสำเร็จผ่าน mail() function");
-                
-                echo json_encode([
-                    'success' => true,
-                    'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
-                    'method' => 'PHP mail()'
-                ]);
-            } else {
-                $error = error_get_last();
-                throw new Exception($error['message'] ?? 'Unknown error');
-            }
-        } catch (Exception $e) {
-            $errorMessage = $e->getMessage();
-            logMessage("ส่งอีเมลไม่สำเร็จ: $errorMessage");
-            
             echo json_encode([
                 'success' => false,
-                'message' => "ไม่สามารถส่งอีเมลได้",
+                'message' => "ไม่สามารถส่งอีเมลได้ - " . $errorMessage,
                 'error' => $errorMessage
             ]);
         }
+    } else {
+        logMessage("PHPMailer not found", 2);
+        
+        echo json_encode([
+            'success' => false,
+            'message' => "ไม่พบ PHPMailer ไม่สามารถส่งอีเมลได้",
+            'error' => "PHPMailer library not found"
+        ]);
     }
     
 } catch (PDOException $e) {
