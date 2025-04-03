@@ -2,8 +2,7 @@
 // Set response header
 header('Content-Type: application/json; charset=utf-8');
 date_default_timezone_set('Asia/Bangkok');
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception;
+
 // Prevent direct access
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -221,69 +220,34 @@ try {
     // Plain text version of the email
     $text_message = strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message));
     
-    // Load PHPMailer
-    logMessage("กำลังโหลด PHPMailer", 2);
+    logMessage("กำลังส่งอีเมลด้วยฟังก์ชัน mail() ไปยัง: $email");
     
-    // ค้นหาไฟล์ autoload.php
-    $phpmailer_paths = [
-        dirname(__DIR__) . '/vendor/autoload.php',
-        __DIR__ . '/vendor/autoload.php',
-        dirname(dirname(__DIR__)) . '/vendor/autoload.php',
-        '../../vendor/autoload.php'
+    // Set email headers
+    $sender = 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ <arts@rmutsb.ac.th>';
+    $headers = [
+        'MIME-Version: 1.0',
+        'Content-type: text/html; charset=utf-8',
+        'From: ' . $sender,
+        'Reply-To: arts@rmutsb.ac.th',
+        'X-Mailer: PHP/' . phpversion()
     ];
     
-    $phpmailer_loaded = false;
+    // Convert header array to string
+    $headers_str = implode("\r\n", $headers);
     
-    foreach ($phpmailer_paths as $path) {
-        if (file_exists($path)) {
-            require_once $path;
-            $phpmailer_loaded = true;
-            logMessage("โหลด PHPMailer จาก: $path", 2);
-            break;
-        }
-    }
+    // Send email using PHP's mail function
+    $mail_sent = mail($email, $subject, $message, $headers_str);
     
-    if (!$phpmailer_loaded) {
-        throw new Exception("ไม่พบไฟล์ PHPMailer autoload.php");
-    }
-    
-   
-    
-    logMessage("กำลังส่งอีเมลผ่าน PHPMailer ไปยัง: $email", 2);
-    
-    // เริ่มการส่งอีเมล
-    $mail = new PHPMailer(true);
-    
-    // ตั้งค่า SMTP สำหรับ Outlook (Office365)
-    $mail->isSMTP();
-    $mail->CharSet = "UTF-8";
-    $mail->Host = 'smtp.office365.com'; // Outlook SMTP server
-    $mail->SMTPAuth = true;
-    $mail->SMTPSecure = 'tls'; // ใช้ TLS
-    $mail->Username = 'tcwatchara@rnn.ac.th'; // Outlook email
-    $mail->Password = 'Ohayou22'; // Outlook password
-    $mail->Port = 587; // Port สำหรับ TLS
-    
-    // ตั้งค่าอีเมล
-    $mail->setFrom('tcwatchara@rnn.ac.th', 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ');
-    $mail->addReplyTo('arts@rmutsb.ac.th', 'คณะศิลปศาสตร์');
-    $mail->addAddress($email, $fullname);
-    $mail->Subject = $subject;
-    $mail->isHTML(true);
-    $mail->Body = $message;
-    $mail->AltBody = $text_message;
-    
-    // ส่งอีเมล
-    if ($mail->send()) {
+    if ($mail_sent) {
         logMessage("ส่งอีเมลสำเร็จ");
         
         echo json_encode([
             'success' => true,
             'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
-            'method' => 'PHPMailer Outlook'
+            'method' => 'PHP mail()'
         ]);
     } else {
-        throw new Exception("ไม่สามารถส่งอีเมลได้: " . $mail->ErrorInfo);
+        throw new Exception("ไม่สามารถส่งอีเมลได้: " . error_get_last()['message']);
     }
     
 } catch (PDOException $e) {
