@@ -1041,7 +1041,7 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                 <option value="paid_approved" <?php echo ($registration['payment_status'] == 'paid_approved' || ($registration['payment_status'] == 'paid' && $registration['is_approved'] == 1)) ? 'selected' : ''; ?>>ชำระแล้ว (อนุมัติแล้ว)</option>
             </select>
         </div>
-                                    </div>
+                                    
                                             
                                     <div class="mb-3">
                                         <label class="form-label">หลักฐานการชำระเงิน</label>
