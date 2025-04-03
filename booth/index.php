@@ -246,7 +246,23 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["action"])) {
         exit;
     }
 }
-
+function getSetting($key, $conn, $defaultValue = '') {
+    try {
+        $stmt = $conn->prepare("SELECT setting_value FROM settings WHERE setting_key = ?");
+        $stmt->bind_param("s", $key);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        if ($result && $result->num_rows > 0) {
+            $row = $result->fetch_assoc();
+            return $row['setting_value'];
+        }
+    } catch (Exception $e) {
+        error_log("Error in getSetting: " . $e->getMessage());
+    }
+    
+    return $defaultValue;
+}
 // ฟังก์ชันแสดงราคาในรูปแบบเงินบาท
 function formatCurrency($amount) {
     return number_format($amount, 0, '.', ',') . ' บาท';
