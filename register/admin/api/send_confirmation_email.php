@@ -227,6 +227,7 @@ try {
             __DIR__ . '/lib/class.phpmailer.php',
             dirname(dirname(__DIR__)) . '/lib/class.phpmailer.php',
             '../../lib/class.phpmailer.php',
+            'class.phpmailer.php',
             dirname(__DIR__) . '/vendor/phpmailer/phpmailer/class.phpmailer.php',
             __DIR__ . '/vendor/phpmailer/phpmailer/class.phpmailer.php'
         ];
