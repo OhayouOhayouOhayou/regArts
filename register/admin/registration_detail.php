@@ -1058,7 +1058,7 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                 <option value="not_paid" <?php echo ($registration['payment_status'] == 'not_paid') ? 'selected' : ''; ?>>ยังไม่ชำระ</option>
                 <option value="paid_pending" <?php echo ($registration['payment_status'] == 'paid' && $registration['is_approved'] == 0) ? 'selected' : ''; ?>>ชำระแล้ว (รอตรวจสอบจากเจ้าหน้าที่)</option>
                 <option value="paid_approved" <?php echo ($registration['payment_status'] == 'paid' && $registration['is_approved'] == 1) ? 'selected' : ''; ?>>ชำระแล้ว (อนุมัติแล้ว)</option>
-                <option value="paid_onsite" <?php echo ($registration['payment_status'] == 'paid_onsite') ? 'selected' : ''; ?>>อนุมัติ (ชำระเงินที่หน้างาน)</option>
+           
             </select>
         </div>
                                     
