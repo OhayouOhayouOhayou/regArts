@@ -250,18 +250,18 @@ try {
     
     logMessage("กำลังส่งอีเมลผ่าน PHPMailer SMTP ไปยัง: $email", 2);
     
-    // Setup PHPMailer
+  
     $mail = new PHPMailer();
     $mail->CharSet = "UTF-8";
     $mail->IsHTML(true);
     $mail->IsSMTP();
     $mail->SMTPAuth = true;
-    $mail->SMTPSecure = ""; // Leave empty for non-secure connection
-    $mail->Host = "mail.google.com"; // Your SMTP server
-    $mail->Port = 25; // Usually 25 for non-secure, 465 for SSL, 587 for TLS
-    $mail->Username = "arts@rmutsb.ac.th"; // SMTP username
-    $mail->Password = "artsrus6"; // SMTP password - replace with actual password
-    
+    $mail->SMTPSecure = "tls"; 
+    $mail->Host = "smtp.gmail.com"; 
+    $mail->Port = 587; 
+    $mail->Username = "arts@rmutsb.ac.th"; 
+    $mail->Password = "artsrus6"; 
+
     $mail->From = "arts@rmutsb.ac.th";
     $mail->FromName = "คณะศิลปศาสตร์ มทร.สุวรรณภูมิ";
     $mail->Subject = $subject;
