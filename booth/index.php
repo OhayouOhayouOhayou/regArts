@@ -1,9 +1,10 @@
 <?php
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
+ini_set('display_errors', 0); // Turn off error display in production
+ini_set('display_startup_errors', 0);
 error_reporting(E_ALL);
 session_start(); 
 require_once 'config.php';
+
 function writeLog($message) {
     $logFile = 'address_debug.log';
     $timestamp = date('Y-m-d H:i:s');
@@ -21,6 +22,7 @@ $customerLineId = $isLoggedIn ? $_SESSION['line_id'] : ''; // เพิ่ม Li
 
 // ระบบล็อกอิน
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["action"])) {
+    // Set content type to JSON for all AJAX responses
     header('Content-Type: application/json');
     
     if ($_POST["action"] == "login") {
@@ -70,17 +72,80 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["action"])) {
         exit;
     }
     
-            // กรณีส่งคำสั่งจอง
-        if ($_POST["action"] == "reserve") {
+    // กรณีส่งคำสั่งจอง
+    if ($_POST["action"] == "reserve") {
+        try {
             $boothId = $_POST["boothId"];
             
             // แสดงลอก debug ข้อมูลที่ได้รับจาก session
             error_log("Customer address from session: " . $_SESSION['address']);
             
-            // ใช้ข้อมูลจาก session แทนการส่งมาใหม่
-            $result = reserveBooth($boothId, $customerName, $customerEmail, $customerPhone, $customerCompany, $conn, $customerAddress, $customerLineId);
-            echo json_encode($result);
+            // ตรวจสอบว่า booth ยังว่างอยู่หรือไม่
+            $checkBooth = $conn->prepare("SELECT status FROM booths WHERE id = ?");
+            $checkBooth->bind_param("i", $boothId);
+            $checkBooth->execute();
+            $checkResult = $checkBooth->get_result();
+            
+            if ($checkResult->num_rows === 0) {
+                echo json_encode(["success" => false, "message" => "ไม่พบข้อมูลบูธที่ต้องการจอง"]);
+                exit;
+            }
+            
+            $boothData = $checkResult->fetch_assoc();
+            if ($boothData['status'] !== 'available') {
+                echo json_encode(["success" => false, "message" => "บูธนี้ถูกจองไปแล้ว"]);
+                exit;
+            }
+            
+            // สร้างคำสั่งซื้อใหม่
+            $orderNumber = "ORD" . date("ymd") . rand(1000, 9999);
+            $orderDate = date("Y-m-d H:i:s");
+            
+            // ดึงข้อมูลราคาบูธ
+            $getPriceQuery = $conn->prepare("SELECT price FROM booths WHERE id = ?");
+            $getPriceQuery->bind_param("i", $boothId);
+            $getPriceQuery->execute();
+            $priceResult = $getPriceQuery->get_result();
+            $priceData = $priceResult->fetch_assoc();
+            $price = $priceData['price'];
+            
+            // เริ่ม transaction
+            $conn->begin_transaction();
+            
+            // สร้างคำสั่งซื้อใหม่
+            $createOrder = $conn->prepare("INSERT INTO orders (order_number, customer_name, customer_email, customer_phone, customer_company, customer_address, customer_line_id, order_date, total_amount, payment_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')");
+            $createOrder->bind_param("ssssssssd", $orderNumber, $customerName, $customerEmail, $customerPhone, $customerCompany, $customerAddress, $customerLineId, $orderDate, $price);
+            $createOrder->execute();
+            
+            $orderId = $conn->insert_id;
+            
+            // เพิ่มรายการบูธ
+            $addItem = $conn->prepare("INSERT INTO order_items (order_id, booth_id, price) VALUES (?, ?, ?)");
+            $addItem->bind_param("iid", $orderId, $boothId, $price);
+            $addItem->execute();
+            
+            // อัพเดตสถานะบูธเป็น reserved
+            $updateBooth = $conn->prepare("UPDATE booths SET status = 'reserved', reserved_by = ?, reserved_at = NOW() WHERE id = ?");
+            $updateBooth->bind_param("si", $customerPhone, $boothId);
+            $updateBooth->execute();
+            
+            // ยืนยัน transaction
+            $conn->commit();
+            
+            echo json_encode([
+                "success" => true, 
+                "order_id" => $orderId,
+                "order_number" => $orderNumber
+            ]);
+            
+        } catch (Exception $e) {
+            // กรณีเกิด error ให้ rollback
+            $conn->rollback();
+            error_log("Reserve error: " . $e->getMessage());
+            echo json_encode(["success" => false, "message" => "เกิดข้อผิดพลาดในการจอง: " . $e->getMessage()]);
         }
+        exit;
+    }
     else if ($_POST["action"] == "upload_slip") {
         $orderId = $_POST["orderId"];
         $paymentMethod = $_POST["paymentMethod"];
@@ -118,6 +183,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["action"])) {
         // อัพโหลดไฟล์
         if (move_uploaded_file($_FILES['paymentSlip']['tmp_name'], $targetFile)) {
             try {
+                // เริ่ม transaction
+                $conn->begin_transaction();
+                
                 // ดึงข้อมูลบูธจาก order_items
                 $getBooth = $conn->prepare("SELECT booth_id FROM order_items WHERE order_id = ?");
                 $getBooth->bind_param("i", $orderId);
@@ -150,35 +218,50 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["action"])) {
                     $updateOrder->bind_param("ssi", $paymentMethod, $targetFile, $orderId);
                     $updateOrder->execute();
                     
+                    // ยืนยัน transaction
+                    $conn->commit();
+                    
                     echo json_encode(["success" => true, "message" => "อัพโหลดสลิปเรียบร้อยแล้ว เจ้าหน้าที่จะตรวจสอบและยืนยันการชำระเงินต่อไป"]);
                 } else {
                     // ไม่พบข้อมูลบูธที่เกี่ยวข้องกับ order นี้
+                    $conn->rollback();
                     echo json_encode(["success" => false, "message" => "ไม่พบข้อมูลบูธที่เกี่ยวข้องกับคำสั่งซื้อนี้"]);
                 }
             } catch (Exception $e) {
                 // บันทึก error log
+                $conn->rollback();
                 error_log("Payment upload error: " . $e->getMessage());
                 echo json_encode(["success" => false, "message" => "เกิดข้อผิดพลาดในการบันทึกข้อมูล: " . $e->getMessage()]);
             }
         } else {
             echo json_encode(["success" => false, "message" => "เกิดข้อผิดพลาดในการอัพโหลดไฟล์"]);
         }
+        exit;
     }
     else if ($_POST["action"] == "logout") {
         // ล้าง session เมื่อล็อกเอาท์
         session_unset();
         session_destroy();
         echo json_encode(["success" => true]);
+        exit;
     }
-    
-    exit;
 }
-// Get all booths
-$sql = "SELECT * FROM booths ORDER BY zone, floor, booth_number";
+
+// ฟังก์ชันแสดงราคาในรูปแบบเงินบาท
+function formatCurrency($amount) {
+    return number_format($amount, 0, '.', ',') . ' บาท';
+}
+
+// Get all booths with order information
+$sql = "SELECT b.*, oi.order_id, o.payment_status AS order_payment_status 
+       FROM booths b 
+       LEFT JOIN order_items oi ON b.id = oi.booth_id 
+       LEFT JOIN orders o ON oi.order_id = o.id 
+       ORDER BY b.zone, b.floor, b.booth_number";
 $result = $conn->query($sql);
 $booths = [];
 
-if ($result->num_rows > 0) {
+if ($result && $result->num_rows > 0) {
     while($row = $result->fetch_assoc()) {
         $booths[] = $row;
     }
@@ -188,11 +271,6 @@ if ($result->num_rows > 0) {
 $zoneAPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_price FROM booths WHERE zone = 'A'")->fetch_assoc();
 $zoneBPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_price FROM booths WHERE zone = 'B'")->fetch_assoc();
 $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_price FROM booths WHERE zone = 'C'")->fetch_assoc();
-
-
-
-
-
 ?>
 <!DOCTYPE html>
 <html lang="th">
@@ -203,317 +281,54 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="style.css" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Sarabun', sans-serif;
-            background-color: #f5f5f5;
+        /* เพิ่ม CSS สำหรับสถานะการชำระเงิน */
+        .booth.reserved {
+            background-color: #9e9e9e;
+            color: white;
+            cursor: not-allowed;
         }
-        
-        .booth-map {
-            position: relative;
-            margin: 30px auto;
-            max-width: 1200px;
+        .booth.pending_payment {
+            background-color: #ffc107;
+            color: black;
+            cursor: not-allowed;
         }
-        
-        .booth {
-            width: 60px;
-            height: 60px;
-            margin: 5px;
-            display: inline-flex;
-            justify-content: center;
-            align-items: center;
-            border: 1px solid #666;
-            cursor: pointer;
-            font-weight: bold;
-            transition: all 0.2s ease;
+        .booth.paid {
+            background-color: #dc3545;
+            color: white;
+            cursor: not-allowed;
         }
-        
+        /* สีตามโซน */
         .booth-blue {
             background-color: #00bcd4;
             color: white;
         }
-        
         .booth-green {
             background-color: #4caf50;
             color: white;
         }
-        
         .booth-purple {
             background-color: #9c27b0;
             color: white;
         }
-        
-        .booth:hover {
-            transform: scale(1.05);
-            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        /* สำหรับบูธที่จองแล้วให้แสดงสีตามสถานะ */
+        .booth.reserved.booth-blue, 
+        .booth.reserved.booth-green, 
+        .booth.reserved.booth-purple {
+            background-color: #9e9e9e;
         }
-        
-        .booth.reserved{
-            background-color: #9e9e9e; 
-            color: white;
-            cursor: not-allowed;
+        .booth.pending_payment.booth-blue, 
+        .booth.pending_payment.booth-green, 
+        .booth.pending_payment.booth-purple {
+            background-color: #ffc107;
+            color: black;
         }
-        
-        .booth.pending_payment {
-                background-color: #ffc107; 
-                color: #333;
-                cursor: not-allowed;
-            }
-        
-            .booth.paid {
-                background-color: #dc3545; 
-                color: white;
-                cursor: not-allowed;
-            }
-        
-        .floor {
-            margin-bottom: 50px;
-            padding: 20px;
-            background-color: #fff;
-            border-radius: 10px;
-            box-shadow: 0 0 20px rgba(0,0,0,0.1);
-            display: none; /* Hidden by default */
+        .booth.paid.booth-blue, 
+        .booth.paid.booth-green, 
+        .booth.paid.booth-purple {
+            background-color: #dc3545;
         }
-        
-        .floor.active {
-            display: block;
-        }
-        
-        .floor-title {
-            font-size: 24px;
-            color: #333;
-            margin-bottom: 20px;
-            background-color: #ffd700;
-            padding: 10px;
-            border-radius: 5px;
-            display: inline-block;
-        }
-        
-        .legend {
-            margin: 20px 0;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-        }
-        
-        .legend-item {
-            display: flex;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-        
-        .legend-color {
-            width: 20px;
-            height: 20px;
-            margin-right: 5px;
-        }
-        
-        .main-hall {
-            background-color: #ffaa66;
-            padding: 15px;
-            text-align: center;
-            font-weight: bold;
-            margin: 20px auto;
-            max-width: 300px;
-            border-radius: 5px;
-        }
-        
-        .venue-feature {
-            text-align: center;
-            font-weight: bold;
-            border-radius: 5px;
-            margin: 10px auto;
-            max-width: 400px;
-        }
-        
-        .booth-details {
-            position: relative;
-            padding: 15px;
-            background-color: #ffffcc;
-            border-radius: 5px;
-            margin-bottom: 20px;
-            transform: rotate(-5deg);
-            box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
-            max-width: 300px;
-        }
-        
-        .stairs {
-            display: flex;
-            align-items: center;
-            margin: 10px 0;
-        }
-        
-        .stairs img {
-            width: 30px;
-            margin-right: 10px;
-        }
-        
-        .modal-title {
-            color: #4a5568;
-        }
-        
-        .arrow {
-            color: red;
-            font-size: 24px;
-            margin: 10px;
-        }
-        
-        .zone-tabs {
-            display: flex;
-            justify-content: center;
-            margin: 20px 0;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-        
-        .zone-tab {
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: all 0.3s ease;
-            flex: 1;
-            max-width: 180px;
-            text-align: center;
-        }
-        
-        .zone-tab:hover {
-            transform: translateY(-3px);
-        }
-        
-        .zone-tab.active {
-            box-shadow: 0 0 15px rgba(0,0,0,0.2);
-        }
-        
-        .tab-a {
-            background-color: #00bcd4;
-            color: white;
-        }
-        
-        .tab-b {
-            background-color: #4caf50;
-            color: white;
-        }
-        
-        .tab-c1 {
-            background-color: #9c27b0;
-            color: white;
-        }
-        
-        .tab-c2 {
-            background-color: #9c27b0;
-            color: white;
-        }
-        
-        .payment-summary {
-            background-color: #f9f9f9;
-            border-radius: 10px;
-            padding: 20px;
-            margin-top: 20px;
-        }
-        
-        .price-tag {
-            font-size: 24px;
-            font-weight: bold;
-            color: #e91e63;
-        }
-        
-        .price-info {
-            background-color: #f0f8ff;
-            padding: 10px;
-            margin-bottom: 10px;
-            border-radius: 5px;
-            border-left: 4px solid #00bcd4;
-        }
-        
-        .user-info {
-            background-color: #eaf7ff;
-            padding: 10px 15px;
-            border-radius: 5px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-        
-        .user-name {
-            font-weight: bold;
-        }
-        
-        .login-cta {
-            background-color: #f0f4ff;
-            border: 1px dashed #ccc;
-            padding: 15px;
-            text-align: center;
-            border-radius: 5px;
-            margin-bottom: 20px;
-        }
-        
-        @media (max-width: 768px) {
-            .booth {
-                width: 50px;
-                height: 50px;
-                font-size: 12px;
-            }
-            
-            .zone-tab {
-                padding: 8px 15px;
-                font-size: 14px;
-            }
-        }
-        
-    .contact-sticky {
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        z-index: 1000;
-    }
-    
-    .contact-btn {
-        border-radius: 50px;
-        padding: 10px 20px;
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        transition: all 0.3s ease;
-    }
-    
-    .contact-btn:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
-    }
-    
-    .contact-info {
-        position: absolute;
-        bottom: 60px;
-        right: 0;
-        width: 300px;
-        display: none;
-        transition: all 0.3s ease;
-    }
-    
-    .contact-info .card {
-        border: none;
-        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-        border-radius: 10px;
-        overflow: hidden;
-    }
-    
-    .contact-info .card-header {
-        position: relative;
-        padding: 15px;
-    }
-    
-    .contact-info.active {
-        display: block;
-        animation: fadeIn 0.3s;
-    }
-    
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(20px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
     </style>
 </head>
 <body>
@@ -541,78 +356,79 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#loginModal">ลงทะเบียน / เข้าสู่ระบบ</button>
         </div>
         <?php endif; ?>
+        
         <div class="overview-section mb-4">
-    <h2 class="text-center mb-4">แผนผังภาพรวมงาน</h2>
-    
-    <div class="row">
-        <div class="col-md-6 mb-3">
-            <div class="card h-100">
-                <img src="zone/overview11.png" alt="ภาพรวมงาน 1" class="card-img-top booth-overview-img" data-bs-toggle="modal" data-bs-target="#overviewModal" data-img="zone/overview11.png">
-                <div class="card-body">
-                    <h5 class="card-title">มุมมองที่ 1</h5>
-                    <p class="card-text">แผนผังรวมของพื้นที่จัดงานทั้งหมด <small class="text-muted">(คลิกเพื่อดูขนาดใหญ่)</small></p>
+            <h2 class="text-center mb-4">แผนผังภาพรวมงาน</h2>
+            
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <div class="card h-100">
+                        <img src="zone/overview11.png" alt="ภาพรวมงาน 1" class="card-img-top booth-overview-img" data-bs-toggle="modal" data-bs-target="#overviewModal" data-img="zone/overview11.png">
+                        <div class="card-body">
+                            <h5 class="card-title">มุมมองที่ 1</h5>
+                            <p class="card-text">แผนผังรวมของพื้นที่จัดงานทั้งหมด <small class="text-muted">(คลิกเพื่อดูขนาดใหญ่)</small></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <div class="card h-100">
+                        <img src="zone/overview12.png" alt="ภาพรวมงาน 2" class="card-img-top booth-overview-img" data-bs-toggle="modal" data-bs-target="#overviewModal" data-img="zone/overview12.png">
+                        <div class="card-body">
+                            <h5 class="card-title">มุมมองที่ 2</h5>
+                            <p class="card-text">ภาพรวมพื้นที่จัดแสดงสินค้า <small class="text-muted">(คลิกเพื่อดูขนาดใหญ่)</small></p>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
-        <div class="col-md-6 mb-3">
-            <div class="card h-100">
-                <img src="zone/overview12.png" alt="ภาพรวมงาน 2" class="card-img-top booth-overview-img" data-bs-toggle="modal" data-bs-target="#overviewModal" data-img="zone/overview12.png">
-                <div class="card-body">
-                    <h5 class="card-title">มุมมองที่ 2</h5>
-                    <p class="card-text">ภาพรวมพื้นที่จัดแสดงสินค้า <small class="text-muted">(คลิกเพื่อดูขนาดใหญ่)</small></p>
-                </div>
+            
+            <div class="alert alert-info mt-3">
+                <p class="mb-0"><i class="bi bi-info-circle-fill me-2"></i> กรุณาเลือกโซนที่ท่านสนใจด้านล่างเพื่อดูรายละเอียดเพิ่มเติมและทำการจอง</p>
             </div>
         </div>
-    </div>
-    
-    <div class="alert alert-info mt-3">
-        <p class="mb-0"><i class="bi bi-info-circle-fill me-2"></i> กรุณาเลือกโซนที่ท่านสนใจด้านล่างเพื่อดูรายละเอียดเพิ่มเติมและทำการจอง</p>
-    </div>
-</div>
           
-<div class="price-info">
-    <div class="row">
-        <div class="col-md-4">
-            <div class="card h-100 border-info">
-                <div class="card-header bg-info text-white">
-                    <h5 class="mb-0">โซน A (ห้องสัมมนา)</h5>
+        <div class="price-info">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="card h-100 border-info">
+                        <div class="card-header bg-info text-white">
+                            <h5 class="mb-0">โซน A (ห้องสัมมนา)</h5>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>ราคา:</strong> <?php echo formatCurrency($zoneAPrices['min_price']); ?> <span class="text-muted small">(exclude VAT 7%)</span></p>
+                            <p><i class="bi bi-check-circle-fill text-success me-2"></i>ราคาเช่าพร้อมบูธมาตรฐาน</p>
+                            <p><i class="bi bi-check-circle-fill text-success me-2"></i>พื้นที่ห้องแอร์</p>
+                            <p><i class="bi bi-check-circle-fill text-success me-2"></i>ตำแหน่งยอดนิยม</p>
+                        </div>
+                    </div>
                 </div>
-                <div class="card-body">
-                    <p><strong>ราคา:</strong> <?php echo formatCurrency($zoneAPrices['min_price']); ?> <span class="text-muted small">(exclude VAT 7%)</span></p>
-                    <p><i class="bi bi-check-circle-fill text-success me-2"></i>ราคาเช่าพร้อมบูธมาตรฐาน</p>
-                    <p><i class="bi bi-check-circle-fill text-success me-2"></i>พื้นที่ห้องแอร์</p>
-                    <p><i class="bi bi-check-circle-fill text-success me-2"></i>ตำแหน่งยอดนิยม</p>
+                <div class="col-md-4">
+                    <div class="card h-100 border-success">
+                        <div class="card-header bg-success text-white">
+                            <h5 class="mb-0">โซน B</h5>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>ราคา:</strong> <?php echo formatCurrency($zoneBPrices['min_price']); ?> <span class="text-muted small">(exclude VAT 7%)</span></p>
+                            <p><i class="bi bi-check-circle-fill text-success me-2"></i>ราคาเช่าพื้นที่ ไม่มีบูธ</p>
+                            <p><i class="bi bi-check-circle-fill text-success me-2"></i>พื้นที่ห้องแอร์</p>
+                            <p><i class="bi bi-check-circle-fill text-success me-2"></i>ทำเลดี การเข้าถึงสะดวก</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card h-100 border-purple" style="border-color: #9c27b0;">
+                        <div class="card-header text-white" style="background-color: #9c27b0;">
+                            <h5 class="mb-0">โซน C</h5>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>ราคา:</strong> <?php echo formatCurrency($zoneCPrices['min_price']); ?> <span class="text-muted small">(exclude VAT 7%)</span></p>
+                            <p><i class="bi bi-check-circle-fill text-success me-2"></i>ราคาเช่าพื้นที่ ไม่มีบูธ</p>
+                            <p><i class="bi bi-check-circle-fill text-success me-2"></i>พื้นที่ไม่มีแอร์</p>
+                            <p><i class="bi bi-check-circle-fill text-success me-2"></i>ราคาประหยัด</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card h-100 border-success">
-                <div class="card-header bg-success text-white">
-                    <h5 class="mb-0">โซน B</h5>
-                </div>
-                <div class="card-body">
-                    <p><strong>ราคา:</strong> <?php echo formatCurrency($zoneBPrices['min_price']); ?> <span class="text-muted small">(exclude VAT 7%)</span></p>
-                    <p><i class="bi bi-check-circle-fill text-success me-2"></i>ราคาเช่าพื้นที่ ไม่มีบูธ</p>
-                    <p><i class="bi bi-check-circle-fill text-success me-2"></i>พื้นที่ห้องแอร์</p>
-                    <p><i class="bi bi-check-circle-fill text-success me-2"></i>ทำเลดี การเข้าถึงสะดวก</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card h-100 border-purple" style="border-color: #9c27b0;">
-                <div class="card-header text-white" style="background-color: #9c27b0;">
-                    <h5 class="mb-0">โซน C</h5>
-                </div>
-                <div class="card-body">
-                    <p><strong>ราคา:</strong> <?php echo formatCurrency($zoneCPrices['min_price']); ?> <span class="text-muted small">(exclude VAT 7%)</span></p>
-                    <p><i class="bi bi-check-circle-fill text-success me-2"></i>ราคาเช่าพื้นที่ ไม่มีบูธ</p>
-                    <p><i class="bi bi-check-circle-fill text-success me-2"></i>พื้นที่ไม่มีแอร์</p>
-                    <p><i class="bi bi-check-circle-fill text-success me-2"></i>ราคาประหยัด</p>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
         
         <div class="zone-tabs">
             <div class="zone-tab tab-a active" onclick="showZone('A')">โซน A</div>
@@ -666,15 +482,24 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                     for ($i = 1; $i <= 9; $i++) {
                         $isReserved = false;
                         $status = 'available';
+                        $paymentStatus = '';
                         
                         foreach ($booths as $booth) {
                             if ($booth['booth_number'] == $i && $booth['zone'] == 'A') {
                                 $status = $booth['status'];
+                                $paymentStatus = $booth['order_payment_status'] ?? '';
                                 if ($status != 'available') {
                                     $isReserved = true;
                                 }
                                 break;
                             }
+                        }
+                        
+                        // ปรับสีตามสถานะการชำระเงินจาก order_payment_status
+                        if ($isReserved && $paymentStatus == 'paid') {
+                            $status = 'paid';
+                        } else if ($isReserved && $paymentStatus == 'pending') {
+                            $status = 'pending_payment';
                         }
                         
                         $class = ($isReserved) ? "booth $status" : "booth";
@@ -691,7 +516,8 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                             }
                         }
                     ?>
-                    <div class="<?php echo $class; ?>" data-id="<?php echo $boothId; ?>" data-number="<?php echo $i; ?>" data-zone="A" data-price="<?php echo $price; ?>" onclick="selectBooth(this)">
+                    <div class="<?php echo $class; ?>" data-id="<?php echo $boothId; ?>"
+                    data-number="<?php echo $i; ?>" data-zone="A" data-price="<?php echo $price; ?>" onclick="selectBooth(this)">
                         <?php echo $i; ?>
                     </div>
                     <?php } ?>
@@ -709,15 +535,24 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                             for ($i = 10; $i <= 23; $i++) {
                                 $isReserved = false;
                                 $status = 'available';
+                                $paymentStatus = '';
                                 
                                 foreach ($booths as $booth) {
                                     if ($booth['booth_number'] == $i && $booth['zone'] == 'A') {
                                         $status = $booth['status'];
+                                        $paymentStatus = $booth['order_payment_status'] ?? '';
                                         if ($status != 'available') {
                                             $isReserved = true;
                                         }
                                         break;
                                     }
+                                }
+                                
+                                // ปรับสีตามสถานะการชำระเงินจาก order_payment_status
+                                if ($isReserved && $paymentStatus == 'paid') {
+                                    $status = 'paid';
+                                } else if ($isReserved && $paymentStatus == 'pending') {
+                                    $status = 'pending_payment';
                                 }
                                 
                                 $class = ($isReserved) ? "booth $status" : "booth";
@@ -758,15 +593,24 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                             for ($i = 24; $i <= 30; $i++) {
                                 $isReserved = false;
                                 $status = 'available';
+                                $paymentStatus = '';
                                 
                                 foreach ($booths as $booth) {
                                     if ($booth['booth_number'] == $i && $booth['zone'] == 'A') {
                                         $status = $booth['status'];
+                                        $paymentStatus = $booth['order_payment_status'] ?? '';
                                         if ($status != 'available') {
                                             $isReserved = true;
                                         }
                                         break;
                                     }
+                                }
+                                
+                                // ปรับสีตามสถานะการชำระเงินจาก order_payment_status
+                                if ($isReserved && $paymentStatus == 'paid') {
+                                    $status = 'paid';
+                                } else if ($isReserved && $paymentStatus == 'pending') {
+                                    $status = 'pending_payment';
                                 }
                                 
                                 $class = ($isReserved) ? "booth $status" : "booth";
@@ -807,8 +651,8 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
             
             <!-- Zone B (Green) -->
             <div class="floor" id="zone-B">
-            <div class="floor-title">แผนผัง</div>
-            <img src="zone/b.jpg" alt="โซน B" style="width:100%">
+                <div class="floor-title">แผนผัง</div>
+                <img src="zone/b.jpg" alt="โซน B" style="width:100%">
                 <div class="floor-title">โซน B</div>
                 
                 <div class="row">
@@ -819,15 +663,24 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                             for ($i = 1; $i <= 60; $i++) {
                                 $isReserved = false;
                                 $status = 'available';
+                                $paymentStatus = '';
                                 
                                 foreach ($booths as $booth) {
                                     if ($booth['booth_number'] == $i && $booth['zone'] == 'B') {
                                         $status = $booth['status'];
+                                        $paymentStatus = $booth['order_payment_status'] ?? '';
                                         if ($status != 'available') {
                                             $isReserved = true;
                                         }
                                         break;
                                     }
+                                }
+                                
+                                // ปรับสีตามสถานะการชำระเงินจาก order_payment_status
+                                if ($isReserved && $paymentStatus == 'paid') {
+                                    $status = 'paid';
+                                } else if ($isReserved && $paymentStatus == 'pending') {
+                                    $status = 'pending_payment';
                                 }
                                 
                                 $class = ($isReserved) ? "booth $status" : "booth";
@@ -863,15 +716,24 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                             
                             $isReserved = false;
                             $status = 'available';
+                            $paymentStatus = '';
                             
                             foreach ($booths as $booth) {
                                 if ($booth['booth_number'] == $boothNumber && $booth['zone'] == 'C' && $booth['floor'] == 1) {
                                     $status = $booth['status'];
+                                    $paymentStatus = $booth['order_payment_status'] ?? '';
                                     if ($status != 'available') {
                                         $isReserved = true;
                                     }
                                     break;
                                 }
+                            }
+                            
+                            // ปรับสีตามสถานะการชำระเงินจาก order_payment_status
+                            if ($isReserved && $paymentStatus == 'paid') {
+                                $status = 'paid';
+                            } else if ($isReserved && $paymentStatus == 'pending') {
+                                $status = 'pending_payment';
                             }
                             
                             $class = ($isReserved) ? "booth $status" : "booth";
@@ -903,8 +765,8 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
             
             <!-- Zone C Floor 1 (Purple) -->
             <div class="floor" id="zone-C1">
-            <div class="floor-title">แผนผัง</div>
-            <img src="zone/c1.jpg" alt="โซน c" style="width:100%">
+                <div class="floor-title">แผนผัง</div>
+                <img src="zone/c1.jpg" alt="โซน c" style="width:100%">
                 <div class="floor-title">โซน C (ชั้น 1)</div>
                 
            
@@ -916,15 +778,24 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                             for ($i = 30; $i <= 47; $i++) {
                                 $isReserved = false;
                                 $status = 'available';
+                                $paymentStatus = '';
                                 
                                 foreach ($booths as $booth) {
                                     if ($booth['booth_number'] == $i && $booth['zone'] == 'C' && $booth['floor'] == 1) {
                                         $status = $booth['status'];
+                                        $paymentStatus = $booth['order_payment_status'] ?? '';
                                         if ($status != 'available') {
                                             $isReserved = true;
                                         }
                                         break;
                                     }
+                                }
+                                
+                                // ปรับสีตามสถานะการชำระเงินจาก order_payment_status
+                                if ($isReserved && $paymentStatus == 'paid') {
+                                    $status = 'paid';
+                                } else if ($isReserved && $paymentStatus == 'pending') {
+                                    $status = 'pending_payment';
                                 }
                                 
                                 $class = ($isReserved) ? "booth $status" : "booth";
@@ -957,15 +828,24 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                             for ($i = 48; $i <= 92; $i++) {
                                 $isReserved = false;
                                 $status = 'available';
+                                $paymentStatus = '';
                                 
                                 foreach ($booths as $booth) {
                                     if ($booth['booth_number'] == $i && $booth['zone'] == 'C' && $booth['floor'] == 1) {
                                         $status = $booth['status'];
+                                        $paymentStatus = $booth['order_payment_status'] ?? '';
                                         if ($status != 'available') {
                                             $isReserved = true;
                                         }
                                         break;
                                     }
+                                }
+                                
+                                // ปรับสีตามสถานะการชำระเงินจาก order_payment_status
+                                if ($isReserved && $paymentStatus == 'paid') {
+                                    $status = 'paid';
+                                } else if ($isReserved && $paymentStatus == 'pending') {
+                                    $status = 'pending_payment';
                                 }
                                 
                                 $class = ($isReserved) ? "booth $status" : "booth";
@@ -997,8 +877,8 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
             
             <!-- Zone C Floor 2 -->
             <div class="floor" id="zone-C2">
-            <div class="floor-title">แผนผัง</div>
-            <img src="zone/c2.jpg" alt="โซน c" style="width:100%">
+                <div class="floor-title">แผนผัง</div>
+                <img src="zone/c2.jpg" alt="โซน c" style="width:100%">
                 <div class="floor-title">โซน C (ชั้น 2)</div>
                 
                 
@@ -1010,15 +890,24 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                     for ($i = 93; $i <= 116; $i++) {
                         $isReserved = false;
                         $status = 'available';
+                        $paymentStatus = '';
                         
                         foreach ($booths as $booth) {
                             if ($booth['booth_number'] == $i && $booth['zone'] == 'C' && $booth['floor'] == 2) {
                                 $status = $booth['status'];
+                                $paymentStatus = $booth['order_payment_status'] ?? '';
                                 if ($status != 'available') {
                                     $isReserved = true;
                                 }
                                 break;
                             }
+                        }
+                        
+                        // ปรับสีตามสถานะการชำระเงินจาก order_payment_status
+                        if ($isReserved && $paymentStatus == 'paid') {
+                            $status = 'paid';
+                        } else if ($isReserved && $paymentStatus == 'pending') {
+                            $status = 'pending_payment';
                         }
                         
                         $class = ($isReserved) ? "booth $status" : "booth";
@@ -1047,90 +936,91 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
             </div>
         </div>
     </div>
- <!-- Login Modal -->
-<div class="modal fade" id="loginModal" tabindex="-1" aria-labelledby="loginModalLabel" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="loginModalLabel">ลงทะเบียน / เข้าสู่ระบบ</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <form id="loginForm">
-          <div class="mb-3">
-            <label for="loginPhone" class="form-label">เบอร์โทรศัพท์<span class="text-danger">*</span></label>
-            <input type="tel" class="form-control" id="loginPhone" required>
-            <div class="form-text">ใช้เบอร์โทรศัพท์สำหรับเข้าสู่ระบบ</div>
+    
+    <!-- Login Modal -->
+    <div class="modal fade" id="loginModal" tabindex="-1" aria-labelledby="loginModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="loginModalLabel">ลงทะเบียน / เข้าสู่ระบบ</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
-          
-          <div class="mb-3">
-            <label for="loginName" class="form-label">ชื่อ-นามสกุล<span class="text-danger">*</span></label>
-            <input type="text" class="form-control" id="loginName" required>
-          </div>
-          
-          <div class="mb-3">
-            <label for="loginEmail" class="form-label">อีเมล<span class="text-danger">*</span></label>
-            <input type="email" class="form-control" id="loginEmail" required>
-          </div>
-          
-          <div class="mb-3">
-            <label class="form-label">ที่อยู่<span class="text-danger">*</span></label>
-            
-            <div class="mb-2">
-              <input type="text" class="form-control" id="loginAddressDetail" placeholder="บ้านเลขที่ หมู่บ้าน ถนน ซอย" required>
-            </div>
-            
-            <div class="row mb-2">
-              <div class="col-md-6">
-                <select class="form-select" id="loginProvince" required>
-                  <option value="">-- เลือกจังหวัด --</option>
-                  <!-- จังหวัดจะถูกเพิ่มด้วย JavaScript -->
-                </select>
+          <div class="modal-body">
+            <form id="loginForm">
+              <div class="mb-3">
+                <label for="loginPhone" class="form-label">เบอร์โทรศัพท์<span class="text-danger">*</span></label>
+                <input type="tel" class="form-control" id="loginPhone" required>
+                <div class="form-text">ใช้เบอร์โทรศัพท์สำหรับเข้าสู่ระบบ</div>
               </div>
-              <div class="col-md-6">
-                <select class="form-select" id="loginDistrict" required disabled>
-                  <option value="">-- เลือกอำเภอ/เขต --</option>
-                  <!-- อำเภอจะถูกเพิ่มด้วย JavaScript -->
-                </select>
+              
+              <div class="mb-3">
+                <label for="loginName" class="form-label">ชื่อ-นามสกุล<span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="loginName" required>
               </div>
-            </div>
-            
-            <div class="row">
-              <div class="col-md-6">
-                <select class="form-select" id="loginSubdistrict" required disabled>
-                  <option value="">-- เลือกตำบล/แขวง --</option>
-                  <!-- ตำบลจะถูกเพิ่มด้วย JavaScript -->
-                </select>
+              
+              <div class="mb-3">
+                <label for="loginEmail" class="form-label">อีเมล<span class="text-danger">*</span></label>
+                <input type="email" class="form-control" id="loginEmail" required>
               </div>
-              <div class="col-md-6">
-                <input type="text" class="form-control" id="loginZipcode" placeholder="รหัสไปรษณีย์" required readonly>
+              
+              <div class="mb-3">
+                <label class="form-label">ที่อยู่<span class="text-danger">*</span></label>
+                
+                <div class="mb-2">
+                  <input type="text" class="form-control" id="loginAddressDetail" placeholder="บ้านเลขที่ หมู่บ้าน ถนน ซอย" required>
+                </div>
+                
+                <div class="row mb-2">
+                  <div class="col-md-6">
+                    <select class="form-select" id="loginProvince" required>
+                      <option value="">-- เลือกจังหวัด --</option>
+                      <!-- จังหวัดจะถูกเพิ่มด้วย JavaScript -->
+                    </select>
+                  </div>
+                  <div class="col-md-6">
+                    <select class="form-select" id="loginDistrict" required disabled>
+                      <option value="">-- เลือกอำเภอ/เขต --</option>
+                      <!-- อำเภอจะถูกเพิ่มด้วย JavaScript -->
+                    </select>
+                  </div>
+                </div>
+                
+                <div class="row">
+                  <div class="col-md-6">
+                    <select class="form-select" id="loginSubdistrict" required disabled>
+                      <option value="">-- เลือกตำบล/แขวง --</option>
+                      <!-- ตำบลจะถูกเพิ่มด้วย JavaScript -->
+                    </select>
+                  </div>
+                  <div class="col-md-6">
+                    <input type="text" class="form-control" id="loginZipcode" placeholder="รหัสไปรษณีย์" required readonly>
+                  </div>
+                </div>
+                
+                <input type="hidden" id="loginAddress">
               </div>
-            </div>
-            
-            <input type="hidden" id="loginAddress">
+              
+              <div class="mb-3">
+                <label for="loginLineId" class="form-label">Line ID</label>
+                <input type="text" class="form-control" id="loginLineId">
+              </div>
+              
+              <div class="mb-3">
+                <label for="loginCompany" class="form-label">ชื่อบริษัท/ร้านค้า</label>
+                <input type="text" class="form-control" id="loginCompany">
+              </div>
+            </form>
           </div>
-          
-          <div class="mb-3">
-            <label for="loginLineId" class="form-label">Line ID</label>
-            <input type="text" class="form-control" id="loginLineId">
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+            <button type="button" class="btn btn-primary" onclick="login()">เข้าสู่ระบบ</button>
           </div>
-          
-          <div class="mb-3">
-            <label for="loginCompany" class="form-label">ชื่อบริษัท/ร้านค้า</label>
-            <input type="text" class="form-control" id="loginCompany">
-          </div>
-        </form>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
-        <button type="button" class="btn btn-primary" onclick="login()">เข้าสู่ระบบ</button>
+        </div>
       </div>
     </div>
-  </div>
-</div>
 
-
-      <div class="modal fade" id="reservationModal" tabindex="-1" aria-labelledby="reservationModalLabel" aria-hidden="true">
+    <!-- Reservation Modal -->
+    <div class="modal fade" id="reservationModal" tabindex="-1" aria-labelledby="reservationModalLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
@@ -1462,167 +1352,167 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
         
         // ฟังก์ชั่นจองโดยจ่ายทีหลัง
         function submitReservation() {
-    // Get form data
-    const boothId = document.getElementById('boothId').value;
-    
-    // แสดงข้อความกำลังดำเนินการ
-    const reserveBtn = document.querySelector('[onclick="submitReservation()"]');
-    reserveBtn.disabled = true;
-    reserveBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> กำลังดำเนินการ...';
-    
-    // Submit reservation via AJAX
-    $.ajax({
-        url: window.location.href,
-        type: 'POST',
-        data: {
-            action: 'reserve',
-            boothId: boothId
-        },
-        dataType: 'json',
-        success: function(response) {
-            console.log('Server response:', response);
+            // Get form data
+            const boothId = document.getElementById('boothId').value;
             
-            if (response && response.success) {
-                // โค้ดเมื่อสำเร็จ
-                // Hide reservation modal
-                var reservationModal = bootstrap.Modal.getInstance(document.getElementById('reservationModal'));
-                reservationModal.hide();
-                
-                // บันทึกข้อมูลคำสั่งซื้อ
-                currentOrderId = response.order_id;
-                currentOrderNumber = response.order_number;
-                
-                // Set success info และข้อความสำหรับกรณีจ่ายทีหลัง
-                document.getElementById('successOrderNumber').textContent = response.order_number;
-                document.getElementById('successPaymentInfo').innerHTML = `
-                    <p><strong>คุณเลือกชำระเงินภายหลัง</strong></p>
-                    <p>กรุณาชำระเงินภายใน 24 ชั่วโมง มิเช่นนั้นการจองจะถูกยกเลิกโดยอัตโนมัติ</p>
-                    <p>หากมีข้อสงสัยสามารถติดต่อได้ที่ ${getSetting('contact_phone', '0812345678')}</p>
-                `;
-                
-                // เพิ่มปุ่มชำระเงิน
-                document.getElementById('paymentButtonContainer').innerHTML = `
-                    <button class="btn btn-primary" onclick="showPaymentModal('${response.order_id}', '${response.order_number}')">
-                        <i class="bi bi-credit-card me-2"></i>ชำระเงินตอนนี้
-                    </button>
-                `;
-                
-                // Show success modal
-                var successModal = new bootstrap.Modal(document.getElementById('successModal'));
-                successModal.show();
-            } else {
-                alert(response && response.message ? response.message : 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
-            }
+            // แสดงข้อความกำลังดำเนินการ
+            const reserveBtn = document.querySelector('[onclick="submitReservation()"]');
+            reserveBtn.disabled = true;
+            reserveBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> กำลังดำเนินการ...';
             
-            // คืนค่าปุ่ม
-            reserveBtn.disabled = false;
-            reserveBtn.innerHTML = 'ยืนยันการจอง';
-        },
-        error: function(xhr, status, error) {
-            console.error('AJAX error:', status, error);
-            console.log('Response text:', xhr.responseText);
-            
-            try {
-                // พยายามแปลงเป็น JSON
-                const response = JSON.parse(xhr.responseText);
-                if (response && response.success) {
-                    // ถ้าแปลงได้และเป็น success ให้ดำเนินการต่อ
-                    var reservationModal = bootstrap.Modal.getInstance(document.getElementById('reservationModal'));
-                    reservationModal.hide();
+            // Submit reservation via AJAX
+            $.ajax({
+                url: window.location.href,
+                type: 'POST',
+                data: {
+                    action: 'reserve',
+                    boothId: boothId
+                },
+                dataType: 'json',
+                success: function(response) {
+                    console.log('Server response:', response);
                     
-                    // บันทึกข้อมูลคำสั่งซื้อ
-                    currentOrderId = response.order_id;
-                    currentOrderNumber = response.order_number;
+                    if (response && response.success) {
+                        // Hide reservation modal
+                        var reservationModal = bootstrap.Modal.getInstance(document.getElementById('reservationModal'));
+                        reservationModal.hide();
+                        
+                        // บันทึกข้อมูลคำสั่งซื้อ
+                        currentOrderId = response.order_id;
+                        currentOrderNumber = response.order_number;
+                        
+                        // Set success info และข้อความสำหรับกรณีจ่ายทีหลัง
+                        document.getElementById('successOrderNumber').textContent = response.order_number;
+                        document.getElementById('successPaymentInfo').innerHTML = `
+                            <p><strong>คุณเลือกชำระเงินภายหลัง</strong></p>
+                            <p>กรุณาชำระเงินภายใน 24 ชั่วโมง มิเช่นนั้นการจองจะถูกยกเลิกโดยอัตโนมัติ</p>
+                            <p>หากมีข้อสงสัยสามารถติดต่อได้ที่ ${getSetting('contact_phone', '0812345678')}</p>
+                        `;
+                        
+                        // เพิ่มปุ่มชำระเงิน
+                        document.getElementById('paymentButtonContainer').innerHTML = `
+                            <button class="btn btn-primary" onclick="showPaymentModal('${response.order_id}', '${response.order_number}')">
+                                <i class="bi bi-credit-card me-2"></i>ชำระเงินตอนนี้
+                            </button>
+                        `;
+                        
+                        // Show success modal
+                        var successModal = new bootstrap.Modal(document.getElementById('successModal'));
+                        successModal.show();
+                    } else {
+                        alert(response && response.message ? response.message : 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
+                    }
                     
-                    // Set success info
-                    document.getElementById('successOrderNumber').textContent = response.order_number;
-                    document.getElementById('successPaymentInfo').innerHTML = `
-                        <p><strong>คุณเลือกชำระเงินภายหลัง</strong></p>
-                        <p>กรุณาชำระเงินภายใน 24 ชั่วโมง มิเช่นนั้นการจองจะถูกยกเลิกโดยอัตโนมัติ</p>
-                        <p>หากมีข้อสงสัยสามารถติดต่อได้ที่ ${getSetting('contact_phone', '0812345678')}</p>
-                    `;
+                    // คืนค่าปุ่ม
+                    reserveBtn.disabled = false;
+                    reserveBtn.innerHTML = 'ยืนยันการจอง';
+                },
+                error: function(xhr, status, error) {
+                    console.error('AJAX error:', status, error);
+                    console.log('Response text:', xhr.responseText);
                     
-                    // เพิ่มปุ่มชำระเงิน
-                    document.getElementById('paymentButtonContainer').innerHTML = `
-                        <button class="btn btn-primary" onclick="showPaymentModal('${response.order_id}', '${response.order_number}')">
-                            <i class="bi bi-credit-card me-2"></i>ชำระเงินตอนนี้
-                        </button>
-                    `;
+                    try {
+                        // พยายามแปลงเป็น JSON
+                        const response = JSON.parse(xhr.responseText);
+                        if (response && response.success) {
+                            // ถ้าแปลงได้และเป็น success ให้ดำเนินการต่อ
+                            var reservationModal = bootstrap.Modal.getInstance(document.getElementById('reservationModal'));
+                            reservationModal.hide();
+                            
+                            // บันทึกข้อมูลคำสั่งซื้อ
+                            currentOrderId = response.order_id;
+                            currentOrderNumber = response.order_number;
+                            
+                            // Set success info
+                            document.getElementById('successOrderNumber').textContent = response.order_number;
+                            document.getElementById('successPaymentInfo').innerHTML = `
+                                <p><strong>คุณเลือกชำระเงินภายหลัง</strong></p>
+                                <p>กรุณาชำระเงินภายใน 24 ชั่วโมง มิเช่นนั้นการจองจะถูกยกเลิกโดยอัตโนมัติ</p>
+                                <p>หากมีข้อสงสัยสามารถติดต่อได้ที่ ${getSetting('contact_phone', '0812345678')}</p>
+                            `;
+                            
+                            // เพิ่มปุ่มชำระเงิน
+                            document.getElementById('paymentButtonContainer').innerHTML = `
+                                <button class="btn btn-primary" onclick="showPaymentModal('${response.order_id}', '${response.order_number}')">
+                                    <i class="bi bi-credit-card me-2"></i>ชำระเงินตอนนี้
+                                </button>
+                            `;
+                            
+                            // Show success modal
+                            var successModal = new bootstrap.Modal(document.getElementById('successModal'));
+                            successModal.show();
+                            return;
+                        }
+                    } catch (e) {
+                        console.error('Error parsing response:', e);
+                    }
                     
-                    // Show success modal
-                    var successModal = new bootstrap.Modal(document.getElementById('successModal'));
-                    successModal.show();
-                    return;
+                    alert('เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + error);
+                    
+                    // คืนค่าปุ่ม
+                    reserveBtn.disabled = false;
+                    reserveBtn.innerHTML = 'ยืนยันการจอง';
                 }
-            } catch (e) {
-                console.error('Error parsing response:', e);
-            }
-            
-            alert('เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + error);
-            
-            // คืนค่าปุ่ม
-            reserveBtn.disabled = false;
-            reserveBtn.innerHTML = 'ยืนยันการจอง';
+            });
         }
-    });
-}
-function submitReservationAndPay() {
-    // Get form data
-    const boothId = document.getElementById('boothId').value;
-    
-    // แสดงข้อความกำลังดำเนินการ
-    const payNowBtn = document.querySelector('[onclick="submitReservationAndPay()"]');
-    payNowBtn.disabled = true;
-    payNowBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> กำลังดำเนินการ...';
-    
-    // Submit reservation via AJAX
-    $.ajax({
-        url: window.location.href,
-        type: 'POST',
-        data: {
-            action: 'reserve',
-            boothId: boothId
-        },
-        dataType: 'json',
-        success: function(response) {
-            console.log('Server response:', response);
+
+        function submitReservationAndPay() {
+            // Get form data
+            const boothId = document.getElementById('boothId').value;
             
-            if (response && response.success) {
-                // Hide reservation modal
-                var reservationModal = bootstrap.Modal.getInstance(document.getElementById('reservationModal'));
-                reservationModal.hide();
-                
-                // นำข้อมูลมาแสดงที่หน้าชำระเงิน
-                document.getElementById('orderId').value = response.order_id;
-                document.getElementById('orderNumber').value = response.order_number;
-                
-                // ดึงราคาบูธ
-                const price = document.getElementById('boothPrice').textContent;
-                document.getElementById('totalAmount').textContent = price;
-                
-                // Show payment modal
-                var paymentModal = new bootstrap.Modal(document.getElementById('paymentModal'));
-                paymentModal.show();
-            } else {
-                alert(response && response.message ? response.message : 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
-            }
+            // แสดงข้อความกำลังดำเนินการ
+            const payNowBtn = document.querySelector('[onclick="submitReservationAndPay()"]');
+            payNowBtn.disabled = true;
+            payNowBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> กำลังดำเนินการ...';
             
-            // คืนค่าปุ่ม
-            payNowBtn.disabled = false;
-            payNowBtn.innerHTML = 'ยืนยันและชำระเงิน';
-        },
-        error: function(xhr, status, error) {
-            console.error('AJAX error:', status, error);
-            console.log('Response text:', xhr.responseText);
-            
-            alert('เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + error);
-            
-            // คืนค่าปุ่ม
-            payNowBtn.disabled = false;
-            payNowBtn.innerHTML = 'ยืนยันและชำระเงิน';
+            // Submit reservation via AJAX
+            $.ajax({
+                url: window.location.href,
+                type: 'POST',
+                data: {
+                    action: 'reserve',
+                    boothId: boothId
+                },
+                dataType: 'json',
+                success: function(response) {
+                    console.log('Server response:', response);
+                    
+                    if (response && response.success) {
+                        // Hide reservation modal
+                        var reservationModal = bootstrap.Modal.getInstance(document.getElementById('reservationModal'));
+                        reservationModal.hide();
+                        
+                        // นำข้อมูลมาแสดงที่หน้าชำระเงิน
+                        document.getElementById('orderId').value = response.order_id;
+                        document.getElementById('orderNumber').value = response.order_number;
+                        
+                        // ดึงราคาบูธ
+                        const price = document.getElementById('boothPrice').textContent;
+                        document.getElementById('totalAmount').textContent = price;
+                        
+                        // Show payment modal
+                        var paymentModal = new bootstrap.Modal(document.getElementById('paymentModal'));
+                        paymentModal.show();
+                    } else {
+                        alert(response && response.message ? response.message : 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
+                    }
+                    
+                    // คืนค่าปุ่ม
+                    payNowBtn.disabled = false;
+                    payNowBtn.innerHTML = 'ยืนยันและชำระเงิน';
+                },
+                error: function(xhr, status, error) {
+                    console.error('AJAX error:', status, error);
+                    console.log('Response text:', xhr.responseText);
+                    
+                    alert('เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + error);
+                    
+                    // คืนค่าปุ่ม
+                    payNowBtn.disabled = false;
+                    payNowBtn.innerHTML = 'ยืนยันและชำระเงิน';
+                }
+            });
         }
-    });
-}
         // แสดงหน้าชำระเงินสำหรับคำสั่งซื้อที่มีอยู่แล้ว
         function showPaymentModal(orderId, orderNumber) {
             // บันทึกข้อมูลคำสั่งซื้อ
@@ -1731,80 +1621,81 @@ function submitReservationAndPay() {
 
 
         function login() {
-    const phone = document.getElementById('loginPhone').value;
-    const name = document.getElementById('loginName').value;
-    const email = document.getElementById('loginEmail').value;
-    const lineId = document.getElementById('loginLineId').value;
-    const company = document.getElementById('loginCompany').value;
-    
-    // สร้างที่อยู่แบบเต็มจากองค์ประกอบต่างๆ
-    const addressDetail = document.getElementById('loginAddressDetail').value;
-    const province = $('#loginProvince option:selected').text() !== '-- เลือกจังหวัด --' ? $('#loginProvince option:selected').text() : '';
-    const district = $('#loginDistrict option:selected').text() !== '-- เลือกอำเภอ/เขต --' ? $('#loginDistrict option:selected').text() : '';
-    const subdistrict = $('#loginSubdistrict option:selected').text() !== '-- เลือกตำบล/แขวง --' ? $('#loginSubdistrict option:selected').text() : '';
-    const zipcode = document.getElementById('loginZipcode').value;
-    
-    // รวมเป็นที่อยู่เต็มรูปแบบ
-    let fullAddress = addressDetail;
-    if (subdistrict) fullAddress += ' ตำบล/แขวง' + subdistrict;
-    if (district) fullAddress += ' อำเภอ/เขต' + district;
-    if (province) fullAddress += ' จังหวัด' + province;
-    if (zipcode) fullAddress += ' ' + zipcode;
-    
-    // ตรวจสอบข้อมูล
-    if (!phone || !name || !email || !addressDetail || !province || !district || !subdistrict) {
-        alert('กรุณากรอกข้อมูลให้ครบถ้วน (ชื่อ, เบอร์โทร, อีเมล และที่อยู่)');
-        return;
-    }
-    
-    // ตรวจสอบรูปแบบเบอร์โทรศัพท์ (ตัวเลข 9-10 หลัก)
-    if (!phone.match(/^[0-9]{9,10}$/)) {
-        alert('กรุณากรอกเบอร์โทรศัพท์ให้ถูกต้อง (ตัวเลข 9-10 หลัก)');
-        return;
-    }
-    
-    // ตรวจสอบรูปแบบอีเมล
-    const emailPattern = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$/;
-    if (!email.match(emailPattern)) {
-        alert('กรุณากรอกอีเมลให้ถูกต้อง');
-        return;
-    }
-    
-    // พิมพ์ค่าที่อยู่เพื่อตรวจสอบ
-    console.log('ส่งที่อยู่:', fullAddress);
-    
-    // ส่งข้อมูลไปยังเซิร์ฟเวอร์
-    $.ajax({
-        url: window.location.href,
-        type: 'POST',
-        data: {
-            action: 'login',
-            phone: phone,
-            name: name,
-            email: email,
-            address: fullAddress, // ส่งที่อยู่แบบเต็ม
-            lineId: lineId,
-            company: company
-        },
-        dataType: 'json',
-        success: function(response) {
-            if (response.success) {
-                // ปิด modal
-                var loginModal = bootstrap.Modal.getInstance(document.getElementById('loginModal'));
-                loginModal.hide();
-                
-                // รีโหลดหน้าเพื่อแสดงสถานะเข้าสู่ระบบ
-                location.reload();
-            } else {
-                alert(response.message || 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ');
+            const phone = document.getElementById('loginPhone').value;
+            const name = document.getElementById('loginName').value;
+            const email = document.getElementById('loginEmail').value;
+            const lineId = document.getElementById('loginLineId').value;
+            const company = document.getElementById('loginCompany').value;
+            
+            // สร้างที่อยู่แบบเต็มจากองค์ประกอบต่างๆ
+            const addressDetail = document.getElementById('loginAddressDetail').value;
+            const province = $('#loginProvince option:selected').text() !== '-- เลือกจังหวัด --' ? $('#loginProvince option:selected').text() : '';
+            const district = $('#loginDistrict option:selected').text() !== '-- เลือกอำเภอ/เขต --' ? $('#loginDistrict option:selected').text() : '';
+            const subdistrict = $('#loginSubdistrict option:selected').text() !== '-- เลือกตำบล/แขวง --' ? $('#loginSubdistrict option:selected').text() : '';
+            const zipcode = document.getElementById('loginZipcode').value;
+            
+            // รวมเป็นที่อยู่เต็มรูปแบบ
+            let fullAddress = addressDetail;
+            if (subdistrict) fullAddress += ' ตำบล/แขวง' + subdistrict;
+            if (district) fullAddress += ' อำเภอ/เขต' + district;
+            if (province) fullAddress += ' จังหวัด' + province;
+            if (zipcode) fullAddress += ' ' + zipcode;
+            
+            // ตรวจสอบข้อมูล
+            if (!phone || !name || !email || !addressDetail || !province || !district || !subdistrict) {
+                alert('กรุณากรอกข้อมูลให้ครบถ้วน (ชื่อ, เบอร์โทร, อีเมล และที่อยู่)');
+                return;
             }
-        },
-        error: function(xhr, status, error) {
-            console.error('AJAX error:', xhr.responseText);
-            alert('เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + error);
+            
+            // ตรวจสอบรูปแบบเบอร์โทรศัพท์ (ตัวเลข 9-10 หลัก)
+            if (!phone.match(/^[0-9]{9,10}$/)) {
+                alert('กรุณากรอกเบอร์โทรศัพท์ให้ถูกต้อง (ตัวเลข 9-10 หลัก)');
+                return;
+            }
+            
+            // ตรวจสอบรูปแบบอีเมล
+            const emailPattern = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$/;
+            if (!email.match(emailPattern)) {
+                alert('กรุณากรอกอีเมลให้ถูกต้อง');
+                return;
+            }
+            
+            // พิมพ์ค่าที่อยู่เพื่อตรวจสอบ
+            console.log('ส่งที่อยู่:', fullAddress);
+            
+            // ส่งข้อมูลไปยังเซิร์ฟเวอร์
+            $.ajax({
+                url: window.location.href,
+                type: 'POST',
+                data: {
+                    action: 'login',
+                    phone: phone,
+                    name: name,
+                    email: email,
+                    address: fullAddress, // ส่งที่อยู่แบบเต็ม
+                    lineId: lineId,
+                    company: company
+                },
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success) {
+                        // ปิด modal
+                        var loginModal = bootstrap.Modal.getInstance(document.getElementById('loginModal'));
+                        loginModal.hide();
+                        
+                        // รีโหลดหน้าเพื่อแสดงสถานะเข้าสู่ระบบ
+                        location.reload();
+                    } else {
+                        alert(response.message || 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('AJAX error:', xhr.responseText);
+                    alert('เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + error);
+                }
+            });
         }
-    });
-}
+        
         // ล็อกเอาท์
         function logout() {
             $.ajax({
@@ -1859,172 +1750,172 @@ function submitReservationAndPay() {
             });
         });
 
-        // เพิ่มโค้ด JavaScript นี้ในส่วน <script> ของคุณ
-$(document).ready(function() {
-  // โหลดจังหวัดตอนเริ่มต้น
-  loadProvinces();
-  
-  // Event listener เมื่อเลือกจังหวัด
-  $('#loginProvince').change(function() {
-    const provinceId = $(this).val();
-    if (provinceId) {
-      loadDistricts(provinceId);
-      $('#loginDistrict').prop('disabled', false);
-      $('#loginSubdistrict').prop('disabled', true).html('<option value="">-- เลือกตำบล/แขวง --</option>');
-      $('#loginZipcode').val('');
-    } else {
-      $('#loginDistrict').prop('disabled', true).html('<option value="">-- เลือกอำเภอ/เขต --</option>');
-      $('#loginSubdistrict').prop('disabled', true).html('<option value="">-- เลือกตำบล/แขวง --</option>');
-      $('#loginZipcode').val('');
-    }
-    updateAddressField();
-  });
-  
-  // Event listener เมื่อเลือกอำเภอ
-  $('#loginDistrict').change(function() {
-    const districtId = $(this).val();
-    if (districtId) {
-      loadSubdistricts(districtId);
-      $('#loginSubdistrict').prop('disabled', false);
-    } else {
-      $('#loginSubdistrict').prop('disabled', true).html('<option value="">-- เลือกตำบล/แขวง --</option>');
-      $('#loginZipcode').val('');
-    }
-    updateAddressField();
-  });
-  
-  // Event listener เมื่อเลือกตำบล
-  $('#loginSubdistrict').change(function() {
-    const subdistrictId = $(this).val();
-    if (subdistrictId) {
-      // ดึงรหัสไปรษณีย์
-      fetchZipcode(subdistrictId);
-    } else {
-      $('#loginZipcode').val('');
-    }
-    updateAddressField();
-  });
-  
-  // Event listener เมื่อกรอกรายละเอียดที่อยู่
-  $('#loginAddressDetail').on('input', updateAddressField);
-});
-
-// ฟังก์ชันโหลดข้อมูลจังหวัด
-function loadProvinces() {
-  $.ajax({
-    url: 'get_location.php',
-    type: 'GET',
-    data: {
-      action: 'get_provinces'
-    },
-    dataType: 'json',
-    success: function(response) {
-      if (response.success) {
-        let options = '<option value="">-- เลือกจังหวัด --</option>';
-        
-        response.data.forEach(function(province) {
-          options += `<option value="${province.id}">${province.name_in_thai}</option>`;
+        // เพิ่มโค้ด JavaScript สำหรับที่อยู่
+        $(document).ready(function() {
+            // โหลดจังหวัดตอนเริ่มต้น
+            loadProvinces();
+            
+            // Event listener เมื่อเลือกจังหวัด
+            $('#loginProvince').change(function() {
+                const provinceId = $(this).val();
+                if (provinceId) {
+                    loadDistricts(provinceId);
+                    $('#loginDistrict').prop('disabled', false);
+                    $('#loginSubdistrict').prop('disabled', true).html('<option value="">-- เลือกตำบล/แขวง --</option>');
+                    $('#loginZipcode').val('');
+                } else {
+                    $('#loginDistrict').prop('disabled', true).html('<option value="">-- เลือกอำเภอ/เขต --</option>');
+                    $('#loginSubdistrict').prop('disabled', true).html('<option value="">-- เลือกตำบล/แขวง --</option>');
+                    $('#loginZipcode').val('');
+                }
+                updateAddressField();
+            });
+            
+            // Event listener เมื่อเลือกอำเภอ
+            $('#loginDistrict').change(function() {
+                const districtId = $(this).val();
+                if (districtId) {
+                    loadSubdistricts(districtId);
+                    $('#loginSubdistrict').prop('disabled', false);
+                } else {
+                    $('#loginSubdistrict').prop('disabled', true).html('<option value="">-- เลือกตำบล/แขวง --</option>');
+                    $('#loginZipcode').val('');
+                }
+                updateAddressField();
+            });
+            
+            // Event listener เมื่อเลือกตำบล
+            $('#loginSubdistrict').change(function() {
+                const subdistrictId = $(this).val();
+                if (subdistrictId) {
+                    // ดึงรหัสไปรษณีย์
+                    fetchZipcode(subdistrictId);
+                } else {
+                    $('#loginZipcode').val('');
+                }
+                updateAddressField();
+            });
+            
+            // Event listener เมื่อกรอกรายละเอียดที่อยู่
+            $('#loginAddressDetail').on('input', updateAddressField);
         });
-        
-        $('#loginProvince').html(options);
-      }
-    },
-    error: function() {
-      console.error('ไม่สามารถโหลดข้อมูลจังหวัดได้');
-    }
-  });
-}
 
-// ฟังก์ชันโหลดข้อมูลอำเภอตามจังหวัด
-function loadDistricts(provinceId) {
-  $.ajax({
-    url: 'get_location.php',
-    type: 'GET',
-    data: {
-      action: 'get_districts',
-      province_id: provinceId
-    },
-    dataType: 'json',
-    success: function(response) {
-      if (response.success) {
-        let options = '<option value="">-- เลือกอำเภอ/เขต --</option>';
-        
-        response.data.forEach(function(district) {
-          options += `<option value="${district.id}">${district.name_in_thai}</option>`;
-        });
-        
-        $('#loginDistrict').html(options);
-      }
-    },
-    error: function() {
-      console.error('ไม่สามารถโหลดข้อมูลอำเภอได้');
-    }
-  });
-}
+        // ฟังก์ชันโหลดข้อมูลจังหวัด
+        function loadProvinces() {
+            $.ajax({
+                url: 'get_location.php',
+                type: 'GET',
+                data: {
+                    action: 'get_provinces'
+                },
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success) {
+                        let options = '<option value="">-- เลือกจังหวัด --</option>';
+                        
+                        response.data.forEach(function(province) {
+                            options += `<option value="${province.id}">${province.name_in_thai}</option>`;
+                        });
+                        
+                        $('#loginProvince').html(options);
+                    }
+                },
+                error: function() {
+                    console.error('ไม่สามารถโหลดข้อมูลจังหวัดได้');
+                }
+            });
+        }
 
-// ฟังก์ชันโหลดข้อมูลตำบลตามอำเภอ
-function loadSubdistricts(districtId) {
-  $.ajax({
-    url: 'get_location.php',
-    type: 'GET',
-    data: {
-      action: 'get_subdistricts',
-      district_id: districtId
-    },
-    dataType: 'json',
-    success: function(response) {
-      if (response.success) {
-        let options = '<option value="">-- เลือกตำบล/แขวง --</option>';
-        
-        response.data.forEach(function(subdistrict) {
-          options += `<option value="${subdistrict.id}" data-zipcode="${subdistrict.zip_code}">${subdistrict.name_in_thai}</option>`;
-        });
-        
-        $('#loginSubdistrict').html(options);
-      }
-    },
-    error: function() {
-      console.error('ไม่สามารถโหลดข้อมูลตำบลได้');
-    }
-  });
-}
+        // ฟังก์ชันโหลดข้อมูลอำเภอตามจังหวัด
+        function loadDistricts(provinceId) {
+            $.ajax({
+                url: 'get_location.php',
+                type: 'GET',
+                data: {
+                    action: 'get_districts',
+                    province_id: provinceId
+                },
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success) {
+                        let options = '<option value="">-- เลือกอำเภอ/เขต --</option>';
+                        
+                        response.data.forEach(function(district) {
+                            options += `<option value="${district.id}">${district.name_in_thai}</option>`;
+                        });
+                        
+                        $('#loginDistrict').html(options);
+                    }
+                },
+                error: function() {
+                    console.error('ไม่สามารถโหลดข้อมูลอำเภอได้');
+                }
+            });
+        }
 
-// ฟังก์ชันดึงรหัสไปรษณีย์
-function fetchZipcode(subdistrictId) {
-  const zipcode = $('#loginSubdistrict option:selected').data('zipcode');
-  $('#loginZipcode').val(zipcode || '');
-}
+        // ฟังก์ชันโหลดข้อมูลตำบลตามอำเภอ
+        function loadSubdistricts(districtId) {
+            $.ajax({
+                url: 'get_location.php',
+                type: 'GET',
+                data: {
+                    action: 'get_subdistricts',
+                    district_id: districtId
+                },
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success) {
+                        let options = '<option value="">-- เลือกตำบล/แขวง --</option>';
+                        
+                        response.data.forEach(function(subdistrict) {
+                            options += `<option value="${subdistrict.id}" data-zipcode="${subdistrict.zip_code}">${subdistrict.name_in_thai}</option>`;
+                        });
+                        
+                        $('#loginSubdistrict').html(options);
+                    }
+                },
+                error: function() {
+                    console.error('ไม่สามารถโหลดข้อมูลตำบลได้');
+                }
+            });
+        }
 
-// ฟังก์ชันอัพเดตฟิลด์ที่อยู่รวม
-function updateAddressField() {
-  const addressDetail = $('#loginAddressDetail').val();
-  const provinceName = $('#loginProvince option:selected').text();
-  const districtName = $('#loginDistrict option:selected').text();
-  const subdistrictName = $('#loginSubdistrict option:selected').text();
-  const zipcode = $('#loginZipcode').val();
-  
-  // สร้างที่อยู่รวม
-  let fullAddress = addressDetail;
-  
-  if (subdistrictName && subdistrictName !== '-- เลือกตำบล/แขวง --') {
-    fullAddress += ' ตำบล/แขวง' + subdistrictName;
-  }
-  
-  if (districtName && districtName !== '-- เลือกอำเภอ/เขต --') {
-    fullAddress += ' อำเภอ/เขต' + districtName;
-  }
-  
-  if (provinceName && provinceName !== '-- เลือกจังหวัด --') {
-    fullAddress += ' จังหวัด' + provinceName;
-  }
-  
-  if (zipcode) {
-    fullAddress += ' ' + zipcode;
-  }
-  
-  // เก็บที่อยู่รวมในฟิลด์ซ่อน
-  $('#loginAddress').val(fullAddress);
-}
+        // ฟังก์ชันดึงรหัสไปรษณีย์
+        function fetchZipcode(subdistrictId) {
+            const zipcode = $('#loginSubdistrict option:selected').data('zipcode');
+            $('#loginZipcode').val(zipcode || '');
+        }
+
+        // ฟังก์ชันอัพเดตฟิลด์ที่อยู่รวม
+        function updateAddressField() {
+            const addressDetail = $('#loginAddressDetail').val();
+            const provinceName = $('#loginProvince option:selected').text();
+            const districtName = $('#loginDistrict option:selected').text();
+            const subdistrictName = $('#loginSubdistrict option:selected').text();
+            const zipcode = $('#loginZipcode').val();
+            
+            // สร้างที่อยู่รวม
+            let fullAddress = addressDetail;
+            
+            if (subdistrictName && subdistrictName !== '-- เลือกตำบล/แขวง --') {
+                fullAddress += ' ตำบล/แขวง' + subdistrictName;
+            }
+            
+            if (districtName && districtName !== '-- เลือกอำเภอ/เขต --') {
+                fullAddress += ' อำเภอ/เขต' + districtName;
+            }
+            
+            if (provinceName && provinceName !== '-- เลือกจังหวัด --') {
+                fullAddress += ' จังหวัด' + provinceName;
+            }
+            
+            if (zipcode) {
+                fullAddress += ' ' + zipcode;
+            }
+            
+            // เก็บที่อยู่รวมในฟิลด์ซ่อน
+            $('#loginAddress').val(fullAddress);
+        }
     </script>
 </body>
 </html>
