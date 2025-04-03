@@ -1,6 +1,6 @@
 <?php
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
+ini_set('display_errors', 0); // Disable displaying errors directly to the browser
+ini_set('display_startup_errors', 0);
 error_reporting(E_ALL);
 session_start(); 
 require_once 'config.php';
@@ -21,6 +21,8 @@ $customerLineId = $isLoggedIn ? $_SESSION['line_id'] : ''; // เพิ่ม Li
 
 // ระบบล็อกอิน
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["action"])) {
+    // Make sure no output has been sent before headers
+    if (ob_get_length()) ob_clean();
     header('Content-Type: application/json');
     
     if ($_POST["action"] == "login") {
@@ -70,8 +72,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["action"])) {
         exit;
     }
     
-            // กรณีส่งคำสั่งจอง
-        if ($_POST["action"] == "reserve") {
+    // กรณีส่งคำสั่งจอง
+    if ($_POST["action"] == "reserve") {
+        try {
             $boothId = $_POST["boothId"];
             
             // แสดงลอก debug ข้อมูลที่ได้รับจาก session
@@ -79,8 +82,20 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["action"])) {
             
             // ใช้ข้อมูลจาก session แทนการส่งมาใหม่
             $result = reserveBooth($boothId, $customerName, $customerEmail, $customerPhone, $customerCompany, $conn, $customerAddress, $customerLineId);
-            echo json_encode($result);
+            
+            // Make sure result is proper JSON
+            if (is_array($result)) {
+                echo json_encode($result);
+            } else {
+                // In case reserveBooth returns a non-array
+                echo json_encode(["success" => true, "message" => "จองสำเร็จ", "order_id" => $result, "order_number" => generateOrderNumber()]);
+            }
+        } catch (Exception $e) {
+            error_log("Reservation error: " . $e->getMessage());
+            echo json_encode(["success" => false, "message" => "เกิดข้อผิดพลาด: " . $e->getMessage()]);
         }
+        exit;
+    }
     else if ($_POST["action"] == "upload_slip") {
         $orderId = $_POST["orderId"];
         $paymentMethod = $_POST["paymentMethod"];
@@ -173,8 +188,18 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["action"])) {
     
     exit;
 }
-// Get all booths
-$sql = "SELECT * FROM booths ORDER BY zone, floor, booth_number";
+
+// ฟังก์ชั่นสร้างเลขที่คำสั่งซื้อ (กรณีไม่มีในระบบเดิม)
+function generateOrderNumber() {
+    return 'ORD' . date('YmdHis') . rand(100, 999);
+}
+
+// Get all booths with order information
+$sql = "SELECT b.*, oi.order_id, o.payment_status as order_payment_status
+        FROM booths b
+        LEFT JOIN order_items oi ON b.id = oi.booth_id
+        LEFT JOIN orders o ON oi.order_id = o.id
+        ORDER BY b.zone, b.floor, b.booth_number";
 $result = $conn->query($sql);
 $booths = [];
 
@@ -664,30 +689,34 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                     <?php 
                     // Display booths 1-9 (zone A)
                     for ($i = 1; $i <= 9; $i++) {
-                        $isReserved = false;
-                        $status = 'available';
-                        
-                        foreach ($booths as $booth) {
-                            if ($booth['booth_number'] == $i && $booth['zone'] == 'A') {
-                                $status = $booth['status'];
-                                if ($status != 'available') {
-                                    $isReserved = true;
-                                }
-                                break;
-                            }
-                        }
-                        
-                        $class = ($isReserved) ? "booth $status" : "booth";
-                        $class .= " booth-blue"; // Blue colored booths for zone A
-                        
                         $boothId = 0;
                         $price = 0;
+                        $status = 'available';
+                        $orderStatus = null;
+                        $hasOrder = false;
                         
                         foreach ($booths as $booth) {
                             if ($booth['booth_number'] == $i && $booth['zone'] == 'A') {
                                 $boothId = $booth['id'];
                                 $price = $booth['price'];
+                                $status = $booth['status'];
+                                $orderStatus = $booth['order_payment_status'];
+                                $hasOrder = !empty($booth['order_id']);
                                 break;
+                            }
+                        }
+                        
+                        // Set CSS class based on order status instead of booth status
+                        $class = "booth booth-blue";  // Base class and zone color
+                        
+                        if ($hasOrder) {
+                            // Use order status to set class
+                            if ($orderStatus == 'paid') {
+                                $class .= " paid";
+                            } else if ($orderStatus == 'pending') {
+                                $class .= " pending_payment";
+                            } else {
+                                $class .= " reserved";
                             }
                         }
                     ?>
@@ -707,30 +736,34 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                             <?php 
                             // Display booths 10-23 (scattered groups in zone A)
                             for ($i = 10; $i <= 23; $i++) {
-                                $isReserved = false;
-                                $status = 'available';
-                                
-                                foreach ($booths as $booth) {
-                                    if ($booth['booth_number'] == $i && $booth['zone'] == 'A') {
-                                        $status = $booth['status'];
-                                        if ($status != 'available') {
-                                            $isReserved = true;
-                                        }
-                                        break;
-                                    }
-                                }
-                                
-                                $class = ($isReserved) ? "booth $status" : "booth";
-                                $class .= " booth-blue"; // Blue colored booths for zone A
-                                
                                 $boothId = 0;
                                 $price = 0;
+                                $status = 'available';
+                                $orderStatus = null;
+                                $hasOrder = false;
                                 
                                 foreach ($booths as $booth) {
                                     if ($booth['booth_number'] == $i && $booth['zone'] == 'A') {
                                         $boothId = $booth['id'];
                                         $price = $booth['price'];
+                                        $status = $booth['status'];
+                                        $orderStatus = $booth['order_payment_status'];
+                                        $hasOrder = !empty($booth['order_id']);
                                         break;
+                                    }
+                                }
+                                
+                                // Set CSS class based on order status
+                                $class = "booth booth-blue";  // Base class and zone color
+                                
+                                if ($hasOrder) {
+                                    // Use order status to set class
+                                    if ($orderStatus == 'paid') {
+                                        $class .= " paid";
+                                    } else if ($orderStatus == 'pending') {
+                                        $class .= " pending_payment";
+                                    } else {
+                                        $class .= " reserved";
                                     }
                                 }
                                 
@@ -756,30 +789,34 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                             <?php 
                             // Display booths 24-30 (right side of zone A)
                             for ($i = 24; $i <= 30; $i++) {
-                                $isReserved = false;
-                                $status = 'available';
-                                
-                                foreach ($booths as $booth) {
-                                    if ($booth['booth_number'] == $i && $booth['zone'] == 'A') {
-                                        $status = $booth['status'];
-                                        if ($status != 'available') {
-                                            $isReserved = true;
-                                        }
-                                        break;
-                                    }
-                                }
-                                
-                                $class = ($isReserved) ? "booth $status" : "booth";
-                                $class .= " booth-blue"; // Blue colored booths for zone A
-                                
                                 $boothId = 0;
                                 $price = 0;
+                                $status = 'available';
+                                $orderStatus = null;
+                                $hasOrder = false;
                                 
                                 foreach ($booths as $booth) {
                                     if ($booth['booth_number'] == $i && $booth['zone'] == 'A') {
                                         $boothId = $booth['id'];
                                         $price = $booth['price'];
+                                        $status = $booth['status'];
+                                        $orderStatus = $booth['order_payment_status'];
+                                        $hasOrder = !empty($booth['order_id']);
                                         break;
+                                    }
+                                }
+                                
+                                // Set CSS class based on order status
+                                $class = "booth booth-blue";  // Base class and zone color
+                                
+                                if ($hasOrder) {
+                                    // Use order status to set class
+                                    if ($orderStatus == 'paid') {
+                                        $class .= " paid";
+                                    } else if ($orderStatus == 'pending') {
+                                        $class .= " pending_payment";
+                                    } else {
+                                        $class .= " reserved";
                                     }
                                 }
                                 
@@ -817,30 +854,34 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                             <?php 
                             // Display booths 1-60 in zone B (green booths)
                             for ($i = 1; $i <= 60; $i++) {
-                                $isReserved = false;
-                                $status = 'available';
-                                
-                                foreach ($booths as $booth) {
-                                    if ($booth['booth_number'] == $i && $booth['zone'] == 'B') {
-                                        $status = $booth['status'];
-                                        if ($status != 'available') {
-                                            $isReserved = true;
-                                        }
-                                        break;
-                                    }
-                                }
-                                
-                                $class = ($isReserved) ? "booth $status" : "booth";
-                                $class .= " booth-green"; // Green colored booths for zone B
-                                
                                 $boothId = 0;
                                 $price = 0;
+                                $status = 'available';
+                                $orderStatus = null;
+                                $hasOrder = false;
                                 
                                 foreach ($booths as $booth) {
                                     if ($booth['booth_number'] == $i && $booth['zone'] == 'B') {
                                         $boothId = $booth['id'];
                                         $price = $booth['price'];
+                                        $status = $booth['status'];
+                                        $orderStatus = $booth['order_payment_status'];
+                                        $hasOrder = !empty($booth['order_id']);
                                         break;
+                                    }
+                                }
+                                
+                                // Set CSS class based on order status
+                                $class = "booth booth-green";  // Base class and zone color
+                                
+                                if ($hasOrder) {
+                                    // Use order status to set class
+                                    if ($orderStatus == 'paid') {
+                                        $class .= " paid";
+                                    } else if ($orderStatus == 'pending') {
+                                        $class .= " pending_payment";
+                                    } else {
+                                        $class .= " reserved";
                                     }
                                 }
                             ?>
@@ -861,30 +902,34 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                             $boothNumber = $i;
                             $displayBoothNumber = 'C' . $i; 
                             
-                            $isReserved = false;
-                            $status = 'available';
-                            
-                            foreach ($booths as $booth) {
-                                if ($booth['booth_number'] == $boothNumber && $booth['zone'] == 'C' && $booth['floor'] == 1) {
-                                    $status = $booth['status'];
-                                    if ($status != 'available') {
-                                        $isReserved = true;
-                                    }
-                                    break;
-                                }
-                            }
-                            
-                            $class = ($isReserved) ? "booth $status" : "booth";
-                            $class .= " booth-purple"; 
-                            
                             $boothId = 0;
                             $price = 0;
+                            $status = 'available';
+                            $orderStatus = null;
+                            $hasOrder = false;
                             
                             foreach ($booths as $booth) {
                                 if ($booth['booth_number'] == $boothNumber && $booth['zone'] == 'C' && $booth['floor'] == 1) {
                                     $boothId = $booth['id'];
                                     $price = $booth['price'];
+                                    $status = $booth['status'];
+                                    $orderStatus = $booth['order_payment_status'];
+                                    $hasOrder = !empty($booth['order_id']);
                                     break;
+                                }
+                            }
+                            
+                            // Set CSS class based on order status
+                            $class = "booth booth-purple";  // Base class and zone color
+                            
+                            if ($hasOrder) {
+                                // Use order status to set class
+                                if ($orderStatus == 'paid') {
+                                    $class .= " paid";
+                                } else if ($orderStatus == 'pending') {
+                                    $class .= " pending_payment";
+                                } else {
+                                    $class .= " reserved";
                                 }
                             }
                         ?>
@@ -914,30 +959,34 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                             <?php 
                             // Display booths 30-47 (zone C, floor 1)
                             for ($i = 30; $i <= 47; $i++) {
-                                $isReserved = false;
-                                $status = 'available';
-                                
-                                foreach ($booths as $booth) {
-                                    if ($booth['booth_number'] == $i && $booth['zone'] == 'C' && $booth['floor'] == 1) {
-                                        $status = $booth['status'];
-                                        if ($status != 'available') {
-                                            $isReserved = true;
-                                        }
-                                        break;
-                                    }
-                                }
-                                
-                                $class = ($isReserved) ? "booth $status" : "booth";
-                                $class .= " booth-purple"; // Purple colored booths for zone C
-                                
                                 $boothId = 0;
                                 $price = 0;
+                                $status = 'available';
+                                $orderStatus = null;
+                                $hasOrder = false;
                                 
                                 foreach ($booths as $booth) {
                                     if ($booth['booth_number'] == $i && $booth['zone'] == 'C' && $booth['floor'] == 1) {
                                         $boothId = $booth['id'];
                                         $price = $booth['price'];
+                                        $status = $booth['status'];
+                                        $orderStatus = $booth['order_payment_status'];
+                                        $hasOrder = !empty($booth['order_id']);
                                         break;
+                                    }
+                                }
+                                
+                                // Set CSS class based on order status
+                                $class = "booth booth-purple";  // Base class and zone color
+                                
+                                if ($hasOrder) {
+                                    // Use order status to set class
+                                    if ($orderStatus == 'paid') {
+                                        $class .= " paid";
+                                    } else if ($orderStatus == 'pending') {
+                                        $class .= " pending_payment";
+                                    } else {
+                                        $class .= " reserved";
                                     }
                                 }
                             ?>
@@ -955,30 +1004,34 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                             <?php 
                             // Display booths 48-92 (zone C, floor 1 - larger section)
                             for ($i = 48; $i <= 92; $i++) {
-                                $isReserved = false;
-                                $status = 'available';
-                                
-                                foreach ($booths as $booth) {
-                                    if ($booth['booth_number'] == $i && $booth['zone'] == 'C' && $booth['floor'] == 1) {
-                                        $status = $booth['status'];
-                                        if ($status != 'available') {
-                                            $isReserved = true;
-                                        }
-                                        break;
-                                    }
-                                }
-                                
-                                $class = ($isReserved) ? "booth $status" : "booth";
-                                $class .= " booth-purple"; // Purple colored booths for zone C
-                                
                                 $boothId = 0;
                                 $price = 0;
+                                $status = 'available';
+                                $orderStatus = null;
+                                $hasOrder = false;
                                 
                                 foreach ($booths as $booth) {
                                     if ($booth['booth_number'] == $i && $booth['zone'] == 'C' && $booth['floor'] == 1) {
                                         $boothId = $booth['id'];
                                         $price = $booth['price'];
+                                        $status = $booth['status'];
+                                        $orderStatus = $booth['order_payment_status'];
+                                        $hasOrder = !empty($booth['order_id']);
                                         break;
+                                    }
+                                }
+                                
+                                // Set CSS class based on order status
+                                $class = "booth booth-purple";  // Base class and zone color
+                                
+                                if ($hasOrder) {
+                                    // Use order status to set class
+                                    if ($orderStatus == 'paid') {
+                                        $class .= " paid";
+                                    } else if ($orderStatus == 'pending') {
+                                        $class .= " pending_payment";
+                                    } else {
+                                        $class .= " reserved";
                                     }
                                 }
                             ?>
@@ -1008,30 +1061,34 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                     <?php 
                     // Display booths 93-116 (zone C, floor 2)
                     for ($i = 93; $i <= 116; $i++) {
-                        $isReserved = false;
-                        $status = 'available';
-                        
-                        foreach ($booths as $booth) {
-                            if ($booth['booth_number'] == $i && $booth['zone'] == 'C' && $booth['floor'] == 2) {
-                                $status = $booth['status'];
-                                if ($status != 'available') {
-                                    $isReserved = true;
-                                }
-                                break;
-                            }
-                        }
-                        
-                        $class = ($isReserved) ? "booth $status" : "booth";
-                        $class .= " booth-purple"; // Purple colored booths for zone C
-                        
                         $boothId = 0;
                         $price = 0;
+                        $status = 'available';
+                        $orderStatus = null;
+                        $hasOrder = false;
                         
                         foreach ($booths as $booth) {
                             if ($booth['booth_number'] == $i && $booth['zone'] == 'C' && $booth['floor'] == 2) {
                                 $boothId = $booth['id'];
                                 $price = $booth['price'];
+                                $status = $booth['status'];
+                                $orderStatus = $booth['order_payment_status'];
+                                $hasOrder = !empty($booth['order_id']);
                                 break;
+                            }
+                        }
+                        
+                        // Set CSS class based on order status
+                        $class = "booth booth-purple";  // Base class and zone color
+                        
+                        if ($hasOrder) {
+                            // Use order status to set class
+                            if ($orderStatus == 'paid') {
+                                $class .= " paid";
+                            } else if ($orderStatus == 'pending') {
+                                $class .= " pending_payment";
+                            } else {
+                                $class .= " reserved";
                             }
                         }
                     ?>
@@ -1462,167 +1519,200 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
         
         // ฟังก์ชั่นจองโดยจ่ายทีหลัง
         function submitReservation() {
-    // Get form data
-    const boothId = document.getElementById('boothId').value;
-    
-    // แสดงข้อความกำลังดำเนินการ
-    const reserveBtn = document.querySelector('[onclick="submitReservation()"]');
-    reserveBtn.disabled = true;
-    reserveBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> กำลังดำเนินการ...';
-    
-    // Submit reservation via AJAX
-    $.ajax({
-        url: window.location.href,
-        type: 'POST',
-        data: {
-            action: 'reserve',
-            boothId: boothId
-        },
-        dataType: 'json',
-        success: function(response) {
-            console.log('Server response:', response);
+            // Get form data
+            const boothId = document.getElementById('boothId').value;
             
-            if (response && response.success) {
-                // โค้ดเมื่อสำเร็จ
-                // Hide reservation modal
-                var reservationModal = bootstrap.Modal.getInstance(document.getElementById('reservationModal'));
-                reservationModal.hide();
-                
-                // บันทึกข้อมูลคำสั่งซื้อ
-                currentOrderId = response.order_id;
-                currentOrderNumber = response.order_number;
-                
-                // Set success info และข้อความสำหรับกรณีจ่ายทีหลัง
-                document.getElementById('successOrderNumber').textContent = response.order_number;
-                document.getElementById('successPaymentInfo').innerHTML = `
-                    <p><strong>คุณเลือกชำระเงินภายหลัง</strong></p>
-                    <p>กรุณาชำระเงินภายใน 24 ชั่วโมง มิเช่นนั้นการจองจะถูกยกเลิกโดยอัตโนมัติ</p>
-                    <p>หากมีข้อสงสัยสามารถติดต่อได้ที่ ${getSetting('contact_phone', '0812345678')}</p>
-                `;
-                
-                // เพิ่มปุ่มชำระเงิน
-                document.getElementById('paymentButtonContainer').innerHTML = `
-                    <button class="btn btn-primary" onclick="showPaymentModal('${response.order_id}', '${response.order_number}')">
-                        <i class="bi bi-credit-card me-2"></i>ชำระเงินตอนนี้
-                    </button>
-                `;
-                
-                // Show success modal
-                var successModal = new bootstrap.Modal(document.getElementById('successModal'));
-                successModal.show();
-            } else {
-                alert(response && response.message ? response.message : 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
-            }
+            // แสดงข้อความกำลังดำเนินการ
+            const reserveBtn = document.querySelector('[onclick="submitReservation()"]');
+            reserveBtn.disabled = true;
+            reserveBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> กำลังดำเนินการ...';
             
-            // คืนค่าปุ่ม
-            reserveBtn.disabled = false;
-            reserveBtn.innerHTML = 'ยืนยันการจอง';
-        },
-        error: function(xhr, status, error) {
-            console.error('AJAX error:', status, error);
-            console.log('Response text:', xhr.responseText);
-            
-            try {
-                // พยายามแปลงเป็น JSON
-                const response = JSON.parse(xhr.responseText);
-                if (response && response.success) {
-                    // ถ้าแปลงได้และเป็น success ให้ดำเนินการต่อ
-                    var reservationModal = bootstrap.Modal.getInstance(document.getElementById('reservationModal'));
-                    reservationModal.hide();
+            // ส่งคำขอ AJAX
+            $.ajax({
+                url: window.location.href,
+                type: 'POST',
+                data: {
+                    action: 'reserve',
+                    boothId: boothId
+                },
+                dataType: 'json',
+                success: function(response) {
+                    console.log('Server response:', response);
                     
-                    // บันทึกข้อมูลคำสั่งซื้อ
-                    currentOrderId = response.order_id;
-                    currentOrderNumber = response.order_number;
+                    if (response.success) {
+                        // เก็บข้อมูลคำสั่งซื้อ
+                        currentOrderId = response.order_id;
+                        currentOrderNumber = response.order_number;
+                        
+                        // ปิด modal จอง
+                        var reservationModal = bootstrap.Modal.getInstance(document.getElementById('reservationModal'));
+                        reservationModal.hide();
+                        
+                        // แสดงข้อความสำเร็จ
+                        document.getElementById('successOrderNumber').textContent = response.order_number;
+                        document.getElementById('successPaymentInfo').innerHTML = `
+                            <p><strong>คุณเลือกชำระเงินภายหลัง</strong></p>
+                            <p>กรุณาชำระเงินภายใน 24 ชั่วโมง มิเช่นนั้นการจองจะถูกยกเลิกโดยอัตโนมัติ</p>
+                        `;
+                        
+                        // เพิ่มปุ่มชำระเงิน
+                        document.getElementById('paymentButtonContainer').innerHTML = `
+                            <button class="btn btn-primary" onclick="showPaymentModal('${response.order_id}', '${response.order_number}')">
+                                <i class="bi bi-credit-card me-2"></i>ชำระเงินตอนนี้
+                            </button>
+                        `;
+                        
+                        // แสดง modal สำเร็จ
+                        var successModal = new bootstrap.Modal(document.getElementById('successModal'));
+                        successModal.show();
+                    } else {
+                        alert(response.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
+                    }
                     
-                    // Set success info
-                    document.getElementById('successOrderNumber').textContent = response.order_number;
-                    document.getElementById('successPaymentInfo').innerHTML = `
-                        <p><strong>คุณเลือกชำระเงินภายหลัง</strong></p>
-                        <p>กรุณาชำระเงินภายใน 24 ชั่วโมง มิเช่นนั้นการจองจะถูกยกเลิกโดยอัตโนมัติ</p>
-                        <p>หากมีข้อสงสัยสามารถติดต่อได้ที่ ${getSetting('contact_phone', '0812345678')}</p>
-                    `;
+                    // คืนค่าปุ่ม
+                    reserveBtn.disabled = false;
+                    reserveBtn.innerHTML = 'ยืนยันการจอง';
+                },
+                error: function(xhr, status, error) {
+                    console.error('AJAX error:', xhr.responseText);
                     
-                    // เพิ่มปุ่มชำระเงิน
-                    document.getElementById('paymentButtonContainer').innerHTML = `
-                        <button class="btn btn-primary" onclick="showPaymentModal('${response.order_id}', '${response.order_number}')">
-                            <i class="bi bi-credit-card me-2"></i>ชำระเงินตอนนี้
-                        </button>
-                    `;
+                    // พยายามแปลงเป็น JSON
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        if (response && response.success) {
+                            handleSuccessfulReservation(response);
+                            return;
+                        } else if (response && response.message) {
+                            alert(response.message);
+                            return;
+                        }
+                    } catch (e) {
+                        console.error('Error parsing response:', e);
+                    }
                     
-                    // Show success modal
-                    var successModal = new bootstrap.Modal(document.getElementById('successModal'));
-                    successModal.show();
-                    return;
+                    alert('เกิดข้อผิดพลาดในการทำรายการ กรุณาลองใหม่อีกครั้ง');
+                    
+                    // คืนค่าปุ่ม
+                    reserveBtn.disabled = false;
+                    reserveBtn.innerHTML = 'ยืนยันการจอง';
                 }
-            } catch (e) {
-                console.error('Error parsing response:', e);
-            }
-            
-            alert('เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + error);
-            
-            // คืนค่าปุ่ม
-            reserveBtn.disabled = false;
-            reserveBtn.innerHTML = 'ยืนยันการจอง';
+            });
         }
-    });
-}
-function submitReservationAndPay() {
-    // Get form data
-    const boothId = document.getElementById('boothId').value;
-    
-    // แสดงข้อความกำลังดำเนินการ
-    const payNowBtn = document.querySelector('[onclick="submitReservationAndPay()"]');
-    payNowBtn.disabled = true;
-    payNowBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> กำลังดำเนินการ...';
-    
-    // Submit reservation via AJAX
-    $.ajax({
-        url: window.location.href,
-        type: 'POST',
-        data: {
-            action: 'reserve',
-            boothId: boothId
-        },
-        dataType: 'json',
-        success: function(response) {
-            console.log('Server response:', response);
+
+        // ฟังก์ชันสำหรับจัดการเมื่อจองสำเร็จ
+        function handleSuccessfulReservation(response) {
+            // เก็บข้อมูลคำสั่งซื้อ
+            currentOrderId = response.order_id;
+            currentOrderNumber = response.order_number;
             
-            if (response && response.success) {
-                // Hide reservation modal
-                var reservationModal = bootstrap.Modal.getInstance(document.getElementById('reservationModal'));
-                reservationModal.hide();
-                
-                // นำข้อมูลมาแสดงที่หน้าชำระเงิน
-                document.getElementById('orderId').value = response.order_id;
-                document.getElementById('orderNumber').value = response.order_number;
-                
-                // ดึงราคาบูธ
-                const price = document.getElementById('boothPrice').textContent;
-                document.getElementById('totalAmount').textContent = price;
-                
-                // Show payment modal
-                var paymentModal = new bootstrap.Modal(document.getElementById('paymentModal'));
-                paymentModal.show();
-            } else {
-                alert(response && response.message ? response.message : 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
-            }
+            // ปิด modal จอง
+            var reservationModal = bootstrap.Modal.getInstance(document.getElementById('reservationModal'));
+            reservationModal.hide();
             
-            // คืนค่าปุ่ม
-            payNowBtn.disabled = false;
-            payNowBtn.innerHTML = 'ยืนยันและชำระเงิน';
-        },
-        error: function(xhr, status, error) {
-            console.error('AJAX error:', status, error);
-            console.log('Response text:', xhr.responseText);
+            // แสดงข้อความสำเร็จ
+            document.getElementById('successOrderNumber').textContent = response.order_number;
+            document.getElementById('successPaymentInfo').innerHTML = `
+                <p><strong>คุณเลือกชำระเงินภายหลัง</strong></p>
+                <p>กรุณาชำระเงินภายใน 24 ชั่วโมง มิเช่นนั้นการจองจะถูกยกเลิกโดยอัตโนมัติ</p>
+            `;
             
-            alert('เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + error);
+            // เพิ่มปุ่มชำระเงิน
+            document.getElementById('paymentButtonContainer').innerHTML = `
+                <button class="btn btn-primary" onclick="showPaymentModal('${response.order_id}', '${response.order_number}')">
+                    <i class="bi bi-credit-card me-2"></i>ชำระเงินตอนนี้
+                </button>
+            `;
             
-            // คืนค่าปุ่ม
-            payNowBtn.disabled = false;
-            payNowBtn.innerHTML = 'ยืนยันและชำระเงิน';
+            // แสดง modal สำเร็จ
+            var successModal = new bootstrap.Modal(document.getElementById('successModal'));
+            successModal.show();
         }
-    });
-}
+        
+        function submitReservationAndPay() {
+            // Get form data
+            const boothId = document.getElementById('boothId').value;
+            
+            // แสดงข้อความกำลังดำเนินการ
+            const payNowBtn = document.querySelector('[onclick="submitReservationAndPay()"]');
+            payNowBtn.disabled = true;
+            payNowBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> กำลังดำเนินการ...';
+            
+            // Submit reservation via AJAX
+            $.ajax({
+                url: window.location.href,
+                type: 'POST',
+                data: {
+                    action: 'reserve',
+                    boothId: boothId
+                },
+                dataType: 'json',
+                success: function(response) {
+                    console.log('Server response:', response);
+                    
+                    if (response.success) {
+                        // Hide reservation modal
+                        var reservationModal = bootstrap.Modal.getInstance(document.getElementById('reservationModal'));
+                        reservationModal.hide();
+                        
+                        // นำข้อมูลมาแสดงที่หน้าชำระเงิน
+                        document.getElementById('orderId').value = response.order_id;
+                        document.getElementById('orderNumber').value = response.order_number;
+                        
+                        // ดึงราคาบูธ
+                        const price = document.getElementById('boothPrice').textContent;
+                        document.getElementById('totalAmount').textContent = price;
+                        
+                        // Show payment modal
+                        var paymentModal = new bootstrap.Modal(document.getElementById('paymentModal'));
+                        paymentModal.show();
+                    } else {
+                        alert(response.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
+                    }
+                    
+                    // คืนค่าปุ่ม
+                    payNowBtn.disabled = false;
+                    payNowBtn.innerHTML = 'ยืนยันและชำระเงิน';
+                },
+                error: function(xhr, status, error) {
+                    console.error('AJAX error:', xhr.responseText);
+                    
+                    // พยายามแปลงเป็น JSON
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        if (response && response.success) {
+                            // ปิด modal จอง
+                            var reservationModal = bootstrap.Modal.getInstance(document.getElementById('reservationModal'));
+                            reservationModal.hide();
+                            
+                            // นำข้อมูลมาแสดงที่หน้าชำระเงิน
+                            document.getElementById('orderId').value = response.order_id;
+                            document.getElementById('orderNumber').value = response.order_number;
+                            
+                            // ดึงราคาบูธ
+                            const price = document.getElementById('boothPrice').textContent;
+                            document.getElementById('totalAmount').textContent = price;
+                            
+                            // Show payment modal
+                            var paymentModal = new bootstrap.Modal(document.getElementById('paymentModal'));
+                            paymentModal.show();
+                            return;
+                        } else if (response && response.message) {
+                            alert(response.message);
+                            return;
+                        }
+                    } catch (e) {
+                        console.error('Error parsing response:', e);
+                    }
+                    
+                    alert('เกิดข้อผิดพลาดในการทำรายการ กรุณาลองใหม่อีกครั้ง');
+                    
+                    // คืนค่าปุ่ม
+                    payNowBtn.disabled = false;
+                    payNowBtn.innerHTML = 'ยืนยันและชำระเงิน';
+                }
+            });
+        }
+
         // แสดงหน้าชำระเงินสำหรับคำสั่งซื้อที่มีอยู่แล้ว
         function showPaymentModal(orderId, orderNumber) {
             // บันทึกข้อมูลคำสั่งซื้อ
@@ -1696,7 +1786,6 @@ function submitReservationAndPay() {
                             document.getElementById('successPaymentInfo').innerHTML = `
                                 <p>เราได้รับหลักฐานการชำระเงินของคุณแล้ว</p>
                                 <p>เจ้าหน้าที่จะตรวจสอบและยืนยันการชำระเงินภายใน 24 ชั่วโมง</p>
-                                <p>หากมีข้อสงสัยสามารถติดต่อได้ที่ ${getSetting('contact_phone', '0812345678')}</p>
                             `;
                             
                             // ซ่อนปุ่มชำระเงิน เพราะชำระแล้ว
@@ -1718,8 +1807,7 @@ function submitReservationAndPay() {
                     paymentBtn.innerHTML = 'ยืนยันการชำระเงิน';
                 },
                 error: function(xhr, status, error) {
-                    console.error('AJAX error:', status, error);
-                    console.log('Response text:', xhr.responseText);
+                    console.error('AJAX error:', xhr.responseText);
                     alert('เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + error);
                     
                     // คืนค่าปุ่ม
