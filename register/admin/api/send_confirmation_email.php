@@ -2,7 +2,8 @@
 // Set response header
 header('Content-Type: application/json; charset=utf-8');
 date_default_timezone_set('Asia/Bangkok');
-
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
 // Prevent direct access
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -220,92 +221,69 @@ try {
     // Plain text version of the email
     $text_message = strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message));
     
-    // Attempt to send with PHPMailer
+    // Load PHPMailer
+    logMessage("กำลังโหลด PHPMailer", 2);
+    
+    // ค้นหาไฟล์ autoload.php
     $phpmailer_paths = [
-        __DIR__ . '/PHPMailer/src/',
-        __DIR__ . '/vendor/phpmailer/phpmailer/src/',
-        dirname(__DIR__) . '/vendor/phpmailer/phpmailer/src/',
-        '/var/www/html/vendor/phpmailer/phpmailer/src/'
+        dirname(__DIR__) . '/vendor/autoload.php',
+        __DIR__ . '/vendor/autoload.php',
+        dirname(dirname(__DIR__)) . '/vendor/autoload.php',
+        '../../vendor/autoload.php'
     ];
     
-    $phpmailer_available = false;
+    $phpmailer_loaded = false;
     
     foreach ($phpmailer_paths as $path) {
-        if (file_exists($path . 'PHPMailer.php')) {
-            require_once $path . 'Exception.php';
-            require_once $path . 'PHPMailer.php';
-            require_once $path . 'SMTP.php';
-            $phpmailer_available = true;
-            logMessage("PHPMailer found at: $path", 2);
+        if (file_exists($path)) {
+            require_once $path;
+            $phpmailer_loaded = true;
+            logMessage("โหลด PHPMailer จาก: $path", 2);
             break;
         }
     }
     
-    // Send email using PHPMailer if available
-    if ($phpmailer_available) {
-        try {
-            // สิ่งสำคัญ: ต้องใช้อีเมล SMTP สำหรับทั้ง Login และ From address
-            $mail = new PHPMailer\PHPMailer\PHPMailer(true);
-            $mail->CharSet = 'UTF-8';
-            $mail->isSMTP();
-            $mail->Host = 'smtp-relay.brevo.com';
-            $mail->SMTPAuth = true;
-            $mail->Username = '89606e001@smtp-brevo.com';  // อีเมลสำหรับล็อกอิน
-            $mail->Password = 'SagC4Lpy5qK96NUk';
-            $mail->SMTPSecure = 'tls';
-            $mail->Port = 587;
-            
-            // Enable verbose debug output
-            $mail->SMTPDebug = 2;
-            $mail->Debugoutput = function($str, $level) {
-                logMessage("SMTP DEBUG[$level]: $str", 3);
-            };
-            
-            // สิ่งสำคัญ: ต้องตั้งค่า From เป็นอีเมลเดียวกับที่ใช้ Login
-            $mail->setFrom('89606e001@smtp-brevo.com', 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ');
-            $mail->addReplyTo('arts@rmutsb.ac.th', 'คณะศิลปศาสตร์');
-            
-            // Add recipient
-            $mail->addAddress($email, $fullname);
-            
-            // Set email subject and body
-            $mail->Subject = $subject;
-            $mail->isHTML(true);
-            $mail->Body = $message;
-            $mail->AltBody = $text_message;
-            
-            // Send the email
-            $result = $mail->send();
-            
-            if ($result) {
-                logMessage("ส่งอีเมลสำเร็จ");
-                
-                echo json_encode([
-                    'success' => true,
-                    'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
-                    'method' => 'Brevo SMTP via PHPMailer'
-                ]);
-            } else {
-                throw new Exception($mail->ErrorInfo);
-            }
-        } catch (Exception $e) {
-            $errorMessage = $e->getMessage();
-            logMessage("PHPMailer error: $errorMessage", 2);
-            
-            echo json_encode([
-                'success' => false,
-                'message' => "ไม่สามารถส่งอีเมลได้ - " . $errorMessage,
-                'error' => $errorMessage
-            ]);
-        }
-    } else {
-        logMessage("PHPMailer not found", 2);
+    if (!$phpmailer_loaded) {
+        throw new Exception("ไม่พบไฟล์ PHPMailer autoload.php");
+    }
+    
+   
+    
+    logMessage("กำลังส่งอีเมลผ่าน PHPMailer ไปยัง: $email", 2);
+    
+    // เริ่มการส่งอีเมล
+    $mail = new PHPMailer(true);
+    
+    // ตั้งค่า SMTP สำหรับ Outlook (Office365)
+    $mail->isSMTP();
+    $mail->CharSet = "UTF-8";
+    $mail->Host = 'smtp.office365.com'; // Outlook SMTP server
+    $mail->SMTPAuth = true;
+    $mail->SMTPSecure = 'tls'; // ใช้ TLS
+    $mail->Username = 'tcwatchara@rnn.ac.th'; // Outlook email
+    $mail->Password = 'Ohayou22'; // Outlook password
+    $mail->Port = 587; // Port สำหรับ TLS
+    
+    // ตั้งค่าอีเมล
+    $mail->setFrom('tcwatchara@rnn.ac.th', 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ');
+    $mail->addReplyTo('arts@rmutsb.ac.th', 'คณะศิลปศาสตร์');
+    $mail->addAddress($email, $fullname);
+    $mail->Subject = $subject;
+    $mail->isHTML(true);
+    $mail->Body = $message;
+    $mail->AltBody = $text_message;
+    
+    // ส่งอีเมล
+    if ($mail->send()) {
+        logMessage("ส่งอีเมลสำเร็จ");
         
         echo json_encode([
-            'success' => false,
-            'message' => "ไม่พบ PHPMailer ไม่สามารถส่งอีเมลได้",
-            'error' => "PHPMailer library not found"
+            'success' => true,
+            'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
+            'method' => 'PHPMailer Outlook'
         ]);
+    } else {
+        throw new Exception("ไม่สามารถส่งอีเมลได้: " . $mail->ErrorInfo);
     }
     
 } catch (PDOException $e) {
