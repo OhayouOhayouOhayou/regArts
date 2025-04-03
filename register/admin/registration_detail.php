@@ -88,6 +88,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->beginTransaction();
         
         try {
+            // แปลงค่า payment_status ที่รับมาให้เข้ากับ ENUM ในฐานข้อมูล
+            $original_payment_status = $_POST['payment_status'];
+            
+            // แปลงค่าใหม่เป็นค่าที่ ENUM รองรับ
+            $payment_status = 'not_paid'; // ค่าเริ่มต้น
+            
+            if ($original_payment_status == 'paid_approved') {
+                $payment_status = 'paid';
+                // ให้แน่ใจว่า is_approved เป็น 1 ด้วย
+                $_POST['is_approved'] = '1';
+            } else if ($original_payment_status == 'paid_pending') {
+                $payment_status = 'paid';
+                // ให้แน่ใจว่า is_approved เป็น 0
+                $_POST['is_approved'] = '0';
+            } else {
+                // กรณีเป็น not_paid หรือ paid_onsite ใช้ค่าเดิมได้เลย
+                $payment_status = $original_payment_status;
+            }
+            
             // Update registration table
             $update_stmt = $pdo->prepare("
                 UPDATE registrations 
@@ -111,7 +130,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $phone = $_POST['phone'];
             $email = $_POST['email'];
             $line_id = $_POST['line_id'];
-            $payment_status = $_POST['payment_status'];
             
             $update_stmt->execute([
                 $title,
@@ -122,9 +140,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $phone,
                 $email,
                 $line_id,
-                $payment_status,
+                $payment_status, // ใช้ค่าที่แปลงแล้ว
                 $registration_id
             ]);
+            
             
             // Update addresses
             foreach (['invoice', 'house', 'current'] as $address_type) {
@@ -1011,7 +1030,7 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                                 </div>
                             </div>
                             
-                            <!-- สถานะการชำระเงิน -->
+                           <!-- สถานะการชำระเงิน -->
 <div class="card">
     <div class="card-header">
         <h5 class="title">
@@ -1021,10 +1040,10 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
     </div>
     <div class="card-body">
         <div class="mb-4 text-center p-3" style="background-color: rgba(0,0,0,0.03); border-radius: 0.5rem;">
-            <?php if(($registration['payment_status'] == 'paid_approved') || ($registration['payment_status'] == 'paid' && $registration['is_approved'] == 1)): ?>
+            <?php if($registration['payment_status'] == 'paid' && $registration['is_approved'] == 1): ?>
                 <div class="mb-2"><i class="fas fa-check-circle fa-3x text-success"></i></div>
                 <h5 class="mb-1">ชำระแล้ว (อนุมัติแล้ว)</h5>
-            <?php elseif(($registration['payment_status'] == 'paid_pending') || ($registration['payment_status'] == 'paid' && $registration['is_approved'] == 0) || $registration['payment_status'] == 'paid_onsite'): ?>
+            <?php elseif(($registration['payment_status'] == 'paid' && $registration['is_approved'] == 0) || $registration['payment_status'] == 'paid_onsite'): ?>
                 <div class="mb-2"><i class="fas fa-clock fa-3x text-warning"></i></div>
                 <h5 class="mb-1">ชำระแล้ว (รอตรวจสอบจากเจ้าหน้าที่)</h5>
             <?php else: ?>
@@ -1037,8 +1056,9 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
             <label class="form-label">เปลี่ยนสถานะการชำระเงิน</label>
             <select class="form-select" name="payment_status">
                 <option value="not_paid" <?php echo ($registration['payment_status'] == 'not_paid') ? 'selected' : ''; ?>>ยังไม่ชำระ</option>
-                <option value="paid_pending" <?php echo ($registration['payment_status'] == 'paid_pending' || ($registration['payment_status'] == 'paid' && $registration['is_approved'] == 0)) ? 'selected' : ''; ?>>ชำระแล้ว (รอตรวจสอบจากเจ้าหน้าที่)</option>
-                <option value="paid_approved" <?php echo ($registration['payment_status'] == 'paid_approved' || ($registration['payment_status'] == 'paid' && $registration['is_approved'] == 1)) ? 'selected' : ''; ?>>ชำระแล้ว (อนุมัติแล้ว)</option>
+                <option value="paid_pending" <?php echo ($registration['payment_status'] == 'paid' && $registration['is_approved'] == 0) ? 'selected' : ''; ?>>ชำระแล้ว (รอตรวจสอบจากเจ้าหน้าที่)</option>
+                <option value="paid_approved" <?php echo ($registration['payment_status'] == 'paid' && $registration['is_approved'] == 1) ? 'selected' : ''; ?>>ชำระแล้ว (อนุมัติแล้ว)</option>
+                <option value="paid_onsite" <?php echo ($registration['payment_status'] == 'paid_onsite') ? 'selected' : ''; ?>>อนุมัติ (ชำระเงินที่หน้างาน)</option>
             </select>
         </div>
                                     
