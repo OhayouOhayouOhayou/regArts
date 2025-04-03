@@ -220,34 +220,66 @@ try {
     // Plain text version of the email
     $text_message = strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message));
     
-    logMessage("กำลังส่งอีเมลด้วยฟังก์ชัน mail() ไปยัง: $email");
+    // Check if PHPMailer class exists, if not include it
+    if (!class_exists('PHPMailer')) {
+        $phpmailer_paths = [
+            dirname(__DIR__) . '/lib/class.phpmailer.php',
+            __DIR__ . '/lib/class.phpmailer.php',
+            dirname(dirname(__DIR__)) . '/lib/class.phpmailer.php',
+            '../../lib/class.phpmailer.php',
+            dirname(__DIR__) . '/vendor/phpmailer/phpmailer/class.phpmailer.php',
+            __DIR__ . '/vendor/phpmailer/phpmailer/class.phpmailer.php'
+        ];
+        
+        $phpmailer_loaded = false;
+        
+        foreach ($phpmailer_paths as $path) {
+            if (file_exists($path)) {
+                require_once $path;
+                $phpmailer_loaded = true;
+                logMessage("โหลด PHPMailer จาก: $path", 2);
+                break;
+            }
+        }
+        
+        if (!$phpmailer_loaded) {
+            throw new Exception("ไม่พบไฟล์ PHPMailer class");
+        }
+    }
     
-    // Set email headers
-    $sender = 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ <arts@rmutsb.ac.th>';
-    $headers = [
-        'MIME-Version: 1.0',
-        'Content-type: text/html; charset=utf-8',
-        'From: ' . $sender,
-        'Reply-To: arts@rmutsb.ac.th',
-        'X-Mailer: PHP/' . phpversion()
-    ];
+    logMessage("กำลังส่งอีเมลผ่าน PHPMailer SMTP ไปยัง: $email", 2);
     
-    // Convert header array to string
-    $headers_str = implode("\r\n", $headers);
+    // Setup PHPMailer
+    $mail = new PHPMailer();
+    $mail->CharSet = "UTF-8";
+    $mail->IsHTML(true);
+    $mail->IsSMTP();
+    $mail->SMTPAuth = true;
+    $mail->SMTPSecure = ""; // Leave empty for non-secure connection
+    $mail->Host = "mail.google.com"; // Your SMTP server
+    $mail->Port = 25; // Usually 25 for non-secure, 465 for SSL, 587 for TLS
+    $mail->Username = "arts@rmutsb.ac.th"; // SMTP username
+    $mail->Password = "artsrus6"; // SMTP password - replace with actual password
     
-    // Send email using PHP's mail function
-    $mail_sent = mail($email, $subject, $message, $headers_str);
+    $mail->From = "arts@rmutsb.ac.th";
+    $mail->FromName = "คณะศิลปศาสตร์ มทร.สุวรรณภูมิ";
+    $mail->Subject = $subject;
+    $mail->Body = $message;
+    $mail->AltBody = $text_message;
     
-    if ($mail_sent) {
+    $mail->AddAddress($email, $fullname);
+    
+    // Send email
+    if ($mail->Send()) {
         logMessage("ส่งอีเมลสำเร็จ");
         
         echo json_encode([
             'success' => true,
             'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
-            'method' => 'PHP mail()'
+            'method' => 'PHPMailer SMTP'
         ]);
     } else {
-        throw new Exception("ไม่สามารถส่งอีเมลได้: " . error_get_last()['message']);
+        throw new Exception("ไม่สามารถส่งอีเมลได้: " . $mail->ErrorInfo);
     }
     
 } catch (PDOException $e) {
