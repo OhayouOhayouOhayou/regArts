@@ -229,15 +229,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             
             // รีเซ็ตสถานะบูธ
             $resetBoothStmt = $conn->prepare("
-                UPDATE booths 
-                SET status = 'available', 
-                    payment_status = 'unpaid',
-                    reserved_by = NULL,
-                    note = CONCAT(IFNULL(note, ''), '\nรีเซ็ตโดยผู้ดูแลระบบเมื่อ ', NOW()) 
-                WHERE id = ?
-            ");
-            $resetBoothStmt->bind_param("i", $id);
-            $resetBoothStmt->execute();
+            UPDATE booths 
+            SET status = 'available', 
+                payment_status = 'unpaid',
+                note = CONCAT(IFNULL(note, ''), '\nรีเซ็ตโดยผู้ดูแลระบบเมื่อ ', NOW()) 
+            WHERE id = ?
+        ");
+        $resetBoothStmt->bind_param("i", $id);
+        $resetBoothStmt->execute();
             
             // ยืนยัน transaction
             $conn->commit();
