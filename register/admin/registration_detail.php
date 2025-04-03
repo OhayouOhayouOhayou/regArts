@@ -1012,32 +1012,35 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                             </div>
                             
                             <!-- สถานะการชำระเงิน -->
-                            <div class="card">
-                                <div class="card-header">
-                                    <h5 class="title">
-                                        <i class="fas fa-money-bill-wave"></i>
-                                        สถานะการชำระเงิน
-                                    </h5>
-                                </div>
-                                <div class="card-body">
-                                <div class="text-center mb-3">
-                                    <?php if($registration['payment_status'] == 'paid'): ?>
-                                        <span class="badge bg-success py-2 px-3 fs-6 mb-3">ชำระเงินแล้ว</span>
-                                    <?php elseif($registration['payment_status'] == 'paid_onsite'): ?>
-                                        <span class="badge bg-info py-2 px-3 fs-6 mb-3">อนุมัติ (ชำระเงินที่หน้างาน)</span>
-                                    <?php else: ?>
-                                        <span class="badge bg-danger py-2 px-3 fs-6 mb-3">ยังไม่ชำระเงิน</span>
-                                    <?php endif; ?>
-  
-                                        
-                                        <div class="mb-3">
-                                    <label class="form-label">เปลี่ยนสถานะการชำระเงิน</label>
-                                    <select class="form-select" name="payment_status">
-                                        <option value="not_paid" <?php echo ($registration['payment_status'] == 'not_paid') ? 'selected' : ''; ?>>ยังไม่ชำระเงิน</option>
-                                        <option value="paid" <?php echo ($registration['payment_status'] == 'paid') ? 'selected' : ''; ?>>ชำระเงินแล้ว</option>
-                                        <option value="paid_onsite" <?php echo ($registration['payment_status'] == 'paid_onsite') ? 'selected' : ''; ?>>อนุมัติ (ชำระเงินที่หน้างาน)</option>
-                                    </select>
-                                </div>
+<div class="card">
+    <div class="card-header">
+        <h5 class="title">
+            <i class="fas fa-money-bill-wave"></i>
+            สถานะการชำระเงิน
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="mb-4 text-center p-3" style="background-color: rgba(0,0,0,0.03); border-radius: 0.5rem;">
+            <?php if(($registration['payment_status'] == 'paid_approved') || ($registration['payment_status'] == 'paid' && $registration['is_approved'] == 1)): ?>
+                <div class="mb-2"><i class="fas fa-check-circle fa-3x text-success"></i></div>
+                <h5 class="mb-1">ชำระแล้ว (อนุมัติแล้ว)</h5>
+            <?php elseif(($registration['payment_status'] == 'paid_pending') || ($registration['payment_status'] == 'paid' && $registration['is_approved'] == 0) || $registration['payment_status'] == 'paid_onsite'): ?>
+                <div class="mb-2"><i class="fas fa-clock fa-3x text-warning"></i></div>
+                <h5 class="mb-1">ชำระแล้ว (รอตรวจสอบจากเจ้าหน้าที่)</h5>
+            <?php else: ?>
+                <div class="mb-2"><i class="fas fa-times-circle fa-3x text-danger"></i></div>
+                <h5 class="mb-1">ยังไม่ชำระ</h5>
+            <?php endif; ?>
+        </div>
+        
+        <div class="mb-3">
+            <label class="form-label">เปลี่ยนสถานะการชำระเงิน</label>
+            <select class="form-select" name="payment_status">
+                <option value="not_paid" <?php echo ($registration['payment_status'] == 'not_paid') ? 'selected' : ''; ?>>ยังไม่ชำระ</option>
+                <option value="paid_pending" <?php echo ($registration['payment_status'] == 'paid_pending' || ($registration['payment_status'] == 'paid' && $registration['is_approved'] == 0)) ? 'selected' : ''; ?>>ชำระแล้ว (รอตรวจสอบจากเจ้าหน้าที่)</option>
+                <option value="paid_approved" <?php echo ($registration['payment_status'] == 'paid_approved' || ($registration['payment_status'] == 'paid' && $registration['is_approved'] == 1)) ? 'selected' : ''; ?>>ชำระแล้ว (อนุมัติแล้ว)</option>
+            </select>
+        </div>
                                     </div>
                                             
                                     <div class="mb-3">
