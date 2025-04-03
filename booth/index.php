@@ -4,9 +4,10 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 
+
+session_start(); 
 // Ensure clean JSON output
 header('Content-Type: application/json');
-session_start(); 
 require_once 'config.php';
 function writeLog($message) {
     $logFile = 'address_debug.log';
