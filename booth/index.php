@@ -269,18 +269,26 @@ function formatCurrency($amount) {
 }
 
 // Get all booths with order information
-$sql = "SELECT b.*, oi.order_id, o.payment_status AS order_payment_status 
+$sql = "SELECT b.*, 
+       oi.order_id, 
+       IFNULL(o.payment_status, '') AS order_payment_status 
        FROM booths b 
        LEFT JOIN order_items oi ON b.id = oi.booth_id 
        LEFT JOIN orders o ON oi.order_id = o.id 
        ORDER BY b.zone, b.floor, b.booth_number";
-$result = $conn->query($sql);
-$booths = [];
 
-if ($result && $result->num_rows > 0) {
-    while($row = $result->fetch_assoc()) {
-        $booths[] = $row;
+try {
+    $result = $conn->query($sql);
+    $booths = [];
+
+    if ($result && $result->num_rows > 0) {
+        while($row = $result->fetch_assoc()) {
+            $booths[] = $row;
+        }
     }
+    file_put_contents('error_log.txt', date('Y-m-d H:i:s') . " - Successfully fetched " . count($booths) . " booths\n", FILE_APPEND);
+} catch (Exception $e) {
+    file_put_contents('error_log.txt', date('Y-m-d H:i:s') . " - Error fetching booths: " . $e->getMessage() . "\n", FILE_APPEND);
 }
 
 // Get zone prices for display
