@@ -1,7 +1,11 @@
 <?php
+// Add these at the very top of your script, before any output
+error_reporting(E_ALL);
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
+
+// Ensure clean JSON output
+header('Content-Type: application/json');
 session_start(); 
 require_once 'config.php';
 function writeLog($message) {
@@ -1623,6 +1627,7 @@ function submitReservationAndPay() {
         }
     });
 }
+
         // แสดงหน้าชำระเงินสำหรับคำสั่งซื้อที่มีอยู่แล้ว
         function showPaymentModal(orderId, orderNumber) {
             // บันทึกข้อมูลคำสั่งซื้อ
@@ -2025,6 +2030,35 @@ function updateAddressField() {
   // เก็บที่อยู่รวมในฟิลด์ซ่อน
   $('#loginAddress').val(fullAddress);
 }
+function updateBoothStatus() {
+    document.querySelectorAll('.booth').forEach(booth => {
+        const status = booth.getAttribute('data-status');
+        
+        // Remove existing status classes
+        booth.classList.remove('reserved', 'pending_payment', 'paid');
+        
+        // Add appropriate status class
+        switch(status) {
+            case 'reserved':
+                booth.classList.add('reserved');
+                break;
+            case 'pending_payment':
+                booth.classList.add('pending_payment');
+                break;
+            case 'paid':
+                booth.classList.add('paid');
+                break;
+            default:
+                // Available booth
+                break;
+        }
+    });
+}
+
+// Call this function after page load or dynamic content update
+$(document).ready(function() {
+    updateBoothStatus();
+});
     </script>
 </body>
 </html>
