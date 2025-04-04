@@ -115,115 +115,88 @@ function isBoothAvailable($boothId, $conn) {
  * @return array ผลลัพธ์การจอง
  */
 
-
+// แก้ไขในไฟล์ config.php
 function reserveBooth($boothId, $customerName, $customerEmail, $customerPhone, $customerCompany, $conn, $customerAddress = '', $customerLineId = '') {
+    // ตรวจสอบว่าเชื่อมต่อกับฐานข้อมูลหรือไม่
+    if (!$conn || $conn->connect_error) {
+        return ["success" => false, "message" => "ไม่สามารถเชื่อมต่อกับฐานข้อมูลได้"];
+    }
+    
     try {
-        // บันทึกลอกเพื่อตรวจสอบค่าที่ส่งเข้ามา
-        writeLog("RESERVE BOOTH FUNCTION CALLED:");
-        writeLog("Booth ID: $boothId");
-        writeLog("Customer Name: $customerName");
-        writeLog("Customer Email: $customerEmail");
-        writeLog("Customer Phone: $customerPhone");
-        writeLog("Customer Company: $customerCompany");
-        writeLog("Customer Address: $customerAddress"); // ตรวจสอบค่า address ที่ส่งเข้ามา
-        writeLog("Customer Line ID: $customerLineId");
+        // บันทึกลอกเพื่อตรวจสอบค่าที่ส่งเข้ามา (ไม่ควรส่งการแสดงผลออกมา)
+        error_log("RESERVE BOOTH FUNCTION CALLED: Booth ID: $boothId");
         
-        // ตรวจสอบว่าค่า address เป็น null หรือว่าง
-        if($customerAddress === null || $customerAddress === '') {
-            $customerAddress = 'ไม่ระบุ'; // กำหนดค่าเริ่มต้นถ้าไม่มีข้อมูล
-        }
+        // ตั้งค่าตัวแปรที่อาจเป็น null
+        $customerAddress = empty($customerAddress) ? 'ไม่ระบุ' : $customerAddress;
+        $customerLineId = empty($customerLineId) ? 'ไม่ระบุ' : $customerLineId;
         
-        // ตรวจสอบว่าค่า line_id เป็น null หรือว่าง
-        if($customerLineId === null || $customerLineId === '') {
-            $customerLineId = 'ไม่ระบุ'; // กำหนดค่าเริ่มต้นถ้าไม่มีข้อมูล
-        }
-        
-        $checkBooth = $conn->prepare("SELECT status, price FROM booths WHERE id = ?");
-        $checkBooth->bind_param("i", $boothId);
-        $checkBooth->execute();
-        $result = $checkBooth->get_result();
+        // ตรวจสอบบูธ
+        $stmt = $conn->prepare("SELECT status, price FROM booths WHERE id = ?");
+        $stmt->bind_param("i", $boothId);
+        $stmt->execute();
+        $result = $stmt->get_result();
         
         if ($result->num_rows == 0) {
-            writeLog("ERROR: Booth not found");
             return ["success" => false, "message" => "ไม่พบข้อมูลบูธ"];
         }
         
         $booth = $result->fetch_assoc();
-        writeLog("Booth data: " . json_encode($booth));
         
+        // ตรวจสอบสถานะบูธ
         if ($booth['status'] != 'available') {
-            writeLog("ERROR: Booth not available");
             return ["success" => false, "message" => "บูธนี้ถูกจองไปแล้ว"];
         }
         
         // เริ่ม transaction
         $conn->begin_transaction();
-        writeLog("Started transaction");
         
-        // สร้างรหัสคำสั่งซื้อ (order number)
-        $orderNumber = generateOrderNumber();
-        writeLog("Generated order number: $orderNumber");
-        
-        // ลองใช้ prepared statement แบบตรงๆ โดยไม่ใช้ parameter binding
         try {
-            // เช็คว่ามีคอลัมน์ customer_address และ customer_line_id หรือไม่
+            // สร้างรหัสคำสั่งซื้อ
+            $orderNumber = generateOrderNumber();
+            
+            // ตรวจสอบคอลัมน์ในตาราง orders
+            $hasAddressAndLineId = true;
             $checkColumns = $conn->query("SHOW COLUMNS FROM orders LIKE 'customer_address'");
             $hasAddressColumn = $checkColumns->num_rows > 0;
-            
             $checkColumns = $conn->query("SHOW COLUMNS FROM orders LIKE 'customer_line_id'");
             $hasLineIdColumn = $checkColumns->num_rows > 0;
-            
-            writeLog("Has address column: " . ($hasAddressColumn ? "Yes" : "No"));
-            writeLog("Has line ID column: " . ($hasLineIdColumn ? "Yes" : "No"));
             
             // สร้าง SQL query ตามคอลัมน์ที่มี
             if ($hasAddressColumn && $hasLineIdColumn) {
                 $sql = "INSERT INTO orders (order_number, customer_name, customer_email, customer_phone, customer_company, customer_address, customer_line_id, total_amount, payment_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'unpaid')";
-                writeLog("Using full SQL with address and line ID: $sql");
-                
-                $insertOrder = $conn->prepare($sql);
-                $insertOrder->bind_param("sssssssd", $orderNumber, $customerName, $customerEmail, $customerPhone, $customerCompany, $customerAddress, $customerLineId, $booth['price']);
+                $stmt = $conn->prepare($sql);
+                $stmt->bind_param("sssssssd", $orderNumber, $customerName, $customerEmail, $customerPhone, $customerCompany, $customerAddress, $customerLineId, $booth['price']);
             } else {
-                // ถ้าไม่มีคอลัมน์ address หรือ line_id
                 $sql = "INSERT INTO orders (order_number, customer_name, customer_email, customer_phone, customer_company, total_amount, payment_status) VALUES (?, ?, ?, ?, ?, ?, 'unpaid')";
-                writeLog("Using simplified SQL without address and line ID: $sql");
-                
-                $insertOrder = $conn->prepare($sql);
-                $insertOrder->bind_param("sssssd", $orderNumber, $customerName, $customerEmail, $customerPhone, $customerCompany, $booth['price']);
+                $stmt = $conn->prepare($sql);
+                $stmt->bind_param("sssssd", $orderNumber, $customerName, $customerEmail, $customerPhone, $customerCompany, $booth['price']);
             }
             
-            if (!$insertOrder) {
-                writeLog("ERROR preparing SQL: " . $conn->error);
-                throw new Exception("SQL Prepare Error: " . $conn->error);
-            }
-            
-            writeLog("Binding parameters...");
-            writeLog("Executing order insert...");
-            
-            $executeResult = $insertOrder->execute();
-            if (!$executeResult) {
-                writeLog("ERROR executing SQL: " . $insertOrder->error);
-                throw new Exception("Execute Error: " . $insertOrder->error);
+            // ดำเนินการ query
+            if (!$stmt->execute()) {
+                throw new Exception("ไม่สามารถบันทึกข้อมูลได้: " . $stmt->error);
             }
             
             $orderId = $conn->insert_id;
-            writeLog("Order inserted with ID: $orderId");
             
             // บันทึกข้อมูล order item
-            $insertItem = $conn->prepare("INSERT INTO order_items (order_id, booth_id, price) VALUES (?, ?, ?)");
-            $insertItem->bind_param("iid", $orderId, $boothId, $booth['price']);
-            $insertItem->execute();
-            writeLog("Order item inserted");
+            $itemStmt = $conn->prepare("INSERT INTO order_items (order_id, booth_id, price) VALUES (?, ?, ?)");
+            $itemStmt->bind_param("iid", $orderId, $boothId, $booth['price']);
             
-            // อัพเดตสถานะบูธเป็น reserved
-            $updateBooth = $conn->prepare("UPDATE booths SET status = 'pending_payment' WHERE id = ?");
-            $updateBooth->bind_param("i", $boothId);
-            $updateBooth->execute();
-            writeLog("Booth status updated");
+            if (!$itemStmt->execute()) {
+                throw new Exception("ไม่สามารถบันทึกรายการสินค้าได้: " . $itemStmt->error);
+            }
+            
+            // อัพเดตสถานะบูธ
+            $updateStmt = $conn->prepare("UPDATE booths SET status = 'pending_payment' WHERE id = ?");
+            $updateStmt->bind_param("i", $boothId);
+            
+            if (!$updateStmt->execute()) {
+                throw new Exception("ไม่สามารถอัพเดตสถานะบูธได้: " . $updateStmt->error);
+            }
             
             // ยืนยัน transaction
             $conn->commit();
-            writeLog("Transaction committed successfully");
             
             return [
                 "success" => true, 
@@ -231,70 +204,16 @@ function reserveBooth($boothId, $customerName, $customerEmail, $customerPhone, $
                 "order_id" => $orderId,
                 "order_number" => $orderNumber
             ];
-        } catch (Exception $e) {
-            writeLog("INNER QUERY ERROR: " . $e->getMessage());
-            throw $e; // ส่งต่อไปยัง catch ด้านนอก
+        } catch (Exception $ex) {
+            // ยกเลิก transaction หากเกิดข้อผิดพลาด
+            $conn->rollback();
+            throw $ex; // ส่งต่อไปยัง catch ด้านนอก
         }
     } catch (Exception $e) {
-        // ยกเลิก transaction หากเกิดข้อผิดพลาด
-        if ($conn && $conn->ping()) {
-            $conn->rollback();
-            writeLog("Transaction rolled back due to error");
-        }
-        
-        // บันทึก error log
-        writeLog("RESERVATION ERROR: " . $e->getMessage());
-        writeLog("Stack trace: " . $e->getTraceAsString());
-        
-        // ทดลองใช้ prepared statement แบบตรงๆ
-        try {
-            writeLog("Attempting direct query without prepared statements");
-            
-            // สร้างรหัสคำสั่งซื้อใหม่
-            $orderNumber = generateOrderNumber();
-            $safePhone = $conn->real_escape_string($customerPhone);
-            $safeName = $conn->real_escape_string($customerName);
-            $safeEmail = $conn->real_escape_string($customerEmail);
-            $safeCompany = $conn->real_escape_string($customerCompany);
-            $price = $booth['price'];
-            
-            $directQuery = "INSERT INTO orders (order_number, customer_name, customer_email, customer_phone, customer_company, total_amount, payment_status) 
-                            VALUES ('$orderNumber', '$safeName', '$safeEmail', '$safePhone', '$safeCompany', $price, 'unpaid')";
-            
-            writeLog("Direct query: $directQuery");
-            $directResult = $conn->query($directQuery);
-            
-            if ($directResult) {
-                $orderId = $conn->insert_id;
-                writeLog("Direct query successful. Order ID: $orderId");
-                
-                // บันทึกข้อมูล order item
-                $boothIdSafe = intval($boothId);
-                $directItemQuery = "INSERT INTO order_items (order_id, booth_id, price) 
-                                    VALUES ($orderId, $boothIdSafe, $price)";
-                $conn->query($directItemQuery);
-                
-                // อัพเดตสถานะบูธ
-                $directUpdateQuery = "UPDATE booths SET status = 'pending_payment' WHERE id = $boothIdSafe";
-                $conn->query($directUpdateQuery);
-                
-                return [
-                    "success" => true, 
-                    "message" => "จองบูธสำเร็จ (ใช้วิธีสำรอง)", 
-                    "order_id" => $orderId,
-                    "order_number" => $orderNumber
-                ];
-            } else {
-                writeLog("Direct query failed: " . $conn->error);
-            }
-        } catch (Exception $e2) {
-            writeLog("DIRECT QUERY ERROR: " . $e2->getMessage());
-        }
-        
+        error_log("RESERVATION ERROR: " . $e->getMessage());
         return ["success" => false, "message" => "เกิดข้อผิดพลาดในการจองบูธ: " . $e->getMessage()];
     }
 }
-
 // Function to process payment (updated to support file upload)
 function processPayment($orderId, $paymentMethod, $reference, $amount, $conn) {
     // Verify order exists

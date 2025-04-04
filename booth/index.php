@@ -70,40 +70,41 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["action"])) {
         exit;
     }
     
-    // กรณีส่งคำสั่งจอง
-    if ($_POST["action"] == "reserve") {
-        try {
-            $boothId = $_POST["boothId"];
-            
-            // แสดงลอก debug ข้อมูลที่ได้รับจาก session
-            error_log("Customer address from session: " . $_SESSION['address']);
-            
-            // เช็คว่าบูธยังว่างอยู่หรือไม่ก่อนทำการจอง
-            $checkBooth = $conn->prepare("SELECT status FROM booths WHERE id = ?");
-            $checkBooth->bind_param("i", $boothId);
-            $checkBooth->execute();
-            $boothResult = $checkBooth->get_result();
-            
-            if ($boothResult->num_rows == 0) {
-                echo json_encode(["success" => false, "message" => "ไม่พบบูธที่ต้องการจอง"]);
-                exit;
-            }
-            
-            $boothStatus = $boothResult->fetch_assoc();
-            if ($boothStatus['status'] != 'available') {
-                echo json_encode(["success" => false, "message" => "บูธนี้ถูกจองไปแล้ว"]);
-                exit;
-            }
-            
-            // ใช้ข้อมูลจาก session แทนการส่งมาใหม่
-            $result = reserveBooth($boothId, $customerName, $customerEmail, $customerPhone, $customerCompany, $conn, $customerAddress, $customerLineId);
-            echo json_encode($result);
-        } catch (Exception $e) {
-            error_log("Reserve error: " . $e->getMessage());
-            echo json_encode(["success" => false, "message" => "เกิดข้อผิดพลาดในระบบ: " . $e->getMessage()]);
+  // กรณีส่งคำสั่งจอง
+if ($_POST["action"] == "reserve") {
+    header('Content-Type: application/json'); // ต้องมีการกำหนด Header นี้
+    
+    try {
+        $boothId = $_POST["boothId"];
+        
+        // เช็คว่าบูธยังว่างอยู่หรือไม่ก่อนทำการจอง
+        $checkBooth = $conn->prepare("SELECT status FROM booths WHERE id = ?");
+        $checkBooth->bind_param("i", $boothId);
+        $checkBooth->execute();
+        $boothResult = $checkBooth->get_result();
+        
+        if ($boothResult->num_rows == 0) {
+            echo json_encode(["success" => false, "message" => "ไม่พบบูธที่ต้องการจอง"]);
+            exit;
         }
-        exit;
+        
+        $boothStatus = $boothResult->fetch_assoc();
+        if ($boothStatus['status'] != 'available') {
+            echo json_encode(["success" => false, "message" => "บูธนี้ถูกจองไปแล้ว"]);
+            exit;
+        }
+        
+        // ใช้ข้อมูลจาก session แทนการส่งมาใหม่
+        $result = reserveBooth($boothId, $customerName, $customerEmail, $customerPhone, $customerCompany, $conn, $customerAddress, $customerLineId);
+        
+        // ส่งผลลัพธ์กลับเป็น JSON (ต้องแน่ใจว่าไม่มีข้อความอื่นใดในการส่งกลับ)
+        echo json_encode($result);
+    } catch (Exception $e) {
+        error_log("Reserve error: " . $e->getMessage());
+        echo json_encode(["success" => false, "message" => "เกิดข้อผิดพลาดในระบบ: " . $e->getMessage()]);
     }
+    exit;
+}
     else if ($_POST["action"] == "upload_slip") {
         $orderId = $_POST["orderId"];
         $paymentMethod = $_POST["paymentMethod"];
@@ -714,9 +715,15 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
                             }
                         }
                     ?>
-                    <div class="<?php echo $class; ?>" data-id="<?php echo $boothId; ?>" data-number="<?php echo $i; ?>" data-zone="A" data-price="<?php echo $price; ?>" onclick="selectBooth(this)">
-                        <?php echo $i; ?>
-                    </div>
+                   <div class="<?php echo $class; ?>" 
+                            data-id="<?php echo $boothId; ?>" 
+                            data-number="<?php echo $i; ?>" 
+                            data-zone="A" 
+                            data-price="<?php echo $price; ?>" 
+                            data-status="<?php echo $status; ?>"
+                            onclick="selectBooth(this)">
+                            <?php echo $i; ?>
+                        </div>
                     <?php } ?>
                 </div>
                 
@@ -1436,19 +1443,21 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
         }
         
         function selectBooth(element) {
-            // ตรวจสอบการล็อกอิน
             if (!isLoggedIn) {
-                alert('กรุณาลงทะเบียนหรือเข้าสู่ระบบก่อนทำการจอง');
-                var loginModal = new bootstrap.Modal(document.getElementById('loginModal'));
-                loginModal.show();
-                return;
-            }
-            
-            // Check if booth is already reserved
-            if (element.classList.contains('reserved') || element.classList.contains('pending_payment') || element.classList.contains('paid')) {
-                alert('บูธนี้ถูกจองไปแล้ว');
-                return;
-            }
+                    alert('กรุณาลงทะเบียนหรือเข้าสู่ระบบก่อนทำการจอง');
+                    var loginModal = new bootstrap.Modal(document.getElementById('loginModal'));
+                    loginModal.show();
+                    return;
+                }
+                
+                // ตรวจสอบสถานะบูธทุกรูปแบบที่ไม่ใช่ available
+                if (element.classList.contains('reserved') || 
+                    element.classList.contains('pending_payment') || 
+                    element.classList.contains('paid') || 
+                    element.getAttribute('data-status') !== 'available') {
+                    alert('บูธนี้ถูกจองไปแล้ว');
+                    return;
+                }
             
             // Get booth information
             const boothId = element.getAttribute('data-id');
@@ -1481,110 +1490,83 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
         
         // ฟังก์ชั่นจองโดยจ่ายทีหลัง
         function submitReservation() {
-            // Get form data
-            const boothId = document.getElementById('boothId').value;
+    // Get form data
+    const boothId = document.getElementById('boothId').value;
+    
+    // แสดงข้อความกำลังดำเนินการ
+    const reserveBtn = document.querySelector('[onclick="submitReservation()"]');
+    reserveBtn.disabled = true;
+    reserveBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> กำลังดำเนินการ...';
+    
+    // Submit reservation via AJAX
+    $.ajax({
+        url: window.location.href,
+        type: 'POST',
+        data: {
+            action: 'reserve',
+            boothId: boothId
+        },
+        dataType: 'json',
+        success: function(response) {
+            console.log('Server response:', response);
             
-            // แสดงข้อความกำลังดำเนินการ
-            const reserveBtn = document.querySelector('[onclick="submitReservation()"]');
-            reserveBtn.disabled = true;
-            reserveBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> กำลังดำเนินการ...';
+            if (response && response.success) {
+                // โค้ดเมื่อสำเร็จ (คงเดิม)
+                var reservationModal = bootstrap.Modal.getInstance(document.getElementById('reservationModal'));
+                reservationModal.hide();
+                
+                currentOrderId = response.order_id;
+                currentOrderNumber = response.order_number;
+                
+                document.getElementById('successOrderNumber').textContent = response.order_number;
+                document.getElementById('successPaymentInfo').innerHTML = `
+                    <p><strong>คุณเลือกชำระเงินภายหลัง</strong></p>
+                    <p>กรุณาชำระเงินภายใน 24 ชั่วโมง มิเช่นนั้นการจองจะถูกยกเลิกโดยอัตโนมัติ</p>
+                    <p>หากมีข้อสงสัยสามารถติดต่อได้ที่ ${getSetting('contact_phone', '0812345678')}</p>
+                `;
+                
+                document.getElementById('paymentButtonContainer').innerHTML = `
+                    <button class="btn btn-primary" onclick="showPaymentModal('${response.order_id}', '${response.order_number}')">
+                        <i class="bi bi-credit-card me-2"></i>ชำระเงินตอนนี้
+                    </button>
+                `;
+                
+                var successModal = new bootstrap.Modal(document.getElementById('successModal'));
+                successModal.show();
+            } else {
+                alert(response && response.message ? response.message : 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
+            }
             
-            // Submit reservation via AJAX
-            $.ajax({
-                url: window.location.href,
-                type: 'POST',
-                data: {
-                    action: 'reserve',
-                    boothId: boothId
-                },
-                dataType: 'json',
-                success: function(response) {
-                    console.log('Server response:', response);
-                    
-                    if (response && response.success) {
-                        // โค้ดเมื่อสำเร็จ
-                        // Hide reservation modal
-                        var reservationModal = bootstrap.Modal.getInstance(document.getElementById('reservationModal'));
-                        reservationModal.hide();
-                        
-                        // บันทึกข้อมูลคำสั่งซื้อ
-                        currentOrderId = response.order_id;
-                        currentOrderNumber = response.order_number;
-                        
-                        // Set success info และข้อความสำหรับกรณีจ่ายทีหลัง
-                        document.getElementById('successOrderNumber').textContent = response.order_number;
-                        document.getElementById('successPaymentInfo').innerHTML = `
-                            <p><strong>คุณเลือกชำระเงินภายหลัง</strong></p>
-                            <p>กรุณาชำระเงินภายใน 24 ชั่วโมง มิเช่นนั้นการจองจะถูกยกเลิกโดยอัตโนมัติ</p>
-                            <p>หากมีข้อสงสัยสามารถติดต่อได้ที่ ${getSetting('contact_phone', '0812345678')}</p>
-                        `;
-                        
-                        // เพิ่มปุ่มชำระเงิน
-                        document.getElementById('paymentButtonContainer').innerHTML = `
-                            <button class="btn btn-primary" onclick="showPaymentModal('${response.order_id}', '${response.order_number}')">
-                                <i class="bi bi-credit-card me-2"></i>ชำระเงินตอนนี้
-                            </button>
-                        `;
-                        
-                        // Show success modal
-                        var successModal = new bootstrap.Modal(document.getElementById('successModal'));
-                        successModal.show();
-                    } else {
-                        alert(response && response.message ? response.message : 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
-                    }
-                    
-                    // คืนค่าปุ่ม
-                    reserveBtn.disabled = false;
-                    reserveBtn.innerHTML = 'ยืนยันการจอง';
-                },
-                error: function(xhr, status, error) {
-                    console.error('AJAX error:', status, error);
-                    console.log('Response text:', xhr.responseText);
-                    
-                    try {
-                        // พยายามแปลงเป็น JSON
-                        const response = JSON.parse(xhr.responseText);
-                        if (response && response.success) {
-                            // ถ้าแปลงได้และเป็น success ให้ดำเนินการต่อ
-                            var reservationModal = bootstrap.Modal.getInstance(document.getElementById('reservationModal'));
-                            reservationModal.hide();
-                            
-                            // บันทึกข้อมูลคำสั่งซื้อ
-                            currentOrderId = response.order_id;
-                            currentOrderNumber = response.order_number;
-                            
-                            // Set success info
-                            document.getElementById('successOrderNumber').textContent = response.order_number;
-                            document.getElementById('successPaymentInfo').innerHTML = `
-                                <p><strong>คุณเลือกชำระเงินภายหลัง</strong></p>
-                                <p>กรุณาชำระเงินภายใน 24 ชั่วโมง มิเช่นนั้นการจองจะถูกยกเลิกโดยอัตโนมัติ</p>
-                                <p>หากมีข้อสงสัยสามารถติดต่อได้ที่ ${getSetting('contact_phone', '0812345678')}</p>
-                            `;
-                            
-                            // เพิ่มปุ่มชำระเงิน
-                            document.getElementById('paymentButtonContainer').innerHTML = `
-                                <button class="btn btn-primary" onclick="showPaymentModal('${response.order_id}', '${response.order_number}')">
-                                    <i class="bi bi-credit-card me-2"></i>ชำระเงินตอนนี้
-                                </button>
-                            `;
-                            
-                            // Show success modal
-                            var successModal = new bootstrap.Modal(document.getElementById('successModal'));
-                            successModal.show();
-                            return;
-                        }
-                    } catch (e) {
-                        console.error('Error parsing response:', e);
-                    }
-                    
-                    alert('เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + error);
-                    
-                    // คืนค่าปุ่ม
-                    reserveBtn.disabled = false;
-                    reserveBtn.innerHTML = 'ยืนยันการจอง';
+            // คืนค่าปุ่ม
+            reserveBtn.disabled = false;
+            reserveBtn.innerHTML = 'ยืนยันการจอง';
+        },
+        error: function(xhr, status, error) {
+            console.error('AJAX error:', status, error);
+            console.log('Response text:', xhr.responseText);
+            
+            let errorMessage = 'เกิดข้อผิดพลาดในการเชื่อมต่อ';
+            
+            try {
+                // พยายามแปลง response เป็น JSON
+                const response = JSON.parse(xhr.responseText);
+                if (response && response.message) {
+                    errorMessage = response.message;
                 }
-            });
+            } catch (e) {
+                console.error('Error parsing response:', e);
+                // หากแปลงไม่ได้ แสดงว่าอาจจะเป็น HTML error
+                errorMessage += ' (ระบบส่งการตอบกลับที่ไม่ถูกต้อง)';
+            }
+            
+            alert(errorMessage);
+            
+            // คืนค่าปุ่ม
+            reserveBtn.disabled = false;
+            reserveBtn.innerHTML = 'ยืนยันการจอง';
         }
+    });
+}
         function submitReservationAndPay() {
             // Get form data
             const boothId = document.getElementById('boothId').value;
