@@ -1365,6 +1365,43 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
   </div>
 </div>
 
+
+
+<?php if (isset($_GET['debug']) && $_GET['debug'] === '1'): ?>
+<div class="card mt-4 mb-4 bg-light">
+    <div class="card-header bg-info text-white">
+        <h5 class="mb-0">Debug Information</h5>
+    </div>
+    <div class="card-body">
+        <h6>Booth Statuses:</h6>
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Zone</th>
+                    <th>Number</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php
+                $debugSql = "SELECT id, zone, booth_number, status FROM booths ORDER BY zone, booth_number";
+                $debugResult = $conn->query($debugSql);
+                
+                while ($row = $debugResult->fetch_assoc()): 
+                ?>
+                <tr>
+                    <td><?php echo $row['id']; ?></td>
+                    <td><?php echo $row['zone']; ?></td>
+                    <td><?php echo $row['booth_number']; ?></td>
+                    <td><?php echo $row['status']; ?></td>
+                </tr>
+                <?php endwhile; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+<?php endif; ?>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
@@ -1443,41 +1480,47 @@ $zoneCPrices = $conn->query("SELECT MIN(price) as min_price, MAX(price) as max_p
         }
         
         function selectBooth(element) {
-            if (!isLoggedIn) {
-                    alert('กรุณาลงทะเบียนหรือเข้าสู่ระบบก่อนทำการจอง');
-                    var loginModal = new bootstrap.Modal(document.getElementById('loginModal'));
-                    loginModal.show();
-                    return;
-                }
-                
-                // ตรวจสอบสถานะบูธทุกรูปแบบที่ไม่ใช่ available
-                if (element.classList.contains('reserved') || 
-                    element.classList.contains('pending_payment') || 
-                    element.classList.contains('paid') || 
-                    element.getAttribute('data-status') !== 'available') {
-                    alert('บูธนี้ถูกจองไปแล้ว');
-                    return;
-                }
-            
-            // Get booth information
-            const boothId = element.getAttribute('data-id');
-            const boothNumber = element.getAttribute('data-number');
-            const zone = element.getAttribute('data-zone');
-            const price = element.getAttribute('data-price');
-            
-            // Set values in the modal
-            document.getElementById('selectedBoothNumber').textContent = boothNumber;
-            document.getElementById('selectedZone').textContent = zone;
-            document.getElementById('boothId').value = boothId;
-            document.getElementById('boothPrice').textContent = formatCurrency(price);
-            
-            // กำหนดการแสดงปุ่มตามเงื่อนไขการจ่ายเงิน
-            updatePaymentButtons();
-            
-            // Show the modal
-            var reservationModal = new bootstrap.Modal(document.getElementById('reservationModal'));
-            reservationModal.show();
-        }
+    // ตรวจสอบการล็อกอิน
+    if (!isLoggedIn) {
+        alert('กรุณาลงทะเบียนหรือเข้าสู่ระบบก่อนทำการจอง');
+        var loginModal = new bootstrap.Modal(document.getElementById('loginModal'));
+        loginModal.show();
+        return;
+    }
+    
+    // ตรวจสอบว่ามี class ที่บ่งบอกว่าบูธถูกจองแล้วหรือไม่ (ไม่ใช้ data-status)
+    if (element.classList.contains('reserved') || 
+        element.classList.contains('pending_payment') || 
+        element.classList.contains('paid')) {
+        alert('บูธนี้ถูกจองไปแล้ว');
+        return;
+    }
+    
+    // Get booth information
+    const boothId = element.getAttribute('data-id');
+    const boothNumber = element.getAttribute('data-number');
+    const zone = element.getAttribute('data-zone');
+    const price = element.getAttribute('data-price');
+    
+    // ตรวจสอบว่ามี data-id หรือไม่
+    if (!boothId || boothId === '0') {
+        alert('ไม่สามารถจองบูธนี้ได้ เนื่องจากไม่มีข้อมูลในระบบ');
+        return;
+    }
+    
+    // Set values in the modal
+    document.getElementById('selectedBoothNumber').textContent = boothNumber;
+    document.getElementById('selectedZone').textContent = zone;
+    document.getElementById('boothId').value = boothId;
+    document.getElementById('boothPrice').textContent = formatCurrency(price);
+    
+    // กำหนดการแสดงปุ่มตามเงื่อนไขการจ่ายเงิน
+    updatePaymentButtons();
+    
+    // Show the modal
+    var reservationModal = new bootstrap.Modal(document.getElementById('reservationModal'));
+    reservationModal.show();
+}
         
         // อัพเดตการแสดงปุ่มในหน้าจองตามเงื่อนไข
         function updatePaymentButtons() {
