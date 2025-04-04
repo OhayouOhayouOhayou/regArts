@@ -17,7 +17,7 @@ $customerName = $isLoggedIn ? $_SESSION['name'] : '';
 $customerEmail = $isLoggedIn ? $_SESSION['email'] : '';
 $customerCompany = $isLoggedIn ? $_SESSION['company'] : '';
 $customerAddress = $isLoggedIn ? $_SESSION['address'] : ''; // เพิ่มที่อยู่
-$customerLineId = $isLoggedIn ? $_SESSION['line_id'] : ''; // เพิ่ม Line ID
+$customerLineId = $isLoggedIn ? $_SESSION['line_id'] : ''; // เพิ่ม Line ID //sad
 
 // ระบบล็อกอิน
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["action"])) {
