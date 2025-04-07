@@ -220,68 +220,121 @@ try {
     // Plain text version of the email
     $text_message = strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message));
     
-    // Check if PHPMailer class exists, if not include it
-    if (!class_exists('PHPMailer')) {
-        $phpmailer_paths = [
-            dirname(__DIR__) . '/lib/class.phpmailer.php',
-            __DIR__ . '/lib/class.phpmailer.php',
-            dirname(dirname(__DIR__)) . '/lib/class.phpmailer.php',
-            '../../lib/class.phpmailer.php',
-            'class.phpmailer.php',
-            dirname(__DIR__) . '/vendor/phpmailer/phpmailer/class.phpmailer.php',
-            __DIR__ . '/vendor/phpmailer/phpmailer/class.phpmailer.php'
-        ];
-        
-        $phpmailer_loaded = false;
-        
-        foreach ($phpmailer_paths as $path) {
-            if (file_exists($path)) {
-                require_once $path;
-                $phpmailer_loaded = true;
-                logMessage("โหลด PHPMailer จาก: $path", 2);
-                break;
-            }
-        }
-        
-        if (!$phpmailer_loaded) {
-            throw new Exception("ไม่พบไฟล์ PHPMailer class");
-        }
+    // ThaibulkSMS Email API configuration
+    $api_key = 'gXwi_z_AoGWWsH_QKDr3NmbkC8CwwL';
+    $api_secret = 'zEVdW7gbpI4ZYGUDaG3qpxxltWlIQh';
+    $url = 'https://api-v2.thaibulksms.com/email';
+    
+    $sender_email = 'arts@rmutsb.ac.th';
+    $sender_name = 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ';
+    
+    logMessage("กำลังส่งอีเมลผ่าน ThaibulkSMS API ไปยัง: $email", 2);
+    
+    // Prepare the request data for ThaibulkSMS
+    $data = [
+        'api_key' => $api_key,
+        'api_secret' => $api_secret,
+        'from_email' => $sender_email,
+        'from_name' => $sender_name,
+        'to_email' => $email,
+        'to_name' => $fullname,
+        'subject' => $subject,
+        'html_message' => $message,
+        'text_message' => $text_message
+    ];
+    
+    // Initialize cURL request
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Content-Type: application/x-www-form-urlencoded'
+    ]);
+    
+    // Execute the request
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    
+    curl_close($ch);
+    
+    // Log detailed API response
+    logMessage("ThaibulkSMS API Response Code: $httpCode", 2);
+    if (!empty($response)) {
+        logMessage("ThaibulkSMS API Response: $response", 3);
+    }
+    if (!empty($error)) {
+        logMessage("ThaibulkSMS API Error: $error", 2);
     }
     
-    logMessage("กำลังส่งอีเมลผ่าน PHPMailer SMTP ไปยัง: $email", 2);
+    // Process the response
+    $responseData = json_decode($response, true);
     
-
-    $mail = new PHPMailer();
-    $mail->CharSet = "UTF-8";
-    $mail->IsHTML(true);
-    $mail->IsSMTP();
-    $mail->SMTPAuth = true;
-    $mail->SMTPAutoTLS  = false;
-    $mail->SMTPSecure = "ssl"; 
-    $mail->Host = 'smtppro.zoho.com'; 
-    $mail->Port = 465; 
-    $mail->Username = 'csd@asefa.co.th'; 
-    $mail->Password = 'vk:uak2025'; 
-
-    $mail->From = "arts@rmutsb.ac.th";
-    $mail->FromName = "คณะศิลปศาสตร์ มทร.สุวรรณภูมิ";
-    $mail->Subject = $subject;
-    $mail->Body = $message;
-    $mail->AltBody = $text_message;
-    
-    $mail->AddAddress($email, $fullname);
-    
-    // Send email
-    if ($mail->Send()) {
+    if ($httpCode == 200 && isset($responseData['status']) && $responseData['status'] == 'success') {
+        // Success case
         logMessage("ส่งอีเมลสำเร็จ");
+        
+        // Update email log in database if necessary
+        try {
+            $logStmt = $pdo->prepare("
+                INSERT INTO email_logs 
+                (registration_id, email_type, recipient_email, recipient_name, status, notes)
+                VALUES (?, ?, ?, ?, 'sent', ?)
+            ");
+            $logStmt->execute([
+                $registration_id,
+                $payment_status == 'paid' ? 'payment_confirmation' : 'registration_confirmation',
+                $email,
+                $fullname,
+                'Sent via ThaibulkSMS Email API'
+            ]);
+            
+            logMessage("บันทึกประวัติการส่งอีเมลในฐานข้อมูลสำเร็จ");
+        } catch (PDOException $e) {
+            logMessage("ไม่สามารถบันทึกประวัติการส่งอีเมลในฐานข้อมูล: " . $e->getMessage(), 2);
+            // Continue even if logging to database fails
+        }
         
         echo json_encode([
             'success' => true,
             'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
-            'method' => 'PHPMailer SMTP'
+            'method' => 'ThaibulkSMS Email API',
+            'message_id' => $responseData['message_id'] ?? ''
         ]);
     } else {
-        throw new Exception("ไม่สามารถส่งอีเมลได้: " . $mail->ErrorInfo);
+        // Error case
+        $errorMessage = isset($responseData['error']) 
+            ? $responseData['error'] 
+            : (!empty($error) ? $error : 'Unknown error');
+        
+        logMessage("ไม่สามารถส่งอีเมลได้: " . $errorMessage);
+        
+        // Record failed email attempt in database
+        try {
+            $logStmt = $pdo->prepare("
+                INSERT INTO email_logs 
+                (registration_id, email_type, recipient_email, recipient_name, status, notes)
+                VALUES (?, ?, ?, ?, 'failed', ?)
+            ");
+            $logStmt->execute([
+                $registration_id,
+                $payment_status == 'paid' ? 'payment_confirmation' : 'registration_confirmation',
+                $email,
+                $fullname,
+                'Error: ' . $errorMessage
+            ]);
+            
+            logMessage("บันทึกข้อผิดพลาดการส่งอีเมลในฐานข้อมูลสำเร็จ");
+        } catch (PDOException $e) {
+            logMessage("ไม่สามารถบันทึกข้อผิดพลาดการส่งอีเมลในฐานข้อมูล: " . $e->getMessage(), 2);
+        }
+        
+        echo json_encode([
+            'success' => false,
+            'message' => "ไม่สามารถส่งอีเมลได้ - กรุณาตรวจสอบการตั้งค่า ThaibulkSMS API",
+            'error' => $errorMessage
+        ]);
     }
     
 } catch (PDOException $e) {
