@@ -132,6 +132,8 @@ try {
     
     logMessage("ดึงข้อมูลการลงทะเบียนสำเร็จ");
     
+    
+    
     // Set email subject
     $subject = 'ยืนยันการลงทะเบียนการสัมมนา - มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ';
   
@@ -217,70 +219,107 @@ try {
     
     logMessage("สร้างเนื้อหาอีเมลเรียบร้อย");
     
-    // Plain text version of the email
-    $text_message = strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message));
+    // Mailjet API configuration
+    $api_key = '829cbd1ae749929b8ae832c63f6fe511'; 
+    $api_secret = '3be69cc8ed38c1e0e5456fd5904b4465';
+    $url = 'https://api.mailjet.com/v3.1/send';
     
-    // Check if PHPMailer class exists, if not include it
-    if (!class_exists('PHPMailer')) {
-        $phpmailer_paths = [
-            dirname(__DIR__) . '/lib/class.phpmailer.php',
-            __DIR__ . '/lib/class.phpmailer.php',
-            dirname(dirname(__DIR__)) . '/lib/class.phpmailer.php',
-            '../../lib/class.phpmailer.php',
-            'class.phpmailer.php',
-            dirname(__DIR__) . '/vendor/phpmailer/phpmailer/class.phpmailer.php',
-            __DIR__ . '/vendor/phpmailer/phpmailer/class.phpmailer.php'
-        ];
-        
-        $phpmailer_loaded = false;
-        
-        foreach ($phpmailer_paths as $path) {
-            if (file_exists($path)) {
-                require_once $path;
-                $phpmailer_loaded = true;
-                logMessage("โหลด PHPMailer จาก: $path", 2);
-                break;
-            }
-        }
-        
-        if (!$phpmailer_loaded) {
-            throw new Exception("ไม่พบไฟล์ PHPMailer class");
-        }
+    $sender_email = 'arts@rmutsb.ac.th';
+    $sender_name = 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ';
+    
+    // Prepare the request data for Mailjet
+    $data = [
+        'Messages' => [
+            [
+                'From' => [
+                    'Email' => $sender_email,
+                    'Name' => $sender_name
+                ],
+                'To' => [
+                    [
+                        'Email' => $email,
+                        'Name' => $fullname
+                    ]
+                ],
+                'Subject' => $subject,
+                'HTMLPart' => $message,
+                'TextPart' => strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message))
+            ]
+        ]
+    ];
+    
+    logMessage("กำลังส่งอีเมลผ่าน Mailjet API ไปยัง: $email", 2);
+    
+    // Initialize cURL request
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Content-Type: application/json'
+    ]);
+    curl_setopt($ch, CURLOPT_USERPWD, $api_key . ':' . $api_secret);
+    
+    // Execute the request
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    
+    curl_close($ch);
+    
+    // Log detailed API response
+    logMessage("Mailjet API Response Code: $httpCode", 2);
+    if (!empty($response)) {
+        logMessage("Mailjet API Response: $response", 3);
+    }
+    if (!empty($error)) {
+        logMessage("Mailjet API Error: $error", 2);
     }
     
-    logMessage("กำลังส่งอีเมลผ่าน PHPMailer SMTP ไปยัง: $email", 2);
+    // Parse JSON response
+    $responseData = json_decode($response, true);
     
-  
-    $mail = new PHPMailer();
-    $mail->CharSet = "UTF-8";
-    $mail->IsHTML(true);
-    $mail->IsSMTP();
-    $mail->SMTPAuth = true;
-    $mail->SMTPSecure = "ssl"; 
-    $mail->Host = 'smtppro.zoho.com'; 
-    $mail->Port = 465;
-    $mail->Username = "csd@asefa.co.th"; 
-    $mail->Password = "vk:uak2025"; 
-
-    $mail->From = "csd@asefa.co.th";
-    $mail->FromName = "คณะศิลปศาสตร์ มทร.สุวรรณภูมิ";
-    $mail->Subject = $subject;
-    $mail->Body = $message;
-    $mail->AltBody = $text_message;
-    
-    $mail->AddAddress($email, $fullname);
-    
-    // Send email
-    if ($mail->Send()) {
-        logMessage("ส่งอีเมลสำเร็จ");
-        
-        echo json_encode([
-            'success' => true,
-            'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
-            'method' => 'PHPMailer SMTP'
-        ]);
-    } else {
-        throw new Exception("ไม่สามารถส่งอีเมลได้: " . $mail->ErrorInfo);
+    // Update email log with API response
+    try {
+        if ($httpCode >= 200 && $httpCode < 300 && isset($responseData['Messages'][0]['Status']) && $responseData['Messages'][0]['Status'] === 'success') {
+            // Success
+            $messageId = isset($responseData['Messages'][0]['To'][0]['MessageID']) ? $responseData['Messages'][0]['To'][0]['MessageID'] : '';
+            
+          
+            
+            echo json_encode([
+                'success' => true,
+                'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
+                'method' => 'Mailjet API',
+                'message_id' => $messageId
+            ]);
+        } else {
+            // Failure
+            $errorMessage = '';
+            
+            // Try to extract detailed error from Mailjet response
+            if (isset($responseData['Messages'][0]['Errors'])) {
+                foreach ($responseData['Messages'][0]['Errors'] as $err) {
+                    $errorMessage .= $err['ErrorMessage'] . ' ';
+                }
+            } elseif (!empty($error)) {
+                $errorMessage = $error;
+            } else {
+                $errorMessage = 'Unknown error';
+            }
+            
+           
+            
+            echo json_encode([
+                'success' => false,
+                'message' => "ไม่สามารถส่งอีเมลได้ - กรุณาตรวจสอบการตั้งค่า Mailjet API",
+                'error' => $errorMessage
+            ]);
+            
+          
+        }
+    } catch (PDOException $e) {
+        logMessage("ไม่สามารถอัปเดตข้อมูลการส่งอีเมลในฐานข้อมูล: " . $e->getMessage());
     }
     
 } catch (PDOException $e) {
