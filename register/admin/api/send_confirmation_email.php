@@ -220,98 +220,85 @@ try {
     // Plain text version of the email
     $text_message = strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message));
     
-    // ThaibulkSMS Email API configuration
-    $api_key = 'gXwi_z_AoGWWsH_QKDr3NmbkC8CwwL';
-    $api_secret = 'zEVdW7gbpI4ZYGUDaG3qpxxltWlIQh';
-    $url = 'https://api.thaibulksms.com/v2/transactional/email';
+    // Check if PHPMailer class exists, if not include it
+    if (!class_exists('PHPMailer')) {
+        $phpmailer_paths = [
+            dirname(__DIR__) . '/lib/class.phpmailer.php',
+            __DIR__ . '/lib/class.phpmailer.php',
+            dirname(dirname(__DIR__)) . '/lib/class.phpmailer.php',
+            '../../lib/class.phpmailer.php',
+            'class.phpmailer.php',
+            dirname(__DIR__) . '/vendor/phpmailer/phpmailer/class.phpmailer.php',
+            __DIR__ . '/vendor/phpmailer/phpmailer/class.phpmailer.php'
+        ];
+        
+        $phpmailer_loaded = false;
+        
+        foreach ($phpmailer_paths as $path) {
+            if (file_exists($path)) {
+                require_once $path;
+                $phpmailer_loaded = true;
+                logMessage("โหลด PHPMailer จาก: $path", 2);
+                break;
+            }
+        }
+        
+        if (!$phpmailer_loaded) {
+            throw new Exception("ไม่พบไฟล์ PHPMailer class");
+        }
+    }
     
+    // MailerSend SMTP Configuration
+    $smtp_host = 'smtp.mailersend.net';
+    $smtp_port = 587; // Port with TLS
+    $smtp_username = 'MS_WU6InX@test-q3enl6kj9j042vwr.mlsender.net';
+    $smtp_password = 'mssp.J2B755O.neqvygmejn540p7w.ajpmlSR';
     $sender_email = 'arts@rmutsb.ac.th';
     $sender_name = 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ';
     
-    logMessage("กำลังส่งอีเมลผ่าน ThaibulkSMS API ไปยัง: $email", 2);
+    logMessage("กำลังส่งอีเมลผ่าน MailerSend SMTP ไปยัง: $email", 2);
     
-    // Prepare the request data for ThaibulkSMS
-    $data = [
-        'api_key' => $api_key,
-        'api_secret' => $api_secret,
-        'sender' => [
-            'email' => $sender_email,
-            'name' => $sender_name
-        ],
-        'recipient' => [
-            'email' => $email,
-            'name' => $fullname
-        ],
-        'content' => [
-            'subject' => $subject,
-            'html' => $message,
-            'text' => $text_message
-        ]
-    ];
+    // Create a new PHPMailer instance
+    $mail = new PHPMailer();
+    $mail->CharSet = 'UTF-8';
+    $mail->Encoding = 'base64';
     
-    // Initialize cURL request
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Content-Type: application/json',
-        'Accept: application/json'
-    ]);
+    // Set mailer to use SMTP
+    $mail->isSMTP();
+    $mail->SMTPDebug = 0; // Set to 2 for verbose debug output if needed
     
-    // Execute the request
-    $response = curl_exec($ch);
-$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-$error = curl_error($ch);
+    // SMTP server settings
+    $mail->Host = $smtp_host;
+    $mail->Port = $smtp_port;
+    $mail->SMTPAuth = true;
+    $mail->SMTPSecure = 'tls';
+    $mail->Username = $smtp_username;
+    $mail->Password = $smtp_password;
     
-    curl_close($ch);
+    // Email content
+    $mail->isHTML(true);
+    $mail->setFrom($sender_email, $sender_name);
+    $mail->addAddress($email, $fullname);
+    $mail->Subject = $subject;
+    $mail->Body = $message;
+    $mail->AltBody = $text_message;
     
-    // Log detailed API response
-    logMessage("ThaibulkSMS API Response Code: $httpCode", 2);
-    if (!empty($response)) {
-        logMessage("ThaibulkSMS API Response: $response", 3);
-    }
-    if (!empty($error)) {
-        logMessage("ThaibulkSMS API Error: $error", 2);
-    }
+    // Send the email
+    $sendSuccess = $mail->send();
     
-    // Process the response
-    $responseData = json_decode($response, true);
-    
-   
-    if ($httpCode >= 200 && $httpCode < 300 && isset($responseData['status']) && $responseData['status'] == 'success') {
-        // Success case
+    if ($sendSuccess) {
         logMessage("ส่งอีเมลสำเร็จ");
-        
         echo json_encode([
             'success' => true,
             'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
-            'method' => 'ThaibulkSMS Email API',
-            'message_id' => $responseData['message_id'] ?? ''
+            'method' => 'MailerSend SMTP'
         ]);
     } else {
-        // Error case
-        $errorMessage = '';
-        
-        if (!empty($error)) {
-            $errorMessage = $error;
-        } elseif (isset($responseData['error']['description'])) {
-            $errorMessage = $responseData['error']['description'];
-        } elseif (isset($responseData['error'])) {
-            if (is_array($responseData['error'])) {
-                $errorMessage = json_encode($responseData['error']);
-            } else {
-                $errorMessage = $responseData['error'];
-            }
-        } else {
-            $errorMessage = "HTTP Error: $httpCode";
-        }
-        
+        $errorMessage = $mail->ErrorInfo;
         logMessage("ไม่สามารถส่งอีเมลได้: " . $errorMessage);
-        
         echo json_encode([
             'success' => false,
-            'message' => "ไม่สามารถส่งอีเมลได้ - กรุณาตรวจสอบการตั้งค่า ThaibulkSMS API",
+            'message' => "ไม่สามารถส่งอีเมลได้ - กรุณาตรวจสอบการตั้งค่า SMTP",
             'error' => $errorMessage
         ]);
     }
