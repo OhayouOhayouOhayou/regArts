@@ -132,8 +132,6 @@ try {
     
     logMessage("ดึงข้อมูลการลงทะเบียนสำเร็จ");
     
-    
-    
     // Set email subject
     $subject = 'ยืนยันการลงทะเบียนการสัมมนา - มหาวิทยาลัยเทคโนโลยีราชมงคลสุวรรณภูมิ';
   
@@ -219,107 +217,84 @@ try {
     
     logMessage("สร้างเนื้อหาอีเมลเรียบร้อย");
     
-    // Mailjet API configuration
-    $api_key = '829cbd1ae749929b8ae832c63f6fe511'; 
-    $api_secret = '3be69cc8ed38c1e0e5456fd5904b4465';
-    $url = 'https://api.mailjet.com/v3.1/send';
+    // Plain text version of the email
+    $text_message = strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message));
     
-    $sender_email = 'arts@rmutsb.ac.th';
+    // Load PHPMailer
+    require_once __DIR__ . '/vendor/PHPMailer/PHPMailerAutoload.php';
+    
+    // Mailjet SMTP configuration
+    $smtp_host = 'in-v3.mailjet.com';
+    $smtp_port = 587; // TLS port
+    $smtp_username = '829cbd1ae749929b8ae832c63f6fe511'; // API Key
+    $smtp_password = '3be69cc8ed38c1e0e5456fd5904b4465'; // Secret Key
+    
+    // Email sender information - using temporary domain
+    $sender_email = 'notification@mailjet.arts.rmutsb.ac.th'; // Use a subdomain you control as sender
     $sender_name = 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ';
     
-    // Prepare the request data for Mailjet
-    $data = [
-        'Messages' => [
-            [
-                'From' => [
-                    'Email' => $sender_email,
-                    'Name' => $sender_name
-                ],
-                'To' => [
-                    [
-                        'Email' => $email,
-                        'Name' => $fullname
-                    ]
-                ],
-                'Subject' => $subject,
-                'HTMLPart' => $message,
-                'TextPart' => strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message))
-            ]
-        ]
-    ];
+    logMessage("กำลังส่งอีเมลผ่าน Mailjet SMTP ไปยัง: $email", 2);
     
-    logMessage("กำลังส่งอีเมลผ่าน Mailjet API ไปยัง: $email", 2);
+    // Initialize PHPMailer
+    $mail = new PHPMailer();
+    $mail->CharSet = 'UTF-8'; // Set UTF-8 character encoding for Thai language
+    $mail->Encoding = 'base64'; // Use base64 encoding for content
     
-    // Initialize cURL request
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Content-Type: application/json'
-    ]);
-    curl_setopt($ch, CURLOPT_USERPWD, $api_key . ':' . $api_secret);
+    // Set up SMTP configuration
+    $mail->isSMTP();
+    $mail->SMTPDebug = 0; // 0 = no output, 1 = client output, 2 = client and server output
+    $mail->Debugoutput = function($str, $level) { logMessage("SMTP Debug: $str", 3); }; // Log SMTP debug messages
+    $mail->Host = $smtp_host;
+    $mail->Port = $smtp_port;
+    $mail->SMTPAuth = true;
+    $mail->SMTPSecure = 'tls';
+    $mail->Username = $smtp_username;
+    $mail->Password = $smtp_password;
     
-    // Execute the request
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $error = curl_error($ch);
+    // Set timeout parameters
+    $mail->Timeout = 60; // Timeout in seconds
+    $mail->SMTPKeepAlive = false; // Don't keep connection alive
     
-    curl_close($ch);
+    // Set email content
+    $mail->setFrom($sender_email, $sender_name);
+    $mail->addReplyTo('arts@rmutsb.ac.th', $sender_name); // Reply-To address for responses
+    $mail->addAddress($email, $fullname);
+    $mail->Subject = $subject;
+    $mail->isHTML(true);
+    $mail->Body = $message;
+    $mail->AltBody = $text_message;
     
-    // Log detailed API response
-    logMessage("Mailjet API Response Code: $httpCode", 2);
-    if (!empty($response)) {
-        logMessage("Mailjet API Response: $response", 3);
-    }
-    if (!empty($error)) {
-        logMessage("Mailjet API Error: $error", 2);
-    }
-    
-    // Parse JSON response
-    $responseData = json_decode($response, true);
-    
-    // Update email log with API response
+    // Attempt to send email
     try {
-        if ($httpCode >= 200 && $httpCode < 300 && isset($responseData['Messages'][0]['Status']) && $responseData['Messages'][0]['Status'] === 'success') {
-            // Success
-            $messageId = isset($responseData['Messages'][0]['To'][0]['MessageID']) ? $responseData['Messages'][0]['To'][0]['MessageID'] : '';
-            
-          
+        $success = $mail->send();
+        
+        if ($success) {
+            logMessage("ส่งอีเมลสำเร็จ");
             
             echo json_encode([
                 'success' => true,
                 'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
-                'method' => 'Mailjet API',
-                'message_id' => $messageId
+                'method' => 'Mailjet SMTP'
             ]);
         } else {
-            // Failure
-            $errorMessage = '';
-            
-            // Try to extract detailed error from Mailjet response
-            if (isset($responseData['Messages'][0]['Errors'])) {
-                foreach ($responseData['Messages'][0]['Errors'] as $err) {
-                    $errorMessage .= $err['ErrorMessage'] . ' ';
-                }
-            } elseif (!empty($error)) {
-                $errorMessage = $error;
-            } else {
-                $errorMessage = 'Unknown error';
-            }
-            
-           
+            $error_message = $mail->ErrorInfo;
+            logMessage("ไม่สามารถส่งอีเมลได้: " . $error_message);
             
             echo json_encode([
                 'success' => false,
-                'message' => "ไม่สามารถส่งอีเมลได้ - กรุณาตรวจสอบการตั้งค่า Mailjet API",
-                'error' => $errorMessage
+                'message' => "ไม่สามารถส่งอีเมลได้ - กรุณาตรวจสอบการตั้งค่า SMTP",
+                'error' => $error_message
             ]);
-            
-          
         }
-    } catch (PDOException $e) {
-        logMessage("ไม่สามารถอัปเดตข้อมูลการส่งอีเมลในฐานข้อมูล: " . $e->getMessage());
+    } catch (Exception $e) {
+        $error_message = $e->getMessage();
+        logMessage("เกิดข้อผิดพลาดในการส่งอีเมล: " . $error_message);
+        
+        echo json_encode([
+            'success' => false,
+            'message' => "เกิดข้อผิดพลาดในการส่งอีเมล",
+            'error' => $error_message
+        ]);
     }
     
 } catch (PDOException $e) {
