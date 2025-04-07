@@ -275,26 +275,7 @@ try {
         // Success case
         logMessage("ส่งอีเมลสำเร็จ");
         
-        // Update email log in database if necessary
-        try {
-            $logStmt = $pdo->prepare("
-                INSERT INTO email_logs 
-                (registration_id, email_type, recipient_email, recipient_name, status, notes)
-                VALUES (?, ?, ?, ?, 'sent', ?)
-            ");
-            $logStmt->execute([
-                $registration_id,
-                $payment_status == 'paid' ? 'payment_confirmation' : 'registration_confirmation',
-                $email,
-                $fullname,
-                'Sent via ThaibulkSMS Email API'
-            ]);
-            
-            logMessage("บันทึกประวัติการส่งอีเมลในฐานข้อมูลสำเร็จ");
-        } catch (PDOException $e) {
-            logMessage("ไม่สามารถบันทึกประวัติการส่งอีเมลในฐานข้อมูล: " . $e->getMessage(), 2);
-            // Continue even if logging to database fails
-        }
+     
         
         echo json_encode([
             'success' => true,
@@ -310,25 +291,8 @@ try {
         
         logMessage("ไม่สามารถส่งอีเมลได้: " . $errorMessage);
         
-        // Record failed email attempt in database
-        try {
-            $logStmt = $pdo->prepare("
-                INSERT INTO email_logs 
-                (registration_id, email_type, recipient_email, recipient_name, status, notes)
-                VALUES (?, ?, ?, ?, 'failed', ?)
-            ");
-            $logStmt->execute([
-                $registration_id,
-                $payment_status == 'paid' ? 'payment_confirmation' : 'registration_confirmation',
-                $email,
-                $fullname,
-                'Error: ' . $errorMessage
-            ]);
-            
-            logMessage("บันทึกข้อผิดพลาดการส่งอีเมลในฐานข้อมูลสำเร็จ");
-        } catch (PDOException $e) {
-            logMessage("ไม่สามารถบันทึกข้อผิดพลาดการส่งอีเมลในฐานข้อมูล: " . $e->getMessage(), 2);
-        }
+
+       
         
         echo json_encode([
             'success' => false,
