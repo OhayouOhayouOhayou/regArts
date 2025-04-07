@@ -220,212 +220,108 @@ try {
     // Plain text version of the email
     $text_message = strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message));
     
-    // Find PHPMailer files using a more robust approach
-    $phpmailer_found = false;
-    $phpmailer_paths = [
-        __DIR__ . '/vendor/PHPMailer/PHPMailerAutoload.php',
-        __DIR__ . '/vendor/phpmailer/phpmailer/PHPMailerAutoload.php',
-        __DIR__ . '/vendor/phpmailer/PHPMailerAutoload.php',
-        __DIR__ . '/vendor/class.phpmailer.php',
-        __DIR__ . '/PHPMailer/PHPMailerAutoload.php'
-    ];
-    
-    foreach ($phpmailer_paths as $path) {
-        logMessage("ค้นหา PHPMailer ที่: $path", 2);
-        if (file_exists($path)) {
-            logMessage("พบ PHPMailer ที่: $path", 1);
-            require_once $path;
-            $phpmailer_found = true;
-            break;
-        }
-    }
-    
-    if (!$phpmailer_found) {
-        // Try to locate individual PHPMailer class files
-        logMessage("ไม่พบไฟล์ PHPMailerAutoload.php ค้นหาไฟล์ class หลัก", 1);
-        
-        $phpmailer_class_paths = [
-            __DIR__ . '/vendor/PHPMailer',
-            __DIR__ . '/vendor/phpmailer/phpmailer',
-            __DIR__ . '/vendor/phpmailer',
-            __DIR__ . '/PHPMailer'
-        ];
-        
-        foreach ($phpmailer_class_paths as $dir) {
-            if (file_exists($dir . '/class.phpmailer.php')) {
-                logMessage("พบไฟล์ class.phpmailer.php ที่: $dir", 1);
-                
-                // Load required PHPMailer classes individually
-                require_once $dir . '/class.phpmailer.php';
-                
-                if (file_exists($dir . '/class.smtp.php')) {
-                    require_once $dir . '/class.smtp.php';
-                }
-                
-                if (file_exists($dir . '/class.pop3.php')) {
-                    require_once $dir . '/class.pop3.php';
-                }
-                
-                $phpmailer_found = true;
-                break;
-            }
-        }
-    }
-    
-    if (!$phpmailer_found) {
-        throw new Exception("ไม่พบไฟล์ PHPMailer ในระบบ");
-    }
-    
     // Mailjet API configuration
     $api_key = '829cbd1ae749929b8ae832c63f6fe511'; 
     $api_secret = '3be69cc8ed38c1e0e5456fd5904b4465';
     $url = 'https://api.mailjet.com/v3.1/send';
     
-    $sender_email = 'notification@mailjet.arts.rmutsb.ac.th';
+    // Use a verified sender address in your Mailjet account
+    $sender_email = 'notification@mailjet.arts.rmutsb.ac.th'; // Update this with your verified sender
     $sender_name = 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ';
     
-    // Try SMTP first, fall back to API if SMTP fails
-    logMessage("กำลังส่งอีเมลผ่าน SMTP ไปยัง: $email", 2);
-    
-    try {
-        // Initialize PHPMailer
-        $mail = new PHPMailer();
-        $mail->CharSet = 'UTF-8';
-        $mail->Encoding = 'base64';
-        
-        // Set up SMTP
-        $mail->isSMTP();
-        $mail->SMTPDebug = 2; // Enable verbose debug output
-        $mail->Debugoutput = function($str, $level) { logMessage("SMTP Debug: $str", 3); };
-        $mail->Host = 'in-v3.mailjet.com';
-        $mail->Port = 587;
-        $mail->SMTPAuth = true;
-        $mail->SMTPSecure = 'tls';
-        $mail->Username = $api_key;
-        $mail->Password = $api_secret;
-        $mail->Timeout = 30;
-        
-        // Set sender and recipient
-        $mail->setFrom($sender_email, $sender_name);
-        $mail->addReplyTo('arts@rmutsb.ac.th', $sender_name);
-        $mail->addAddress($email, $fullname);
-        
-        // Set email content
-        $mail->Subject = $subject;
-        $mail->isHTML(true);
-        $mail->Body = $message;
-        $mail->AltBody = $text_message;
-        
-        // Send email
-        logMessage("เริ่มการส่งอีเมลผ่าน SMTP", 2);
-        $smtp_success = $mail->send();
-        logMessage("ผลการส่งอีเมลผ่าน SMTP: " . ($smtp_success ? "สำเร็จ" : "ล้มเหลว"), 2);
-        
-        if ($smtp_success) {
-            logMessage("ส่งอีเมลสำเร็จ");
-            echo json_encode([
-                'success' => true,
-                'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
-                'method' => 'Mailjet SMTP'
-            ]);
-            logMessage("--- จบการทำงาน " . date('Y-m-d H:i:s') . " ---\n");
-            exit;
-        } else {
-            // If SMTP fails, throw exception to fall back to API
-            throw new Exception("SMTP sending failed: " . $mail->ErrorInfo);
-        }
-    } catch (Exception $smtp_exception) {
-        // Log SMTP failure
-        logMessage("ไม่สามารถส่งอีเมลผ่าน SMTP: " . $smtp_exception->getMessage(), 1);
-        logMessage("กำลังใช้ Mailjet API เป็นตัวเลือกสำรอง", 1);
-        
-        // Fall back to Mailjet API
-        $data = [
-            'Messages' => [
-                [
-                    'From' => [
-                        'Email' => $sender_email,
-                        'Name' => $sender_name
-                    ],
-                    'To' => [
-                        [
-                            'Email' => $email,
-                            'Name' => $fullname
-                        ]
-                    ],
-                    'Subject' => $subject,
-                    'HTMLPart' => $message,
-                    'TextPart' => $text_message
+    // Prepare the request data for Mailjet
+    $data = [
+        'Messages' => [
+            [
+                'From' => [
+                    'Email' => $sender_email,
+                    'Name' => $sender_name
+                ],
+                'To' => [
+                    [
+                        'Email' => $email,
+                        'Name' => $fullname
+                    ]
+                ],
+                'Subject' => $subject,
+                'HTMLPart' => $message,
+                'TextPart' => $text_message,
+                'Headers' => [
+                    'Reply-To' => 'arts@rmutsb.ac.th'
                 ]
             ]
-        ];
+        ]
+    ];
+    
+    logMessage("กำลังส่งอีเมลผ่าน Mailjet API ไปยัง: $email", 2);
+    
+    // Initialize cURL request with improved error handling
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Content-Type: application/json'
+    ]);
+    curl_setopt($ch, CURLOPT_USERPWD, $api_key . ':' . $api_secret);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30); // Set timeout to 30 seconds
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true); // Verify SSL
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10); // Connection timeout
+    
+    // Execute the request
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    
+    curl_close($ch);
+    
+    // Log detailed API response
+    logMessage("Mailjet API Response Code: $httpCode", 2);
+    if (!empty($response)) {
+        logMessage("Mailjet API Response: $response", 3);
+    }
+    if (!empty($error)) {
+        logMessage("Mailjet API Error: $error", 2);
+    }
+    
+    // Parse JSON response
+    $responseData = json_decode($response, true);
+    
+    // Process the response
+    if ($httpCode >= 200 && $httpCode < 300 && isset($responseData['Messages'][0]['Status']) && $responseData['Messages'][0]['Status'] === 'success') {
+        // Success
+        $messageId = isset($responseData['Messages'][0]['To'][0]['MessageID']) ? $responseData['Messages'][0]['To'][0]['MessageID'] : '';
         
-        logMessage("กำลังส่งอีเมลผ่าน Mailjet API ไปยัง: $email", 2);
+        logMessage("ส่งอีเมลสำเร็จ");
         
-        // Initialize cURL request
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'Content-Type: application/json'
+        echo json_encode([
+            'success' => true,
+            'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
+            'method' => 'Mailjet API',
+            'message_id' => $messageId
         ]);
-        curl_setopt($ch, CURLOPT_USERPWD, $api_key . ':' . $api_secret);
+    } else {
+        // Failure
+        $errorMessage = '';
         
-        // Execute the request
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $error = curl_error($ch);
-        
-        curl_close($ch);
-        
-        // Log detailed API response
-        logMessage("Mailjet API Response Code: $httpCode", 2);
-        if (!empty($response)) {
-            logMessage("Mailjet API Response: $response", 3);
-        }
-        if (!empty($error)) {
-            logMessage("Mailjet API Error: $error", 2);
-        }
-        
-        // Parse JSON response
-        $responseData = json_decode($response, true);
-        
-        if ($httpCode >= 200 && $httpCode < 300 && isset($responseData['Messages'][0]['Status']) && $responseData['Messages'][0]['Status'] === 'success') {
-            // Success
-            $messageId = isset($responseData['Messages'][0]['To'][0]['MessageID']) ? $responseData['Messages'][0]['To'][0]['MessageID'] : '';
-            
-            logMessage("ส่งอีเมลสำเร็จผ่าน API");
-            
-            echo json_encode([
-                'success' => true,
-                'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
-                'method' => 'Mailjet API',
-                'message_id' => $messageId
-            ]);
-        } else {
-            // Failure
-            $errorMessage = '';
-            
-            // Try to extract detailed error from Mailjet response
-            if (isset($responseData['Messages'][0]['Errors'])) {
-                foreach ($responseData['Messages'][0]['Errors'] as $err) {
-                    $errorMessage .= $err['ErrorMessage'] . ' ';
-                }
-            } elseif (!empty($error)) {
-                $errorMessage = $error;
-            } else {
-                $errorMessage = 'Unknown error';
+        // Try to extract detailed error from Mailjet response
+        if (isset($responseData['Messages'][0]['Errors'])) {
+            foreach ($responseData['Messages'][0]['Errors'] as $err) {
+                $errorMessage .= $err['ErrorMessage'] . ' ';
             }
-            
-            logMessage("ไม่สามารถส่งอีเมลผ่าน API: " . $errorMessage);
-            
-            echo json_encode([
-                'success' => false,
-                'message' => "ไม่สามารถส่งอีเมลได้ - กรุณาตรวจสอบการตั้งค่า Mailjet API",
-                'error' => $errorMessage
-            ]);
+        } elseif (!empty($error)) {
+            $errorMessage = $error;
+        } else {
+            $errorMessage = 'Unknown error';
         }
+        
+        logMessage("ไม่สามารถส่งอีเมลได้: " . $errorMessage);
+        
+        echo json_encode([
+            'success' => false,
+            'message' => "ไม่สามารถส่งอีเมลได้ - กรุณาตรวจสอบการตั้งค่า Mailjet API",
+            'error' => $errorMessage
+        ]);
     }
     
 } catch (PDOException $e) {
