@@ -18,11 +18,17 @@ if (empty($username) || empty($password)) {
     exit;
 }
 
+// Initialize database connection
+$db = new Database();
+if ($db->error) {
+    $_SESSION['login_error'] = 'ไม่สามารถเชื่อมต่อฐานข้อมูลได้';
+    header('Location: login.php');
+    exit;
+}
+
+$conn = $db->getConnection();
+
 try {
-    // Connect to database
-    $conn = new PDO("mysql:host=$db_host;dbname=$db_name", $db_user, $db_pass);
-    $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    
     // Prepare and execute query
     $stmt = $conn->prepare("SELECT * FROM admin_users WHERE username = :username");
     $stmt->bindParam(':username', $username);

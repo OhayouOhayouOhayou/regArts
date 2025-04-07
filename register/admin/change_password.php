@@ -20,57 +20,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($new_password !== $confirm_password) {
         $error = 'รหัสผ่านไม่ตรงกัน กรุณาตรวจสอบอีกครั้ง';
     } else {
-        try {
-            // Connect to database
-            $conn = new PDO("mysql:host=$db_host;dbname=$db_name", $db_user, $db_pass);
-            $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        // Initialize database connection
+        $db = new Database();
+        if ($db->error) {
+            $error = 'ไม่สามารถเชื่อมต่อฐานข้อมูลได้';
+        } else {
+            $conn = $db->getConnection();
             
-            // Hash the new password
-            $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
-            
-            // Update user record
-            $stmt = $conn->prepare("UPDATE admin_users SET password = :password, password_change_required = 0 
-                                   WHERE id = :user_id");
-            $stmt->bindParam(':password', $hashed_password);
-            $stmt->bindParam(':user_id', $_SESSION['temp_user_id']);
-            $stmt->execute();
-            
-            // Log the password change
-            $logStmt = $conn->prepare("INSERT INTO admin_logs (admin_id, action_type, details, ip_address, user_agent) 
-                                     VALUES (:admin_id, 'update', 'เปลี่ยนรหัสผ่าน', :ip_address, :user_agent)");
-            $logStmt->bindParam(':admin_id', $_SESSION['temp_user_id']);
-            $logStmt->bindParam(':ip_address', $_SERVER['REMOTE_ADDR']);
-            $logStmt->bindParam(':user_agent', $_SERVER['HTTP_USER_AGENT']);
-            $logStmt->execute();
-            
-            // Get complete user data
-            $userStmt = $conn->prepare("SELECT * FROM admin_users WHERE id = :user_id");
-            $userStmt->bindParam(':user_id', $_SESSION['temp_user_id']);
-            $userStmt->execute();
-            $user = $userStmt->fetch(PDO::FETCH_ASSOC);
-            
-            // Update session
-            unset($_SESSION['temp_user_id']);
-            unset($_SESSION['temp_username']);
-            unset($_SESSION['password_change_required']);
-            
-            $_SESSION['admin_id'] = $user['id'];
-            $_SESSION['admin_username'] = $user['username'];
-            $_SESSION['admin_display_name'] = $user['display_name'];
-            $_SESSION['admin_role'] = $user['role'];
-            $_SESSION['login_time'] = time();
-            
-            // Success message and redirect
-            $_SESSION['success_message'] = 'เปลี่ยนรหัสผ่านสำเร็จ';
-            header('Location: dashboard.php');
-            exit;
-        } catch (PDOException $e) {
-            error_log("Password change error: " . $e->getMessage());
-            $error = 'เกิดข้อผิดพลาดในการเปลี่ยนรหัสผ่าน กรุณาลองใหม่อีกครั้ง';
+            try {
+                // Hash the new password
+                $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
+                
+                // Update user record
+                $stmt = $conn->prepare("UPDATE admin_users SET password = :password, password_change_required = 0 
+                                       WHERE id = :user_id");
+                $stmt->bindParam(':password', $hashed_password);
+                $stmt->bindParam(':user_id', $_SESSION['temp_user_id']);
+                $stmt->execute();
+                
+                // Log the password change
+                $logStmt = $conn->prepare("INSERT INTO admin_logs (admin_id, action_type, details, ip_address, user_agent) 
+                                         VALUES (:admin_id, 'update', 'เปลี่ยนรหัสผ่าน', :ip_address, :user_agent)");
+                $logStmt->bindParam(':admin_id', $_SESSION['temp_user_id']);
+                $logStmt->bindParam(':ip_address', $_SERVER['REMOTE_ADDR']);
+                $logStmt->bindParam(':user_agent', $_SERVER['HTTP_USER_AGENT']);
+                $logStmt->execute();
+                
+                // Get complete user data
+                $userStmt = $conn->prepare("SELECT * FROM admin_users WHERE id = :user_id");
+                $userStmt->bindParam(':user_id', $_SESSION['temp_user_id']);
+                $userStmt->execute();
+                $user = $userStmt->fetch(PDO::FETCH_ASSOC);
+                
+                // Update session
+                unset($_SESSION['temp_user_id']);
+                unset($_SESSION['temp_username']);
+                unset($_SESSION['password_change_required']);
+                
+                $_SESSION['admin_id'] = $user['id'];
+                $_SESSION['admin_username'] = $user['username'];
+                $_SESSION['admin_display_name'] = $user['display_name'];
+                $_SESSION['admin_role'] = $user['role'];
+                $_SESSION['login_time'] = time();
+                
+                // Success message and redirect
+                $_SESSION['success_message'] = 'เปลี่ยนรหัสผ่านสำเร็จ';
+                header('Location: dashboard.php');
+                exit;
+            } catch (PDOException $e) {
+                error_log("Password change error: " . $e->getMessage());
+                $error = 'เกิดข้อผิดพลาดในการเปลี่ยนรหัสผ่าน กรุณาลองใหม่อีกครั้ง';
+            }
         }
     }
 }
 ?>
+<!DOCTYPE html>
+<!-- [HTML content remains unchanged] -->
 <!DOCTYPE html>
 <html lang="th">
 <head>
