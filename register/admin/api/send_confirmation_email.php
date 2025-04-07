@@ -250,18 +250,17 @@ try {
     
     logMessage("กำลังส่งอีเมลผ่าน PHPMailer SMTP ไปยัง: $email", 2);
     
-
+  
     $mail = new PHPMailer();
     $mail->CharSet = "UTF-8";
     $mail->IsHTML(true);
     $mail->IsSMTP();
     $mail->SMTPAuth = true;
-    $mail->SMTPAutoTLS  = false;
-    $mail->SMTPSecure = "ssl"; 
-    $mail->Host = 'smtppro.zoho.com'; 
-    $mail->Port = 465; 
-    $mail->Username = 'csd@asefa.co.th'; 
-    $mail->Password = 'vk:uak2025'; 
+    $mail->SMTPSecure = "tls"; 
+    $mail->Host = "smtp.gmail.com"; 
+    $mail->Port = 587; 
+    $mail->Username = "arts@rmutsb.ac.th"; 
+    $mail->Password = "artsrus6"; 
 
     $mail->From = "arts@rmutsb.ac.th";
     $mail->FromName = "คณะศิลปศาสตร์ มทร.สุวรรณภูมิ";
