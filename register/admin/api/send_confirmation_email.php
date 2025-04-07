@@ -220,86 +220,130 @@ try {
     // Plain text version of the email
     $text_message = strip_tags(str_replace(['<div>', '</div>', '<p>', '</p>', '<li>', '</li>'], ["\n", '', "\n", "\n", "- ", "\n"], $message));
     
-    // Check if PHPMailer class exists, if not include it
-    if (!class_exists('PHPMailer')) {
-        $phpmailer_paths = [
-            dirname(__DIR__) . '/lib/class.phpmailer.php',
-            __DIR__ . '/lib/class.phpmailer.php',
-            dirname(dirname(__DIR__)) . '/lib/class.phpmailer.php',
-            '../../lib/class.phpmailer.php',
-            'class.phpmailer.php',
-            dirname(__DIR__) . '/vendor/phpmailer/phpmailer/class.phpmailer.php',
-            __DIR__ . '/vendor/phpmailer/phpmailer/class.phpmailer.php'
-        ];
-        
-        $phpmailer_loaded = false;
-        
-        foreach ($phpmailer_paths as $path) {
-            if (file_exists($path)) {
-                require_once $path;
-                $phpmailer_loaded = true;
-                logMessage("โหลด PHPMailer จาก: $path", 2);
-                break;
-            }
-        }
-        
-        if (!$phpmailer_loaded) {
-            throw new Exception("ไม่พบไฟล์ PHPMailer class");
-        }
-    }
+    // MailerSend API configuration
+    $api_key = 'mlsn.7921f046d66cc13db24af0180465e9d779ffa7743e4caecf997451e71a3dd3d0'; // Replace with your actual API key from MailerSend dashboard
+    $api_url = 'https://api.mailersend.com/v1/email';
     
-    // MailerSend SMTP Configuration
-    $smtp_host = 'smtp.mailersend.net';
-    $smtp_port = 587; // Port with TLS
-    $smtp_username = 'MS_WU6InX@test-q3enl6kj9j042vwr.mlsender.net';
-    $smtp_password = 'mssp.J2B755O.neqvygmejn540p7w.ajpmlSR';
+    // Email data
     $sender_email = 'arts@rmutsb.ac.th';
     $sender_name = 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ';
     
-    logMessage("กำลังส่งอีเมลผ่าน MailerSend SMTP ไปยัง: $email", 2);
+    logMessage("กำลังส่งอีเมลผ่าน MailerSend API ไปยัง: $email", 2);
     
-    // Create a new PHPMailer instance
-    $mail = new PHPMailer();
-    $mail->CharSet = 'UTF-8';
-    $mail->Encoding = 'base64';
+    // Prepare request data
+    $data = [
+        'from' => [
+            'email' => $sender_email,
+            'name' => $sender_name
+        ],
+        'to' => [
+            [
+                'email' => $email,
+                'name' => $fullname
+            ]
+        ],
+        'subject' => $subject,
+        'html' => $message,
+        'text' => $text_message
+    ];
     
-    // Set mailer to use SMTP
-    $mail->isSMTP();
-    $mail->SMTPDebug = 0; // Set to 2 for verbose debug output if needed
+    // Initialize cURL request
+    $ch = curl_init($api_url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Bearer ' . $api_key,
+        'Content-Type: application/json',
+        'X-Requested-With: XMLHttpRequest'
+    ]);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30); // Set timeout to 30 seconds
     
-    // SMTP server settings
-    $mail->Host = $smtp_host;
-    $mail->Port = $smtp_port;
-    $mail->SMTPAuth = true;
-    $mail->SMTPSecure = 'tls';
-    $mail->Username = $smtp_username;
-    $mail->Password = $smtp_password;
+    // Execute request
+    $response = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curl_error = curl_error($ch);
+    curl_close($ch);
     
-    // Email content
-    $mail->isHTML(true);
-    $mail->setFrom($sender_email, $sender_name);
-    $mail->addAddress($email, $fullname);
-    $mail->Subject = $subject;
-    $mail->Body = $message;
-    $mail->AltBody = $text_message;
+    // Log response details
+    logMessage("MailerSend API Response Code: $http_code", 2);
+    logMessage("MailerSend API Response: $response", 3);
+    if (!empty($curl_error)) {
+        logMessage("MailerSend API cURL Error: $curl_error", 2);
+    }
     
-    // Send the email
-    $sendSuccess = $mail->send();
-    
-    if ($sendSuccess) {
+    // Process response
+    if ($http_code >= 200 && $http_code < 300) {
+        // Success
         logMessage("ส่งอีเมลสำเร็จ");
+        
+        // Record in database if needed
+        try {
+            // Check if email_logs table exists
+            $tableCheckStmt = $pdo->prepare("SHOW TABLES LIKE 'email_logs'");
+            $tableCheckStmt->execute();
+            
+            if ($tableCheckStmt->rowCount() > 0) {
+                // Table exists, check for required columns
+                $columnCheckStmt = $pdo->prepare("SHOW COLUMNS FROM email_logs LIKE 'email_type'");
+                $columnCheckStmt->execute();
+                
+                if ($columnCheckStmt->rowCount() == 0) {
+                    // Column doesn't exist, use alternative insert statement
+                    $logStmt = $pdo->prepare("
+                        INSERT INTO email_logs 
+                        (registration_id, recipient_email, recipient_name, status, notes, created_at)
+                        VALUES (?, ?, ?, 'sent', ?, NOW())
+                    ");
+                    $logStmt->execute([
+                        $registration_id,
+                        $email,
+                        $fullname,
+                        'Sent via MailerSend API'
+                    ]);
+                } else {
+                    // Column exists, use full insert statement
+                    $logStmt = $pdo->prepare("
+                        INSERT INTO email_logs 
+                        (registration_id, email_type, recipient_email, recipient_name, status, notes, created_at)
+                        VALUES (?, ?, ?, ?, 'sent', ?, NOW())
+                    ");
+                    $logStmt->execute([
+                        $registration_id,
+                        $payment_status == 'paid' ? 'payment_confirmation' : 'registration_confirmation',
+                        $email,
+                        $fullname,
+                        'Sent via MailerSend API'
+                    ]);
+                }
+                
+                logMessage("บันทึกประวัติการส่งอีเมลในฐานข้อมูลสำเร็จ");
+            }
+        } catch (PDOException $e) {
+            logMessage("ไม่สามารถบันทึกประวัติการส่งอีเมลในฐานข้อมูล: " . $e->getMessage(), 2);
+            // Continue even if logging to database fails
+        }
+        
         echo json_encode([
             'success' => true,
             'message' => "ส่งอีเมลยืนยันไปยัง $email เรียบร้อยแล้ว",
-            'method' => 'MailerSend SMTP'
+            'method' => 'MailerSend API'
         ]);
     } else {
-        $errorMessage = $mail->ErrorInfo;
-        logMessage("ไม่สามารถส่งอีเมลได้: " . $errorMessage);
+        // Error
+        $response_data = json_decode($response, true);
+        $error_message = isset($response_data['message']) ? $response_data['message'] : 'Unknown error';
+        
+        if (!empty($curl_error)) {
+            $error_message = "cURL Error: $curl_error";
+        }
+        
+        logMessage("ไม่สามารถส่งอีเมลได้: " . $error_message);
+        
         echo json_encode([
             'success' => false,
-            'message' => "ไม่สามารถส่งอีเมลได้ - กรุณาตรวจสอบการตั้งค่า SMTP",
-            'error' => $errorMessage
+            'message' => "ไม่สามารถส่งอีเมลได้ - กรุณาตรวจสอบการตั้งค่า MailerSend API",
+            'error' => $error_message
         ]);
     }
     
