@@ -223,7 +223,7 @@ try {
     // ThaibulkSMS Email API configuration
     $api_key = 'gXwi_z_AoGWWsH_QKDr3NmbkC8CwwL';
     $api_secret = 'zEVdW7gbpI4ZYGUDaG3qpxxltWlIQh';
-    $url = 'https://api-v2.thaibulksms.com/email';
+    $url = 'https://api.thaibulksms.com/v2/transactional/email';
     
     $sender_email = 'arts@rmutsb.ac.th';
     $sender_name = 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ';
@@ -234,28 +234,35 @@ try {
     $data = [
         'api_key' => $api_key,
         'api_secret' => $api_secret,
-        'from_email' => $sender_email,
-        'from_name' => $sender_name,
-        'to_email' => $email,
-        'to_name' => $fullname,
-        'subject' => $subject,
-        'html_message' => $message,
-        'text_message' => $text_message
+        'sender' => [
+            'email' => $sender_email,
+            'name' => $sender_name
+        ],
+        'recipient' => [
+            'email' => $email,
+            'name' => $fullname
+        ],
+        'content' => [
+            'subject' => $subject,
+            'html' => $message,
+            'text' => $text_message
+        ]
     ];
     
     // Initialize cURL request
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Content-Type: application/x-www-form-urlencoded'
+        'Content-Type: application/json',
+        'Accept: application/json'
     ]);
     
     // Execute the request
     $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $error = curl_error($ch);
+$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$error = curl_error($ch);
     
     curl_close($ch);
     
@@ -271,11 +278,10 @@ try {
     // Process the response
     $responseData = json_decode($response, true);
     
-    if ($httpCode == 200 && isset($responseData['status']) && $responseData['status'] == 'success') {
+   
+    if ($httpCode >= 200 && $httpCode < 300 && isset($responseData['status']) && $responseData['status'] == 'success') {
         // Success case
         logMessage("ส่งอีเมลสำเร็จ");
-        
-     
         
         echo json_encode([
             'success' => true,
@@ -285,14 +291,23 @@ try {
         ]);
     } else {
         // Error case
-        $errorMessage = isset($responseData['error']) 
-            ? $responseData['error'] 
-            : (!empty($error) ? $error : 'Unknown error');
+        $errorMessage = '';
+        
+        if (!empty($error)) {
+            $errorMessage = $error;
+        } elseif (isset($responseData['error']['description'])) {
+            $errorMessage = $responseData['error']['description'];
+        } elseif (isset($responseData['error'])) {
+            if (is_array($responseData['error'])) {
+                $errorMessage = json_encode($responseData['error']);
+            } else {
+                $errorMessage = $responseData['error'];
+            }
+        } else {
+            $errorMessage = "HTTP Error: $httpCode";
+        }
         
         logMessage("ไม่สามารถส่งอีเมลได้: " . $errorMessage);
-        
-
-       
         
         echo json_encode([
             'success' => false,
