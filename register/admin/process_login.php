@@ -62,7 +62,7 @@ try {
         // Normal login - set session variables
         $_SESSION['admin_id'] = $user['id'];
         $_SESSION['admin_username'] = $user['username'];
-        $_SESSION['admin_display_name'] = $user['display_name'];
+        $_SESSION['admin_name'] = $user['display_name'];
         $_SESSION['admin_role'] = $user['role'];
         $_SESSION['login_time'] = time();
         
