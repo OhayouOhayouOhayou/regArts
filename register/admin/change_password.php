@@ -1,14 +1,74 @@
 <?php
 session_start();
-require_once 'includes/check_auth.php';
 
-// ตรวจสอบว่ามีการบังคับเปลี่ยนรหัสผ่านหรือไม่
-$forceChange = isset($_SESSION['password_change_required']) && $_SESSION['password_change_required'];
-
-// หากไม่ได้บังคับเปลี่ยนรหัสผ่านและไม่ได้เลือกที่จะเปลี่ยนจากเมนู ให้ redirect ไปหน้า dashboard
-if (!$forceChange && !isset($_GET['change'])) {
-    header('Location: dashboard.php');
+// Verify this is accessed only after authentication with password change required
+if (!isset($_SESSION['temp_user_id']) || !isset($_SESSION['password_change_required'])) {
+    header('Location: login.php');
     exit;
+}
+
+// Process form submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    require_once '../config/database.php';
+    
+    $new_password = $_POST['new_password'] ?? '';
+    $confirm_password = $_POST['confirm_password'] ?? '';
+    
+    // Validate passwords
+    if (strlen($new_password) < 8) {
+        $error = 'รหัสผ่านต้องมีความยาวอย่างน้อย 8 ตัวอักษร';
+    } elseif ($new_password !== $confirm_password) {
+        $error = 'รหัสผ่านไม่ตรงกัน กรุณาตรวจสอบอีกครั้ง';
+    } else {
+        try {
+            // Connect to database
+            $conn = new PDO("mysql:host=$db_host;dbname=$db_name", $db_user, $db_pass);
+            $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            
+            // Hash the new password
+            $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
+            
+            // Update user record
+            $stmt = $conn->prepare("UPDATE admin_users SET password = :password, password_change_required = 0 
+                                   WHERE id = :user_id");
+            $stmt->bindParam(':password', $hashed_password);
+            $stmt->bindParam(':user_id', $_SESSION['temp_user_id']);
+            $stmt->execute();
+            
+            // Log the password change
+            $logStmt = $conn->prepare("INSERT INTO admin_logs (admin_id, action_type, details, ip_address, user_agent) 
+                                     VALUES (:admin_id, 'update', 'เปลี่ยนรหัสผ่าน', :ip_address, :user_agent)");
+            $logStmt->bindParam(':admin_id', $_SESSION['temp_user_id']);
+            $logStmt->bindParam(':ip_address', $_SERVER['REMOTE_ADDR']);
+            $logStmt->bindParam(':user_agent', $_SERVER['HTTP_USER_AGENT']);
+            $logStmt->execute();
+            
+            // Get complete user data
+            $userStmt = $conn->prepare("SELECT * FROM admin_users WHERE id = :user_id");
+            $userStmt->bindParam(':user_id', $_SESSION['temp_user_id']);
+            $userStmt->execute();
+            $user = $userStmt->fetch(PDO::FETCH_ASSOC);
+            
+            // Update session
+            unset($_SESSION['temp_user_id']);
+            unset($_SESSION['temp_username']);
+            unset($_SESSION['password_change_required']);
+            
+            $_SESSION['admin_id'] = $user['id'];
+            $_SESSION['admin_username'] = $user['username'];
+            $_SESSION['admin_display_name'] = $user['display_name'];
+            $_SESSION['admin_role'] = $user['role'];
+            $_SESSION['login_time'] = time();
+            
+            // Success message and redirect
+            $_SESSION['success_message'] = 'เปลี่ยนรหัสผ่านสำเร็จ';
+            header('Location: dashboard.php');
+            exit;
+        } catch (PDOException $e) {
+            error_log("Password change error: " . $e->getMessage());
+            $error = 'เกิดข้อผิดพลาดในการเปลี่ยนรหัสผ่าน กรุณาลองใหม่อีกครั้ง';
+        }
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -16,133 +76,105 @@ if (!$forceChange && !isset($_GET['change'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>เปลี่ยนรหัสผ่าน - ระบบจัดการการลงทะเบียน</title>
+    <title>เปลี่ยนรหัสผ่าน</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;700&display=swap" rel="stylesheet">
     <style>
-        /* ใช้สไตล์เดียวกับหน้า login */
         body {
-            font-family: 'Sarabun', sans-serif;
-            background-color: #f5f7fa;
+            font-family: "Sarabun", serif;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #2C3E50, #3498DB);
         }
-        .card {
+        .password-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+            width: 100%;
+            max-width: 450px;
+        }
+        .password-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .form-floating {
+            margin-bottom: 1rem;
+        }
+        .btn-submit {
+            background: #3498DB;
             border: none;
-            border-radius: 15px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            padding: 0.8rem;
+            font-size: 1.1rem;
         }
-        .form-control:focus, .form-select:focus {
-            border-color: #3498DB;
-            box-shadow: 0 0 0 0.25rem rgba(52, 152, 219, 0.25);
-        }
-        .change-password-container {
-            max-width: 500px;
-            margin: 5rem auto;
-        }
-        .password-requirements {
-            font-size: 0.85rem;
-            color: #6c757d;
-        }
-        .password-requirements ul {
-            padding-left: 1rem;
-            margin-bottom: 0;
+        .password-info {
+            margin: 1.5rem 0;
+            padding: 1rem;
+            background-color: #f8f9fa;
+            border-radius: 0.5rem;
+            border-left: 4px solid #3498DB;
         }
     </style>
 </head>
 <body>
-    <?php if ($forceChange): ?>
-    <div class="container change-password-container">
-    <?php else: ?>
-    <!-- Header and Sidebar should be included here for non-forced change -->
-    <?php include 'includes/header.php'; ?>
-    <div class="container-fluid">
-        <div class="row">
-            <?php include 'includes/sidebar.php'; ?>
-            <div class="col-lg-10 main-content">
-                <div class="page-header">
-                    <h4>เปลี่ยนรหัสผ่าน</h4>
-                    <p class="text-muted">กำหนดรหัสผ่านใหม่สำหรับบัญชีของคุณ</p>
-                </div>
-    <?php endif; ?>
-    
-    <div class="card">
-        <div class="card-header bg-primary text-white">
-            <h5 class="card-title mb-0">
+    <div class="password-card">
+        <div class="password-header">
+            <h4>เปลี่ยนรหัสผ่าน</h4>
+            <p class="text-muted">กรุณาเปลี่ยนรหัสผ่านเพื่อความปลอดภัย</p>
+        </div>
+        
+        <div class="password-info">
+            <p class="mb-0"><i class="fas fa-info-circle me-2"></i> รหัสผ่านของคุณต้องเปลี่ยนก่อนเข้าใช้งานระบบ</p>
+        </div>
+        
+        <?php if (isset($error)): ?>
+            <div class="alert alert-danger">
+                <?php echo $error; ?>
+            </div>
+        <?php endif; ?>
+
+        <form action="change_password.php" method="POST">
+            <div class="form-floating">
+                <input type="text" class="form-control" value="<?php echo htmlspecialchars($_SESSION['temp_username']); ?>" disabled>
+                <label>ชื่อผู้ใช้</label>
+            </div>
+            
+            <div class="form-floating">
+                <input type="password" class="form-control" id="new_password" name="new_password" 
+                       placeholder="รหัสผ่านใหม่" required>
+                <label for="new_password">รหัสผ่านใหม่</label>
+            </div>
+            
+            <div class="form-floating">
+                <input type="password" class="form-control" id="confirm_password" name="confirm_password" 
+                       placeholder="ยืนยันรหัสผ่านใหม่" required>
+                <label for="confirm_password">ยืนยันรหัสผ่านใหม่</label>
+            </div>
+            
+            <div class="mb-3">
+                <ul class="text-muted small">
+                    <li>รหัสผ่านควรมีความยาวอย่างน้อย 8 ตัวอักษร</li>
+                    <li>ควรประกอบด้วยตัวอักษรพิมพ์ใหญ่ พิมพ์เล็ก ตัวเลข และอักขระพิเศษ</li>
+                </ul>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-submit w-100">
                 <i class="fas fa-key me-2"></i>
-                <?php echo $forceChange ? 'กรุณาเปลี่ยนรหัสผ่านของคุณ' : 'เปลี่ยนรหัสผ่าน'; ?>
-            </h5>
-        </div>
-        <div class="card-body">
-            <?php if ($forceChange): ?>
-                <div class="alert alert-info">
-                    <i class="fas fa-info-circle me-2"></i>
-                    นี่เป็นการเข้าสู่ระบบครั้งแรกของคุณหรือรหัสผ่านของคุณถูกรีเซ็ต กรุณาเปลี่ยนรหัสผ่านเพื่อความปลอดภัย
-                </div>
-            <?php endif; ?>
-            
-            <?php if (isset($_SESSION['password_error'])): ?>
-                <div class="alert alert-danger">
-                    <?php 
-                        echo $_SESSION['password_error'];
-                        unset($_SESSION['password_error']);
-                    ?>
-                </div>
-            <?php endif; ?>
-            
-            <?php if (isset($_SESSION['password_success'])): ?>
-                <div class="alert alert-success">
-                    <?php 
-                        echo $_SESSION['password_success'];
-                        unset($_SESSION['password_success']);
-                    ?>
-                </div>
-            <?php endif; ?>
-            
-            <form action="process_change_password.php" method="post">
-                <?php if (!$forceChange): ?>
-                <div class="mb-3">
-                    <label for="current_password" class="form-label">รหัสผ่านปัจจุบัน</label>
-                    <input type="password" class="form-control" id="current_password" name="current_password" required>
-                </div>
-                <?php endif; ?>
-                
-                <div class="mb-3">
-                    <label for="new_password" class="form-label">รหัสผ่านใหม่</label>
-                    <input type="password" class="form-control" id="new_password" name="new_password" required>
-                </div>
-                
-                <div class="mb-3">
-                    <label for="confirm_password" class="form-label">ยืนยันรหัสผ่านใหม่</label>
-                    <input type="password" class="form-control" id="confirm_password" name="confirm_password" required>
-                </div>
-                
-                <div class="password-requirements mb-4">
-                    <p class="mb-1">รหัสผ่านต้อง:</p>
-                    <ul>
-                        <li>มีความยาวอย่างน้อย 8 ตัวอักษร</li>
-                        <li>ประกอบด้วยตัวอักษรภาษาอังกฤษและตัวเลขอย่างน้อย 1 ตัว</li>
-                        <li>ไม่เหมือนกับรหัสผ่านเดิม</li>
-                    </ul>
-                </div>
-                
-                <div class="d-grid">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save me-2"></i>
-                        บันทึกรหัสผ่านใหม่
-                    </button>
-                </div>
-            </form>
-        </div>
+                เปลี่ยนรหัสผ่าน
+            </button>
+        </form>
     </div>
-    
-    <?php if ($forceChange): ?>
-    </div> <!-- .container -->
-    <?php else: ?>
-            </div> <!-- .main-content -->
-        </div> <!-- .row -->
-    </div> <!-- .container-fluid -->
-    <?php endif; ?>
-    
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Basic password strength validation
+        document.getElementById('new_password').addEventListener('input', function() {
+            const password = this.value;
+            // Add password strength indicator functionality here if desired
+        });
+    </script>
 </body>
 </html>
