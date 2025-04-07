@@ -225,8 +225,7 @@ try {
     $api_secret = '3be69cc8ed38c1e0e5456fd5904b4465';
     $url = 'https://api.mailjet.com/v3.1/send';
     
-    // Use a verified sender address in your Mailjet account
-    $sender_email = 'notification@mailjet.arts.rmutsb.ac.th'; // Update this with your verified sender
+    $sender_email = 'arts@rmutsb.ac.th';
     $sender_name = 'คณะศิลปศาสตร์ มทร.สุวรรณภูมิ';
     
     // Prepare the request data for Mailjet
