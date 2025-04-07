@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once 'config.php'; // Ensure you have a config file with DB connection details
+require_once '../config/database.php';
 
 // Validate request method
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
