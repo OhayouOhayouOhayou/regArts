@@ -51,26 +51,31 @@ function populateProvinces(provinces) {
     });
 }
 
-// ฟังก์ชันกำหนดข้อความสถานะการชำระเงิน
 function getPaymentStatusText(reg) {
-    if (reg.payment_status === 'paid_approved') {
+    // Add string trim and ensure case consistency
+    const status = (reg.payment_status || '').trim().toLowerCase();
+    
+    // Log the actual value for debugging
+    console.log('Payment status value:', status, 'Original:', reg.payment_status);
+    
+    if (status === 'paid_approved') {
         return 'ชำระแล้ว (อนุมัติแล้ว)';
-    } else if (reg.payment_status === 'paid') {
+    } else if (status === 'paid') {
         return 'ชำระแล้ว (รอตรวจสอบจากเจ้าหน้าที่)';
-    } else if (reg.payment_status === 'paid_onsite') {
+    } else if (status === 'paid_onsite') {
         return 'ชำระเงินที่หน้างาน';
     } else {
         return 'ยังไม่ชำระ';
     }
 }
-
-// ฟังก์ชันกำหนดสีพื้นหลังตามสถานะการชำระเงิน
 function getPaymentStatusClass(reg) {
-    if (reg.payment_status === 'paid_approved') {
+    const status = (reg.payment_status || '').trim().toLowerCase();
+    
+    if (status === 'paid_approved') {
         return 'bg-success';
-    } else if (reg.payment_status === 'paid') {
+    } else if (status === 'paid') {
         return 'bg-warning';
-    } else if (reg.payment_status === 'paid_onsite') {
+    } else if (status === 'paid_onsite') {
         return 'bg-info';
     } else {
         return 'bg-danger';
