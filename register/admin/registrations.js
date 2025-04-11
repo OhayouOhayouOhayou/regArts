@@ -51,6 +51,7 @@ function populateProvinces(provinces) {
     });
 }
 
+// ฟังก์ชันกำหนดข้อความสถานะการชำระเงิน
 function getPaymentStatusText(reg) {
     if (reg.payment_status === 'paid_approved') {
         return 'ชำระแล้ว (อนุมัติแล้ว)';
@@ -62,6 +63,7 @@ function getPaymentStatusText(reg) {
         return 'ยังไม่ชำระ';
     }
 }
+
 // ฟังก์ชันกำหนดสีพื้นหลังตามสถานะการชำระเงิน
 function getPaymentStatusClass(reg) {
     if (reg.payment_status === 'paid_approved') {
@@ -74,6 +76,7 @@ function getPaymentStatusClass(reg) {
         return 'bg-danger';
     }
 }
+
 // ฟังก์ชันโหลดข้อมูลอำเภอตามจังหวัดที่เลือก
 async function loadDistricts() {
     const provinceId = document.getElementById('provinceFilter').value;
@@ -109,7 +112,6 @@ async function loadDistricts() {
         });
     }
 }
-
 
 // ฟังก์ชันโหลดและกรองข้อมูลการลงทะเบียน
 async function applyFilters() {
@@ -148,13 +150,13 @@ async function applyFilters() {
                         <td>${reg.phone || '-'}</td>
                         <td>${reg.email || '-'}</td>
                         <td>${formatAddress(reg)}</td>
-                       <td><span class="status-badge ${reg.is_approved == 1 ? 'bg-success' : 'bg-warning'} text-white">${reg.is_approved == 1 ? 'อนุมัติแล้ว' : 'รอการอนุมัติ'}</span></td>
-<td><span class="status-badge ${getPaymentStatusClass(reg)} text-white">${getPaymentStatusText(reg)}</span></td>
+                        <td><span class="status-badge ${reg.is_approved == 1 ? 'bg-success' : 'bg-warning'} text-white">${reg.is_approved == 1 ? 'อนุมัติแล้ว' : 'รอการอนุมัติ'}</span></td>
+                        <td><span class="status-badge ${getPaymentStatusClass(reg)} text-white">${getPaymentStatusText(reg)}</span></td>
                         <td>
                             <button class="btn btn-sm btn-primary me-1" onclick="viewRegistration(${reg.id})"><i class="fas fa-eye"></i></button>
                             <button class="btn btn-danger btn-sm" onclick="deleteRegistration(${reg.id})" title="ลบ">
                             <i class="fas fa-trash"></i>
-                        </button>
+                            </button>
                         </td>
                     </tr>
                 `).join('') : 
@@ -332,7 +334,7 @@ async function loadPage(page) {
                         <td>${reg.email || '-'}</td>
                         <td>${formatAddress(reg)}</td>
                         <td><span class="status-badge ${reg.is_approved == 1 ? 'bg-success' : 'bg-warning'} text-white">${reg.is_approved == 1 ? 'อนุมัติแล้ว' : 'รอการอนุมัติ'}</span></td>
-                       <td><span class="status-badge ${getPaymentStatusClass(reg)} text-white">${getPaymentStatusText(reg)}</span></td>
+                        <td><span class="status-badge ${getPaymentStatusClass(reg)} text-white">${getPaymentStatusText(reg)}</span></td>
                         <td>
                             <button class="btn btn-sm btn-primary me-1" onclick="viewRegistration(${reg.id})"><i class="fas fa-eye"></i></button>
                             <button class="btn btn-danger btn-sm" onclick="deleteRegistration(${reg.id})" title="ลบ">
@@ -371,6 +373,7 @@ function exportToExcel() {
     window.location.href = url;
 }
 
+// ฟังก์ชันดูรายละเอียดการลงทะเบียน
 function viewRegistration(id) {
     window.open(`registration_detail.php?id=${id}`, '_blank');
 }

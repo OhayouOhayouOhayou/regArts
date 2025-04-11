@@ -23,6 +23,7 @@ $offset = ($page - 1) * $limit;
 
 // รับพารามิเตอร์สำหรับฟิลเตอร์
 $province = $_GET['province'] ?? '';
+$district = $_GET['district'] ?? '';
 $firstName = $_GET['firstName'] ?? '';
 $lastName = $_GET['lastName'] ?? '';
 $phone = $_GET['phone'] ?? '';
@@ -52,9 +53,17 @@ if ($province) {
     $conditions[] = "a.province_id = :province";
     $params[':province'] = $province;
 }
+if ($district) {
+    $conditions[] = "a.district_id = :district";
+    $params[':district'] = $district;
+}
 if ($firstName) {
     $conditions[] = "r.fullname LIKE :firstName";
     $params[':firstName'] = "%$firstName%";
+}
+if ($lastName) {
+    $conditions[] = "r.fullname LIKE :lastName";
+    $params[':lastName'] = "%$lastName%";
 }
 if ($phone) {
     $conditions[] = "r.phone LIKE :phone";
@@ -89,10 +98,10 @@ try {
     $countSql = "SELECT COUNT(DISTINCT r.id) as total FROM registrations r";
     
     // ต้องเพิ่ม JOIN ถ้ามีเงื่อนไขที่เกี่ยวข้องกับตารางอื่น
-    if ($province || in_array($status, ['approved', 'pending'])) {
+    if ($province || $district || in_array($status, ['approved', 'pending'])) {
         $countSql .= " LEFT JOIN registration_addresses a ON r.id = a.registration_id AND a.address_type = 'invoice'";
         
-        if ($province) {
+        if ($province || $district) {
             $countSql .= " LEFT JOIN provinces p ON a.province_id = p.id";
             $countSql .= " LEFT JOIN districts d ON a.district_id = d.id";
             $countSql .= " LEFT JOIN subdistricts s ON a.subdistrict_id = s.id";
