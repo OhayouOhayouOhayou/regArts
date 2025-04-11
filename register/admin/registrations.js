@@ -51,32 +51,29 @@ function populateProvinces(provinces) {
     });
 }
 
-// ฟังก์ชันกำหนดข้อความสถานะการชำระเงิน
 function getPaymentStatusText(reg) {
-    if (reg.payment_status === 'paid' || reg.payment_status === 'paid_onsite') {
-        if (reg.is_approved == 1) {
-            return 'ชำระแล้ว';
-        } else {
-            return 'ชำระแล้ว (รอตรวจสอบจากเจ้าหน้าที่)';
-        }
+    if (reg.payment_status === 'paid_approved') {
+        return 'ชำระแล้ว (อนุมัติแล้ว)';
+    } else if (reg.payment_status === 'paid') {
+        return 'ชำระแล้ว (รอตรวจสอบจากเจ้าหน้าที่)';
+    } else if (reg.payment_status === 'paid_onsite') {
+        return 'ชำระเงินที่หน้างาน';
     } else {
         return 'ยังไม่ชำระ';
     }
 }
-
 // ฟังก์ชันกำหนดสีพื้นหลังตามสถานะการชำระเงิน
 function getPaymentStatusClass(reg) {
-    if (reg.payment_status === 'paid' || reg.payment_status === 'paid_onsite') {
-        if (reg.is_approved == 1) {
-            return 'bg-success';
-        } else {
-            return 'bg-warning';
-        }
+    if (reg.payment_status === 'paid_approved') {
+        return 'bg-success';
+    } else if (reg.payment_status === 'paid') {
+        return 'bg-warning';
+    } else if (reg.payment_status === 'paid_onsite') {
+        return 'bg-info';
     } else {
         return 'bg-danger';
     }
 }
-
 // ฟังก์ชันโหลดข้อมูลอำเภอตามจังหวัดที่เลือก
 async function loadDistricts() {
     const provinceId = document.getElementById('provinceFilter').value;
@@ -374,9 +371,8 @@ function exportToExcel() {
     window.location.href = url;
 }
 
-// ฟังก์ชันดูรายละเอียดการลงทะเบียน
 function viewRegistration(id) {
-    window.location.href = `registration_detail.php?id=${id}`;
+    window.open(`registration_detail.php?id=${id}`, '_blank');
 }
 
 // ฟังก์ชันแก้ไขการลงทะเบียน
