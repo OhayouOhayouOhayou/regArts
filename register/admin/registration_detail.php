@@ -88,25 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->beginTransaction();
         
         try {
-            // แปลงค่า payment_status ที่รับมาให้เข้ากับ ENUM ในฐานข้อมูล
-            $original_payment_status = $_POST['payment_status'];
-            
-            // แปลงค่าใหม่เป็นค่าที่ ENUM รองรับ
-            $payment_status = 'not_paid'; // ค่าเริ่มต้น
-            
-            if ($original_payment_status == 'paid_approved') {
-                $payment_status = 'paid';
-                // ให้แน่ใจว่า is_approved เป็น 1 ด้วย
-                $_POST['is_approved'] = '1';
-            } else if ($original_payment_status == 'paid_pending') {
-                $payment_status = 'paid';
-                // ให้แน่ใจว่า is_approved เป็น 0
-                $_POST['is_approved'] = '0';
-            } else {
-                // กรณีเป็น not_paid หรือ paid_onsite ใช้ค่าเดิมได้เลย
-                $payment_status = $original_payment_status;
-            }
-            
+            $payment_status = $_POST['payment_status'];
             // Update registration table
             $update_stmt = $pdo->prepare("
                 UPDATE registrations 
@@ -1000,25 +982,23 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                                         </div>
                                     </div>
                                     
-                                    <?php if($registration['payment_status'] == 'paid'): ?>
-                                        <div class="approval-timeline">
-                                            <div class="timeline-point bg-success"></div>
-                                            <div class="timeline-content">
-                                                <p class="timeline-title">ชำระเงินแล้ว</p>
-                                                <p class="timeline-date"><?php echo $registration['payment_updated_at'] ? date('d/m/Y H:i', strtotime($registration['payment_updated_at'])) : '-'; ?></p>
-                                            </div>
+                                    <div class="mb-4 text-center p-3" style="background-color: rgba(0,0,0,0.03); border-radius: 0.5rem;">
+                                            <?php if($registration['payment_status'] == 'paid_approved'): ?>
+                                                <div class="mb-2"><i class="fas fa-check-circle fa-3x text-success"></i></div>
+                                                <h5 class="mb-1">ชำระแล้ว (อนุมัติแล้ว)</h5>
+                                            <?php elseif($registration['payment_status'] == 'paid'): ?>
+                                                <div class="mb-2"><i class="fas fa-clock fa-3x text-warning"></i></div>
+                                                <h5 class="mb-1">ชำระแล้ว (รอตรวจสอบจากเจ้าหน้าที่)</h5>
+                                            <?php elseif($registration['payment_status'] == 'paid_onsite'): ?>
+                                                <div class="mb-2"><i class="fas fa-money-bill fa-3x text-info"></i></div>
+                                                <h5 class="mb-1">ชำระเงินที่หน้างาน</h5>
+                                            <?php else: ?>
+                                                <div class="mb-2"><i class="fas fa-times-circle fa-3x text-danger"></i></div>
+                                                <h5 class="mb-1">ยังไม่ชำระ</h5>
+                                            <?php endif; ?>
                                         </div>
-                                        <?php elseif($registration['payment_status'] == 'paid_onsite'): ?>
-                                        <div class="approval-timeline">
-                                            <div class="timeline-point bg-info"></div>
-                                            <div class="timeline-content">
-                                                <p class="timeline-title">อนุมัติ (ชำระเงินที่หน้างาน)</p>
-                                                <p class="timeline-date"><?php echo $registration['payment_updated_at'] ? date('d/m/Y H:i', strtotime($registration['payment_updated_at'])) : '-'; ?></p>
-                                            </div>
-                                        </div>
-                                        <?php endif; ?>
                                     
-                                    <?php if($registration['is_approved'] == 1): ?>
+                                    <?php if($registration['is_approved'] == 1 && $registration['payment_status'] == 'paid_approved'): ?>
                                     <div class="approval-timeline">
                                         <div class="timeline-point bg-success"></div>
                                         <div class="timeline-content">
@@ -1056,9 +1036,9 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
             <label class="form-label">เปลี่ยนสถานะการชำระเงิน</label>
             <select class="form-select" name="payment_status">
                 <option value="not_paid" <?php echo ($registration['payment_status'] == 'not_paid') ? 'selected' : ''; ?>>ยังไม่ชำระ</option>
-                <option value="paid_pending" <?php echo ($registration['payment_status'] == 'paid' && $registration['is_approved'] == 0) ? 'selected' : ''; ?>>ชำระแล้ว (รอตรวจสอบจากเจ้าหน้าที่)</option>
-                <option value="paid_approved" <?php echo ($registration['payment_status'] == 'paid' && $registration['is_approved'] == 1) ? 'selected' : ''; ?>>ชำระแล้ว (อนุมัติแล้ว)</option>
-           
+                <option value="paid" <?php echo ($registration['payment_status'] == 'paid') ? 'selected' : ''; ?>>ชำระแล้ว (รอตรวจสอบจากเจ้าหน้าที่)</option>
+                <option value="paid_approved" <?php echo ($registration['payment_status'] == 'paid_approved') ? 'selected' : ''; ?>>ชำระแล้ว (อนุมัติแล้ว)</option>
+              
             </select>
         </div>
                                     
