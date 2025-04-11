@@ -94,18 +94,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // แปลงค่าใหม่เป็นค่าที่ ENUM รองรับ
             $payment_status = 'not_paid'; // ค่าเริ่มต้น
             
- 
-                if ($original_payment_status == 'paid_approved') {
-                    $payment_status = 'paid';
-                } else if ($original_payment_status == 'paid_pending') {
-                    $payment_status = 'paid';
-                } else {
-                
-                    $payment_status = $original_payment_status;
-                }
-
-
-                $is_approved = $_POST['is_approved'];
+            if ($original_payment_status == 'paid_approved') {
+                $payment_status = 'paid';
+                // ให้แน่ใจว่า is_approved เป็น 1 ด้วย
+                $_POST['is_approved'] = '1';
+            } else if ($original_payment_status == 'paid_pending') {
+                $payment_status = 'paid';
+                // ให้แน่ใจว่า is_approved เป็น 0
+                $_POST['is_approved'] = '0';
+            } else {
+                // กรณีเป็น not_paid หรือ paid_onsite ใช้ค่าเดิมได้เลย
+                $payment_status = $original_payment_status;
+            }
             
             // Update registration table
             $update_stmt = $pdo->prepare("
