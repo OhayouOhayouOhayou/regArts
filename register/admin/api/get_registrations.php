@@ -65,11 +65,13 @@ if ($status === 'approved') {
 } else if ($status === 'pending') {
     $conditions[] = "r.is_approved = 0";
 } else if ($status === 'paid_approved') {
-    $conditions[] = "r.payment_status IN ('paid', 'paid_onsite') AND r.is_approved = 1";
+    $conditions[] = "r.payment_status = 'paid_approved'";
 } else if ($status === 'paid_pending') {
-    $conditions[] = "r.payment_status IN ('paid', 'paid_onsite') AND r.is_approved = 0";
+    $conditions[] = "r.payment_status = 'paid' AND r.is_approved = 0";
 } else if ($status === 'paid') {
-    $conditions[] = "r.payment_status IN ('paid', 'paid_onsite')";
+    $conditions[] = "r.payment_status = 'paid'";
+} else if ($status === 'paid_onsite') {
+    $conditions[] = "r.payment_status = 'paid_onsite'";
 } else if ($status === 'not_paid') {
     $conditions[] = "r.payment_status = 'not_paid'";
 }
