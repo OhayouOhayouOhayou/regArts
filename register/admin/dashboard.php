@@ -577,7 +577,7 @@ $recent_registrations = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <i class="fas fa-users"></i>
                             </div>
                             <div class="stat-info">
-                                <h2><?php echo number_format($total); ?></h2>
+                                <h2><?php echo number_format($total); ?> คน</h2>
                                 <p>ลงทะเบียนทั้งหมด</p>
                             </div>
                         </div>
@@ -588,7 +588,7 @@ $recent_registrations = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <i class="fas fa-clock"></i>
                             </div>
                             <div class="stat-info">
-                                <h2><?php echo number_format($pending); ?></h2>
+                                <h2><?php echo number_format($pending); ?> คน</h2>
                                 <p>รอการอนุมัติ</p>
                             </div>
                         </div>
@@ -599,7 +599,7 @@ $recent_registrations = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <i class="fas fa-check-circle"></i>
                             </div>
                             <div class="stat-info">
-                                <h2><?php echo number_format($approved); ?></h2>
+                                <h2><?php echo number_format($approved); ?> คน</h2>
                                 <p>อนุมัติแล้ว</p>
                             </div>
                         </div>
@@ -610,7 +610,7 @@ $recent_registrations = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <i class="fas fa-exclamation-circle"></i>
                             </div>
                             <div class="stat-info">
-                                <h2><?php echo number_format($unpaid); ?></h2>
+                                <h2><?php echo number_format($unpaid); ?> คน</h2>
                                 <p>ยังไม่ชำระเงิน</p>
                             </div>
                         </div>
