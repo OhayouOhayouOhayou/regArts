@@ -1019,13 +1019,16 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
         </h5>
     </div>
     <div class="card-body">
-        <div class="mb-4 text-center p-3" style="background-color: rgba(0,0,0,0.03); border-radius: 0.5rem;">
-            <?php if($registration['payment_status'] == 'paid' && $registration['is_approved'] == 1): ?>
+            <div class="mb-4 text-center p-3" style="background-color: rgba(0,0,0,0.03); border-radius: 0.5rem;">
+            <?php if($registration['payment_status'] == 'paid_approved'): ?>
                 <div class="mb-2"><i class="fas fa-check-circle fa-3x text-success"></i></div>
                 <h5 class="mb-1">ชำระแล้ว (อนุมัติแล้ว)</h5>
-            <?php elseif(($registration['payment_status'] == 'paid' && $registration['is_approved'] == 0) || $registration['payment_status'] == 'paid_onsite'): ?>
+            <?php elseif($registration['payment_status'] == 'paid'): ?>
                 <div class="mb-2"><i class="fas fa-clock fa-3x text-warning"></i></div>
                 <h5 class="mb-1">ชำระแล้ว (รอตรวจสอบจากเจ้าหน้าที่)</h5>
+            <?php elseif($registration['payment_status'] == 'paid_onsite'): ?>
+                <div class="mb-2"><i class="fas fa-money-bill fa-3x text-info"></i></div>
+                <h5 class="mb-1">ชำระเงินที่หน้างาน</h5>
             <?php else: ?>
                 <div class="mb-2"><i class="fas fa-times-circle fa-3x text-danger"></i></div>
                 <h5 class="mb-1">ยังไม่ชำระ</h5>
