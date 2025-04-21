@@ -71,6 +71,45 @@ $stmt = $pdo->prepare("
 $stmt->execute([$registration_id]);
 $payment_files = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// Get the registration_group of the current registration
+$registration_group = $registration['registration_group'];
+
+// Initialize array for group members' files
+$group_payment_files = [];
+
+// If the current registration has a registration_group
+if (!empty($registration_group)) {
+    // Query to get all other registrations in the same group that have made payments
+    $group_stmt = $pdo->prepare("
+        SELECT id, fullname 
+        FROM registrations 
+        WHERE registration_group = ? 
+        AND id != ? 
+        AND payment_status IN ('paid', 'paid_approved', 'paid_onsite')
+    ");
+    $group_stmt->execute([$registration_group, $registration_id]);
+    $group_members = $group_stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // If there are other registrations in the same group that have paid
+    if (!empty($group_members)) {
+        // Get all member IDs
+        $member_ids = array_column($group_members, 'id');
+        
+        // Create placeholders for SQL query
+        $placeholders = implode(',', array_fill(0, count($member_ids), '?'));
+        
+        // Fetch all payment files for these members in one query
+        $files_stmt = $pdo->prepare("
+            SELECT rf.*, r.fullname as member_name
+            FROM registration_files rf
+            JOIN registrations r ON rf.registration_id = r.id
+            WHERE rf.registration_id IN ($placeholders)
+        ");
+        $files_stmt->execute($member_ids);
+        $group_payment_files = $files_stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+}
+
 // Get all provinces for dropdown
 $stmt = $pdo->query("SELECT * FROM provinces ORDER BY name_in_thai");
 $provinces = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -205,6 +244,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if (isset($_GET['success']) && $_GET['success'] == '1') {
     $success_message = "บันทึกข้อมูลเรียบร้อยแล้ว";
 }
+
+
 ?>
 <!DOCTYPE html>
 <html lang="th">
@@ -1032,53 +1073,66 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
         </div>
                                     
                                             
-                                    <div class="mb-3">
-                                        <label class="form-label">หลักฐานการชำระเงิน</label>
-                                        <div id="payment-gallery">
-                                        <?php if (count($payment_files) > 0): ?>
-                                            <?php foreach($payment_files as $file): ?>
-                                                <div class="file-preview mb-3">
-                                                    <?php if (strpos($file['file_type'], 'image') !== false): ?>
-                                                        <div class="gallery-item" data-src="../<?php echo $file['file_path']; ?>">
-                                                            <img src="../<?php echo $file['file_path']; ?>" alt="Payment proof" class="img-fluid mb-2">
-                                                        </div>
-                                                    <?php elseif (strpos($file['file_type'], 'pdf') !== false): ?>
-                                                        <div class="file-preview-pdf mb-2">
-                                                            <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-primary">
-                                                                <i class="fas fa-file-pdf me-2"></i>
-                                                                เปิดไฟล์ PDF
-                                                            </a>
-                                                        </div>
-                                                    <?php else: ?>
-                                                        <div class="file-preview-pdf mb-2">
-                                                            <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-primary">
-                                                                <i class="fas fa-file me-2"></i>
-                                                                เปิดไฟล์
-                                                            </a>
-                                                        </div>
-                                                    <?php endif; ?>
-                                                    
-                                                    <div class="d-flex justify-content-between align-items-center">
-                                                        <small class="text-muted">
-                                                            <?php echo $file['file_name']; ?><br>
-                                                            (<?php echo round($file['file_size']/1024, 2); ?> KB)
-                                                        </small>
-                                                        <a href="../<?php echo $file['file_path']; ?>" class="btn btn-sm btn-outline-secondary" download>
-                                                            <i class="fas fa-download"></i>
-                                                        </a>
-                                                    </div>
-                                                </div>
-                                            <?php endforeach; ?>
-                                        <?php else: ?>
-                                            <div class="alert alert-warning">
-                                                <i class="fas fa-exclamation-triangle me-2"></i>
-                                                ไม่พบไฟล์หลักฐานการชำระเงิน
-                                            </div>
-                                        <?php endif; ?>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+        <div class="mb-3">
+    <label class="form-label">หลักฐานการชำระเงิน</label>
+    <div id="payment-gallery">
+        
+        
+        
+        <!-- Group Members' Files -->
+        <?php if (count($group_payment_files) > 0): ?>
+            <h6 class="text-success mt-4 mb-3"><i class="fas fa-users me-2"></i>หลักฐานการชำระเงิน</h6>
+            <?php foreach($group_payment_files as $file): ?>
+                <div class="file-preview mb-3 border border-success">
+                    <div class="bg-light p-2 mb-2 rounded">
+                        <small class="text-success">
+                            <i class="fas fa-user me-1"></i> 
+                            <strong><?php echo $file['member_name']; ?></strong>
+                        </small>
+                    </div>
+                
+                    <?php if (strpos($file['file_type'], 'image') !== false): ?>
+                        <div class="gallery-item" data-src="../<?php echo $file['file_path']; ?>">
+                            <img src="../<?php echo $file['file_path']; ?>" alt="Payment proof" class="img-fluid mb-2">
+                        </div>
+                    <?php elseif (strpos($file['file_type'], 'pdf') !== false): ?>
+                        <div class="file-preview-pdf mb-2">
+                            <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-success">
+                                <i class="fas fa-file-pdf me-2"></i>
+                                เปิดไฟล์ PDF
+                            </a>
+                        </div>
+                    <?php else: ?>
+                        <div class="file-preview-pdf mb-2">
+                            <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-success">
+                                <i class="fas fa-file me-2"></i>
+                                เปิดไฟล์
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                    
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">
+                            <?php echo $file['file_name']; ?><br>
+                            (<?php echo round($file['file_size']/1024, 2); ?> KB)
+                        </small>
+                        <a href="../<?php echo $file['file_path']; ?>" class="btn btn-sm btn-outline-secondary" download>
+                            <i class="fas fa-download"></i>
+                        </a>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        <?php endif; ?>
+        
+        <!-- No Files Message -->
+        <?php if (count($payment_files) == 0 && count($group_payment_files) == 0): ?>
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                ไม่พบหลักฐานการชำระเงินของคุณหรือสมาชิกในกลุ่มของคุณ
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
                             
                             <!-- Actions -->
                             <div class="card">
