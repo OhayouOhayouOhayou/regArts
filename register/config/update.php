@@ -35,24 +35,47 @@ if ($result->num_rows > 0) {
 
 echo "Found " . count($existing_groups) . " existing groups.\n";
 
-// 2. ดึงข้อมูลกลุ่มที่มีอยู่แล้วของแต่ละอีเมล
+// 2. ดึงข้อมูลกลุ่มที่มีอยู่แล้วของแต่ละอีเมล - แก้ไขคำสั่ง SQL เพื่อแก้ปัญหา only_full_group_by
 $email_to_group = [];
+
+// ใช้ subquery เพื่อหาค่า registration_group แรกของแต่ละอีเมล
 $sql_find_groups = "
-    SELECT email, registration_group 
-    FROM registrations 
-    WHERE registration_group IS NOT NULL 
+    SELECT email, 
+           (SELECT registration_group 
+            FROM registrations r2 
+            WHERE r2.email = r1.email AND r2.registration_group IS NOT NULL 
+            LIMIT 1) AS registration_group
+    FROM registrations r1
+    WHERE EXISTS (SELECT 1 
+                 FROM registrations r3 
+                 WHERE r3.email = r1.email AND r3.registration_group IS NOT NULL)
     GROUP BY email
 ";
 
+// อีกวิธีหนึ่งที่อาจใช้ได้ (ถ้าวิธีบนไม่ทำงาน):
+/*
+$sql_find_groups = "
+    SELECT DISTINCT r1.email, r1.registration_group
+    FROM registrations r1
+    INNER JOIN (
+        SELECT email, MIN(id) AS min_id
+        FROM registrations
+        WHERE registration_group IS NOT NULL
+        GROUP BY email
+    ) r2 ON r1.email = r2.email AND r1.id = r2.min_id
+    WHERE r1.registration_group IS NOT NULL
+";
+*/
+
 $result = $conn->query($sql_find_groups);
 
-if ($result->num_rows > 0) {
+if ($result && $result->num_rows > 0) {
     while($row = $result->fetch_assoc()) {
         $email = $row["email"];
         $group = $row["registration_group"];
         
-        // เก็บกลุ่มแรกที่พบสำหรับแต่ละอีเมล
-        if (!isset($email_to_group[$email])) {
+        // กรณีที่ group อาจเป็น NULL จากการใช้ subquery
+        if (!is_null($group)) {
             $email_to_group[$email] = $group;
         }
     }
