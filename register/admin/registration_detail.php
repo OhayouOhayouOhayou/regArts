@@ -1076,8 +1076,43 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
         <div class="mb-3">
     <label class="form-label">หลักฐานการชำระเงิน</label>
     <div id="payment-gallery">
-        
-        
+        <!-- Current Registration's Files -->
+        <?php if (count($payment_files) > 0): ?>
+            <h6 class="text-primary mb-3"><i class="fas fa-user me-2"></i>หลักฐานการชำระเงินของคุณ</h6>
+            <?php foreach($payment_files as $file): ?>
+                <div class="file-preview mb-3 border border-primary">
+                    <?php if (strpos($file['file_type'], 'image') !== false): ?>
+                        <div class="gallery-item" data-src="../<?php echo $file['file_path']; ?>">
+                            <img src="../<?php echo $file['file_path']; ?>" alt="Payment proof" class="img-fluid mb-2">
+                        </div>
+                    <?php elseif (strpos($file['file_type'], 'pdf') !== false): ?>
+                        <div class="file-preview-pdf mb-2">
+                            <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-primary">
+                                <i class="fas fa-file-pdf me-2"></i>
+                                เปิดไฟล์ PDF
+                            </a>
+                        </div>
+                    <?php else: ?>
+                        <div class="file-preview-pdf mb-2">
+                            <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-primary">
+                                <i class="fas fa-file me-2"></i>
+                                เปิดไฟล์
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                    
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">
+                            <?php echo $file['file_name']; ?><br>
+                            (<?php echo round($file['file_size']/1024, 2); ?> KB)
+                        </small>
+                        <a href="../<?php echo $file['file_path']; ?>" class="btn btn-sm btn-outline-secondary" download>
+                            <i class="fas fa-download"></i>
+                        </a>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        <?php endif; ?>
         
         <!-- Group Members' Files -->
         <?php if (count($group_payment_files) > 0): ?>
