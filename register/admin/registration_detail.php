@@ -1194,42 +1194,42 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                 </div>
             </div>
 
-            <!-- Upload/Update Modal -->
-            <div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
-                <div class="modal-dialog">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title" id="uploadModalLabel">อัพโหลดหลักฐานการชำระเงิน</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                        </div>
-                        <form id="uploadForm" action="api/update_payment_file.php" method="post" enctype="multipart/form-data">
-                            <div class="modal-body">
-                                <input type="hidden" name="registration_id" value="<?php echo $registration_id; ?>">
-                                <input type="hidden" name="file_id" id="file_id" value="0">
-                                <input type="hidden" name="action" id="fileAction" value="upload">
-                                
-                                <div class="mb-3">
-                                    <label for="payment_file" class="form-label">เลือกไฟล์</label>
-                                    <input type="file" class="form-control" id="payment_file" name="payment_file" required>
-                                    <div class="form-text">รองรับไฟล์: JPG, JPEG, PNG, PDF (ขนาดไม่เกิน 5MB)</div>
-                                </div>
-                                
-                                <div id="updateFileInfo" class="alert alert-info" style="display: none;">
-                                    <i class="fas fa-info-circle me-2"></i>
-                                    <span id="fileUpdateMessage"></span>
-                                </div>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="fas fa-upload me-1"></i>
-                                    <span id="submitBtnText">อัพโหลด</span>
-                                </button>
-                            </div>
-                        </form>
+           <!-- Upload/Update Modal -->
+<div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="uploadModalLabel">อัพโหลดหลักฐานการชำระเงิน</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="uploadForm" action="api/update_payment_file.php?return_id=<?php echo $registration_id; ?>" method="post" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <input type="hidden" name="registration_id" value="<?php echo $registration_id; ?>">
+                    <input type="hidden" name="file_id" id="file_id" value="0">
+                    <input type="hidden" name="action" id="fileAction" value="upload">
+                    
+                    <div class="mb-3">
+                        <label for="payment_file" class="form-label">เลือกไฟล์</label>
+                        <input type="file" class="form-control" id="payment_file" name="payment_file" required>
+                        <div class="form-text">รองรับไฟล์: JPG, JPEG, PNG, PDF (ขนาดไม่เกิน 5MB)</div>
+                    </div>
+                    
+                    <div id="updateFileInfo" class="alert alert-info" style="display: none;">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <span id="fileUpdateMessage"></span>
                     </div>
                 </div>
-            </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-upload me-1"></i>
+                        <span id="submitBtnText">อัพโหลด</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
                             <!-- Actions -->
                             <div class="card">
                                 <div class="card-header">
@@ -1343,101 +1343,6 @@ function deleteFile(fileId, fileName) {
 }
     $(document).ready(function() {
 
-        $('#uploadForm').on('submit', function(e) {
-    e.preventDefault();
-    
-    let formData = new FormData(this);
-    
-    // ดีบักเพื่อดูข้อมูลที่ส่ง
-    console.log('Form data being sent:');
-    for (let pair of formData.entries()) {
-        console.log(pair[0] + ': ' + pair[1]);
-    }
-    
-    // ตรวจสอบว่ามีไฟล์ที่จะอัพโหลดหรือไม่
-    const fileInput = $('#payment_file')[0];
-    if (fileInput.files.length === 0) {
-        Swal.fire({
-            icon: 'error',
-            title: 'กรุณาเลือกไฟล์',
-            text: 'คุณยังไม่ได้เลือกไฟล์ที่จะอัพโหลด'
-        });
-        return;
-    }
-    
-    console.log('File selected:', fileInput.files[0].name);
-    console.log('File size:', fileInput.files[0].size);
-    console.log('File type:', fileInput.files[0].type);
-    
-    // แสดง loading
-    Swal.fire({
-        title: 'กำลังอัพโหลด...',
-        allowOutsideClick: false,
-        didOpen: () => {
-            Swal.showLoading();
-        }
-    });
-    
-    $.ajax({
-        url: $(this).attr('action'),
-        type: 'POST',
-        data: formData,
-        processData: false,
-        contentType: false,
-        // ลบ dataType: 'json' เพื่อให้ jQuery จัดการเอง
-        success: function(response) {
-            console.log('Raw response:', response);
-            
-            try {
-                // พยายามแปลง response เป็น JSON
-                if (typeof response === 'string') {
-                    response = JSON.parse(response);
-                }
-                
-                console.log('Parsed response:', response);
-                
-                if (response.success) {
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'อัพโหลดสำเร็จ',
-                        text: 'ไฟล์ถูกอัพโหลดเรียบร้อยแล้ว',
-                        confirmButtonText: 'ตกลง'
-                    }).then(() => {
-                        // Close modal and reload page
-                        $('#uploadModal').modal('hide');
-                        window.location.reload();
-                    });
-                } else {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'เกิดข้อผิดพลาด',
-                        text: response.message || 'ไม่สามารถอัพโหลดไฟล์ได้ กรุณาลองใหม่อีกครั้ง'
-                    });
-                }
-            } catch (e) {
-                console.error('Error parsing response:', e);
-                Swal.fire({
-                    icon: 'error',
-                    title: 'เกิดข้อผิดพลาด',
-                    text: 'การตอบกลับจากเซิร์ฟเวอร์ไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง'
-                });
-            }
-        },
-        error: function(xhr, status, error) {
-            console.log('Error details:');
-            console.log('Status:', status);
-            console.log('Error:', error);
-            console.log('Response:', xhr.responseText);
-            
-            Swal.fire({
-                icon: 'error',
-                title: 'เกิดข้อผิดพลาด',
-                text: 'ไม่สามารถเชื่อมต่อกับระบบได้ กรุณาลองใหม่อีกครั้ง'
-            });
-        }
-    });
-});
-    // Reset modal when hidden
     $('#uploadModal').on('hidden.bs.modal', function() {
         $('#uploadForm')[0].reset();
         $('#file_id').val(0);

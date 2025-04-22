@@ -18,24 +18,6 @@ error_log("PHP memory_limit: " . ini_get('memory_limit'));
 require_once '../check_auth.php';
 require_once '../../config/database.php';
 
-// ตรวจสอบว่าโฟลเดอร์สำหรับอัพโหลดมีอยู่จริงหรือไม่
-$upload_dir = '../../uploads/payment_slips/';
-if (!is_dir($upload_dir)) {
-    if (!mkdir($upload_dir, 0755, true)) {
-        error_log("Failed to create directory: " . $upload_dir);
-    } else {
-        error_log("Created directory: " . $upload_dir);
-    }
-} else {
-    error_log("Directory exists: " . $upload_dir);
-    // ตรวจสอบสิทธิ์การเขียน
-    if (is_writable($upload_dir)) {
-        error_log("Directory is writable");
-    } else {
-        error_log("Directory is NOT writable");
-    }
-}
-
 // Create database connection
 $database = new Database();
 $pdo = $database->getConnection();
@@ -45,6 +27,43 @@ $response = [
     'success' => false,
     'message' => 'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ'
 ];
+
+// กำหนดโฟลเดอร์อัพโหลด
+$upload_dir = '../../uploads/payment_slips/';
+
+// ตรวจสอบว่าโฟลเดอร์มีอยู่หรือไม่
+if (!is_dir($upload_dir)) {
+    // สร้างโฟลเดอร์พร้อมกับโฟลเดอร์ย่อยที่จำเป็น
+    if (!mkdir($upload_dir, 0777, true)) {
+        error_log("Failed to create directory: " . $upload_dir);
+        $response['message'] = 'ไม่สามารถสร้างโฟลเดอร์สำหรับอัพโหลดได้';
+        echo json_encode($response);
+        exit;
+    } else {
+        error_log("Created directory: " . $upload_dir);
+    }
+} else {
+    error_log("Directory exists: " . $upload_dir);
+}
+
+// ตรวจสอบสิทธิ์การเขียน
+if (!is_writable($upload_dir)) {
+    // พยายามกำหนดสิทธิ์การเขียน
+    chmod($upload_dir, 0777);
+    error_log("Tried to change permissions on directory: " . $upload_dir);
+    
+    // ตรวจสอบอีกครั้ง
+    if (!is_writable($upload_dir)) {
+        error_log("Directory is NOT writable: " . $upload_dir);
+        $response['message'] = 'ไม่มีสิทธิ์เขียนไฟล์ในโฟลเดอร์อัพโหลด';
+        echo json_encode($response);
+        exit;
+    } else {
+        error_log("Directory is now writable: " . $upload_dir);
+    }
+} else {
+    error_log("Directory is writable: " . $upload_dir);
+}
 
 // Get action type
 $action = isset($_POST['action']) ? $_POST['action'] : '';
@@ -177,17 +196,6 @@ if ($action === 'delete') {
     $safe_original_name = preg_replace('/[^a-zA-Z0-9_\-\.]/', '', $original_name);
     $filename = $timestamp . '_' . $unique_id . ($safe_original_name ? '_' . $safe_original_name : '.' . $file_ext);
     
-    // Set upload path
-    $upload_dir = '../../uploads/payment_slips/';
-    if (!is_dir($upload_dir)) {
-        if (!mkdir($upload_dir, 0755, true)) {
-            error_log("Failed to create directory: " . $upload_dir);
-            $response['message'] = 'ไม่สามารถสร้างโฟลเดอร์สำหรับเก็บไฟล์ได้';
-            echo json_encode($response);
-            exit;
-        }
-    }
-    
     $file_path = $upload_dir . $filename;
     $db_file_path = 'uploads/payment_slips/' . $filename;
     
@@ -304,6 +312,18 @@ if ($action === 'delete') {
 } else {
     error_log("Invalid action requested: " . $action);
     $response['message'] = 'คำสั่งไม่ถูกต้อง';
+}
+
+// ตรวจสอบว่ามีการส่ง return_id มาหรือไม่
+if (isset($_GET['return_id']) && is_numeric($_GET['return_id'])) {
+    $return_id = intval($_GET['return_id']);
+    
+    // ถ้าเป็นการอัพโหลดหรืออัพเดทที่สำเร็จ ให้ redirect กลับไปหน้าเดิม
+    if (($action === 'upload' || $action === 'update') && $response['success']) {
+        error_log("Redirecting back to registration detail page with id: " . $return_id);
+        header("Location: ../registration_detail.php?id=$return_id&success=1");
+        exit;
+    }
 }
 
 // Return response
