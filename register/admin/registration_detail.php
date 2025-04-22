@@ -1344,56 +1344,68 @@ function deleteFile(fileId, fileName) {
     $(document).ready(function() {
 
         $('#uploadForm').on('submit', function(e) {
-        e.preventDefault();
-        
-        let formData = new FormData(this);
-        
-        // Show loading
-        Swal.fire({
-            title: 'กำลังอัพโหลด...',
-            allowOutsideClick: false,
-            didOpen: () => {
-                Swal.showLoading();
-            }
-        });
-        
-        $.ajax({
-            url: $(this).attr('action'),
-            type: 'POST',
-            data: formData,
-            processData: false,
-            contentType: false,
-            dataType: 'json',
-            success: function(response) {
-                if (response.success) {
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'อัพโหลดสำเร็จ',
-                        text: 'ไฟล์ถูกอัพโหลดเรียบร้อยแล้ว',
-                        confirmButtonText: 'ตกลง'
-                    }).then(() => {
-                        // Close modal and reload page
-                        $('#uploadModal').modal('hide');
-                        window.location.reload();
-                    });
-                } else {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'เกิดข้อผิดพลาด',
-                        text: response.message || 'ไม่สามารถอัพโหลดไฟล์ได้ กรุณาลองใหม่อีกครั้ง'
-                    });
+                e.preventDefault();
+                
+                let formData = new FormData(this);
+                
+                // ดีบักเพื่อดูข้อมูลที่ส่ง
+                console.log('Form data being sent:');
+                for (let pair of formData.entries()) {
+                    console.log(pair[0] + ': ' + pair[1]);
                 }
-            },
-            error: function() {
+                
+                // แสดง loading
                 Swal.fire({
-                    icon: 'error',
-                    title: 'เกิดข้อผิดพลาด',
-                    text: 'ไม่สามารถเชื่อมต่อกับระบบได้ กรุณาลองใหม่อีกครั้ง'
+                    title: 'กำลังอัพโหลด...',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
                 });
-            }
-        });
-    });
-    
+                
+                $.ajax({
+                    url: $(this).attr('action'),
+                    type: 'POST',
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    dataType: 'json',
+                    success: function(response) {
+                        console.log('Success response:', response);
+                        
+                        if (response.success) {
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'อัพโหลดสำเร็จ',
+                                text: 'ไฟล์ถูกอัพโหลดเรียบร้อยแล้ว',
+                                confirmButtonText: 'ตกลง'
+                            }).then(() => {
+                                // Close modal and reload page
+                                $('#uploadModal').modal('hide');
+                                window.location.reload();
+                            });
+                        } else {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'เกิดข้อผิดพลาด',
+                                text: response.message || 'ไม่สามารถอัพโหลดไฟล์ได้ กรุณาลองใหม่อีกครั้ง'
+                            });
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.log('Error details:');
+                        console.log('Status:', status);
+                        console.log('Error:', error);
+                        console.log('Response:', xhr.responseText);
+                        
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'เกิดข้อผิดพลาด',
+                            text: 'ไม่สามารถเชื่อมต่อกับระบบได้ กรุณาลองใหม่อีกครั้ง'
+                        });
+                    }
+                });
+            });
     // Reset modal when hidden
     $('#uploadModal').on('hidden.bs.modal', function() {
         $('#uploadForm')[0].reset();
