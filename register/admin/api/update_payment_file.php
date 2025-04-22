@@ -16,12 +16,6 @@ $response = [
     'message' => 'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ'
 ];
 
-// Check if user is authenticated
-if (!isset($_SESSION['admin_id'])) {
-    $response['message'] = 'ไม่ได้รับอนุญาต กรุณาเข้าสู่ระบบ';
-    echo json_encode($response);
-    exit;
-}
 
 // Get action type
 $action = isset($_POST['action']) ? $_POST['action'] : '';
