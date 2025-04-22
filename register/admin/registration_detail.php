@@ -1142,7 +1142,7 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                     <input type="hidden" name="action" value="upload">
                     <div class="mb-3">
                         <label for="payment_file" class="form-label">อัพโหลดหลักฐานการชำระเงิน</label>
-                        <input type="file" class="form-control" id="payment_file" name="payment_file" required>
+                        <input type="file" class="form-control" id="payment_file" name="payment_file">
                         <div class="form-text">รองรับไฟล์: JPG, JPEG, PNG, PDF (ขนาดไม่เกิน 5MB)</div>
                     </div>
                     <button type="submit" class="btn btn-primary">
