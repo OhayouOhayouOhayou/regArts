@@ -1274,24 +1274,21 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
 
     <!-- JavaScript สำหรับโหลดข้อมูลเขต/อำเภอและตำบล -->
     <script>
-        function updateFile(fileId, fileName) {
-    // Reset form
-    $('#uploadForm')[0].reset();
-    
-    // Set form values for update
-    $('#file_id').val(fileId);
-    $('#fileAction').val('update');
-    $('#submitBtnText').text('อัพเดทเอกสาร');
-    $('#uploadModalLabel').text('อัพเดทหลักฐานการชำระเงิน');
-    
-    // Show file info
-    $('#fileUpdateMessage').text('กำลังแทนที่ไฟล์: ' + fileName);
-    $('#updateFileInfo').show();
-    
-    // Show modal
-    $('#uploadModal').modal('show');
-}
-
+      function updateFile(fileId, fileName) {
+            // ตรวจสอบก่อนว่าฟอร์มมีอยู่จริง
+            if ($('#uploadForm').length > 0) {
+                $('#uploadForm')[0].reset();
+            }
+            
+            // ส่วนที่เหลือของฟังก์ชัน
+            $('#file_id').val(fileId);
+            $('#fileAction').val('update');
+            $('#submitBtnText').text('อัพเดทเอกสาร');
+            $('#uploadModalLabel').text('อัพเดทหลักฐานการชำระเงิน');
+            $('#fileUpdateMessage').text('กำลังแทนที่ไฟล์: ' + fileName);
+            $('#updateFileInfo').show();
+            $('#uploadModal').modal('show');
+        }
 function deleteFile(fileId, fileName) {
     Swal.fire({
         title: 'ยืนยันการลบไฟล์',
