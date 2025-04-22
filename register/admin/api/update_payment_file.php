@@ -1,15 +1,15 @@
 <?php
-// เพิ่มการเปิดใช้งานการแสดงข้อผิดพลาดทั้งหมด
+// Enable error reporting for debugging
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-// บันทึกข้อมูลที่ได้รับทั้งหมดลง error_log
-error_log("API update_payment_file was called");
+// Log request details
+error_log("API update_payment_file called");
 error_log("POST data: " . print_r($_POST, true));
 error_log("FILES data: " . print_r($_FILES, true));
 
-// ตรวจสอบการตั้งค่า PHP
+// Log PHP configuration
 error_log("PHP upload_max_filesize: " . ini_get('upload_max_filesize'));
 error_log("PHP post_max_size: " . ini_get('post_max_size'));
 error_log("PHP max_execution_time: " . ini_get('max_execution_time'));
@@ -25,84 +25,70 @@ $pdo = $database->getConnection();
 // Initialize response
 $response = [
     'success' => false,
-    'message' => 'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ'
+    'message' => 'An unknown error occurred'
 ];
 
-// กำหนดโฟลเดอร์อัพโหลด
-$upload_dir = '../../uploads/payment_slips/';
+// Define upload directory (use absolute path)
+$upload_dir = dirname(__FILE__) . '/../../Uploads/payment_slips/';
+error_log("Upload directory: " . $upload_dir);
 
-// ตรวจสอบว่าโฟลเดอร์มีอยู่หรือไม่
+// Ensure upload directory exists and is writable
 if (!is_dir($upload_dir)) {
-    // สร้างโฟลเดอร์พร้อมกับโฟลเดอร์ย่อยที่จำเป็น
-    if (!mkdir($upload_dir, 0777, true)) {
+    if (!mkdir($upload_dir, 0755, true)) {
         error_log("Failed to create directory: " . $upload_dir);
-        $response['message'] = 'ไม่สามารถสร้างโฟลเดอร์สำหรับอัพโหลดได้';
+        $response['message'] = 'Cannot create upload directory';
         echo json_encode($response);
         exit;
-    } else {
-        error_log("Created directory: " . $upload_dir);
     }
-} else {
-    error_log("Directory exists: " . $upload_dir);
+    error_log("Created directory: " . $upload_dir);
 }
 
-// ตรวจสอบสิทธิ์การเขียน
 if (!is_writable($upload_dir)) {
-    // พยายามกำหนดสิทธิ์การเขียน
-    chmod($upload_dir, 0777);
-    error_log("Tried to change permissions on directory: " . $upload_dir);
-    
-    // ตรวจสอบอีกครั้ง
-    if (!is_writable($upload_dir)) {
-        error_log("Directory is NOT writable: " . $upload_dir);
-        $response['message'] = 'ไม่มีสิทธิ์เขียนไฟล์ในโฟลเดอร์อัพโหลด';
-        echo json_encode($response);
-        exit;
-    } else {
-        error_log("Directory is now writable: " . $upload_dir);
-    }
-} else {
-    error_log("Directory is writable: " . $upload_dir);
+    error_log("Directory is not writable: " . $upload_dir);
+    $response['message'] = 'Upload directory is not writable';
+    echo json_encode($response);
+    exit;
 }
+error_log("Directory is writable: " . $upload_dir);
 
 // Get action type
-$action = isset($_POST['action']) ? $_POST['action'] : '';
+$action = isset($_POST['action']) ? trim($_POST['action']) : '';
 error_log("Action requested: " . $action);
 
 // Process based on action
 if ($action === 'delete') {
     // Delete file
     if (!isset($_POST['file_id']) || !is_numeric($_POST['file_id'])) {
-        $response['message'] = 'ไม่พบรหัสไฟล์';
+        $response['message'] = 'Invalid file ID';
         echo json_encode($response);
         exit;
     }
-    
+
     $file_id = intval($_POST['file_id']);
-    
+
     // Get file path before deleting
     $stmt = $pdo->prepare("SELECT file_path FROM registration_files WHERE id = ?");
     $stmt->execute([$file_id]);
     $file = $stmt->fetch(PDO::FETCH_ASSOC);
-    
+
     if (!$file) {
-        $response['message'] = 'ไม่พบไฟล์ที่ต้องการลบ';
+        $response['message'] = 'File not found';
         echo json_encode($response);
         exit;
     }
-    
+
     // Begin transaction
     $pdo->beginTransaction();
-    
+
     try {
         // Delete from database
         $stmt = $pdo->prepare("DELETE FROM registration_files WHERE id = ?");
         $result = $stmt->execute([$file_id]);
-        
+
         if ($result) {
             // Delete physical file
-            $file_path = "../../" . $file['file_path'];
-            if (file_exists($file_path)) {
+            $file_path = realpath(dirname(__FILE__) . '/../../' . $file['file_path']);
+            if ($file_path && file_exists($file_path)) {
                 if (unlink($file_path)) {
                     error_log("File deleted successfully: " . $file_path);
                 } else {
@@ -111,222 +97,203 @@ if ($action === 'delete') {
             } else {
                 error_log("File does not exist: " . $file_path);
             }
-            
+
             $pdo->commit();
-            
             $response['success'] = true;
-            $response['message'] = 'ลบไฟล์เรียบร้อยแล้ว';
+            $response['message'] = 'File deleted successfully';
         } else {
-            throw new Exception("ไม่สามารถลบข้อมูลไฟล์ได้");
+            throw new Exception("Failed to delete file record from database");
         }
     } catch (Exception $e) {
         $pdo->rollBack();
         error_log("Exception during delete: " . $e->getMessage());
-        $response['message'] = 'เกิดข้อผิดพลาด: ' . $e->getMessage();
+        $response['message'] = 'Error: ' . $e->getMessage();
     }
-    
-} elseif ($action === 'update' || $action === 'upload') {
-    // Update or upload file
+
+} elseif ($action === 'upload' || $action === 'update') {
+    // Upload or update file
     if (!isset($_POST['registration_id']) || !is_numeric($_POST['registration_id'])) {
-        $response['message'] = 'ไม่พบรหัสการลงทะเบียน';
+        $response['message'] = 'Invalid registration ID';
         echo json_encode($response);
         exit;
     }
-    
+
     $registration_id = intval($_POST['registration_id']);
     $file_id = isset($_POST['file_id']) ? intval($_POST['file_id']) : 0;
-    
+
     error_log("Processing " . $action . " for registration_id: " . $registration_id . " and file_id: " . $file_id);
-    
+
     // Check if file was uploaded
-    if (!isset($_FILES['payment_file'])) {
-        error_log("No file uploaded - payment_file not found in FILES array");
-        $response['message'] = 'ไม่พบไฟล์ที่อัพโหลด';
+    if (!isset($_FILES['payment_file']) || empty($_FILES['payment_file']['name'])) {
+        error_log("No file uploaded - payment_file missing or empty");
+        $response['message'] = 'No file uploaded';
         echo json_encode($response);
         exit;
     }
-    
-    if ($_FILES['payment_file']['error'] != 0) {
-        $upload_errors = array(
-            UPLOAD_ERR_INI_SIZE => 'ไฟล์มีขนาดใหญ่เกินกว่าที่กำหนดในไฟล์ php.ini',
-            UPLOAD_ERR_FORM_SIZE => 'ไฟล์มีขนาดใหญ่เกินกว่าที่กำหนดในฟอร์ม',
-            UPLOAD_ERR_PARTIAL => 'ไฟล์ถูกอัพโหลดเพียงบางส่วน',
-            UPLOAD_ERR_NO_FILE => 'ไม่มีไฟล์ถูกอัพโหลด',
-            UPLOAD_ERR_NO_TMP_DIR => 'ไม่พบโฟลเดอร์ชั่วคราวสำหรับอัพโหลด',
-            UPLOAD_ERR_CANT_WRITE => 'ไม่สามารถเขียนไฟล์ลงดิสก์ได้',
-            UPLOAD_ERR_EXTENSION => 'การอัพโหลดถูกหยุดโดย PHP extension'
-        );
-        
-        $error_code = $_FILES['payment_file']['error'];
+
+    $file = $_FILES['payment_file'];
+
+    // Handle upload errors
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        $upload_errors = [
+            UPLOAD_ERR_INI_SIZE => 'File exceeds PHP upload_max_filesize',
+            UPLOAD_ERR_FORM_SIZE => 'File exceeds form MAX_FILE_SIZE',
+            UPLOAD_ERR_PARTIAL => 'File was only partially uploaded',
+            UPLOAD_ERR_NO_FILE => 'No file was uploaded',
+            UPLOAD_ERR_NO_TMP_DIR => 'Missing temporary folder',
+            UPLOAD_ERR_CANT_WRITE => 'Failed to write file to disk',
+            UPLOAD_ERR_EXTENSION => 'File upload stopped by extension'
+        ];
+        $error_code = $file['error'];
         error_log("Upload error code: " . $error_code);
-        $error_message = isset($upload_errors[$error_code]) ? $upload_errors[$error_code] : 'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุในการอัพโหลด';
-        
-        $response['message'] = 'เกิดข้อผิดพลาดในการอัพโหลด: ' . $error_message;
+        $response['message'] = 'Upload error: ' . ($upload_errors[$error_code] ?? 'Unknown error');
         echo json_encode($response);
         exit;
     }
-    
+
     // Validate file
     $allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
     $max_size = 5 * 1024 * 1024; // 5MB
-    
-    $file = $_FILES['payment_file'];
-    
+
     if (!in_array($file['type'], $allowed_types)) {
         error_log("Invalid file type: " . $file['type']);
-        $response['message'] = 'ประเภทไฟล์ไม่ถูกต้อง รองรับเฉพาะ JPG, JPEG, PNG, PDF เท่านั้น';
+        $response['message'] = 'Invalid file type. Allowed: JPG, JPEG, PNG, PDF';
         echo json_encode($response);
         exit;
     }
-    
+
     if ($file['size'] > $max_size) {
         error_log("File too large: " . $file['size'] . " bytes");
-        $response['message'] = 'ขนาดไฟล์เกิน 5MB';
+        $response['message'] = 'File size exceeds 5MB';
         echo json_encode($response);
         exit;
     }
-    
+
+    // Validate temporary file
+    if (!is_uploaded_file($file['tmp_name']) || !is_readable($file['tmp_name'])) {
+        error_log("Invalid or unreadable temporary file: " . $file['tmp_name']);
+        $response['message'] = 'Invalid or inaccessible uploaded file';
+        echo json_encode($response);
+        exit;
+    }
+
     // Generate unique filename
     $timestamp = time();
     $unique_id = uniqid();
-    $original_name = $file['name'];
-    $file_ext = pathinfo($original_name, PATHINFO_EXTENSION);
-    
-    // Keep original filename if provided by removing any potentially harmful characters
-    $safe_original_name = preg_replace('/[^a-zA-Z0-9_\-\.]/', '', $original_name);
-    $filename = $timestamp . '_' . $unique_id . ($safe_original_name ? '_' . $safe_original_name : '.' . $file_ext);
-    
+    $original_name = pathinfo($file['name'], PATHINFO_FILENAME);
+    $file_ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+
+    // Sanitize filename
+    $safe_name = preg_replace('/[^a-zA-Z0-9_-]/', '', $original_name);
+    if (empty($safe_name)) {
+        $safe_name = 'file';
+    }
+    $filename = $timestamp . '_' . $unique_id . '_' . substr($safe_name, 0, 50) . '.' . $file_ext;
     $file_path = $upload_dir . $filename;
-    $db_file_path = 'uploads/payment_slips/' . $filename;
-    
+    $db_file_path = 'Uploads/payment_slips/' . $filename;
+
     error_log("Generated file path: " . $file_path);
-    
+
     // Begin transaction
     $pdo->beginTransaction();
-    
+
     try {
-        // If updating, get old file path and delete
+        // If updating, get old file path
         $old_file_path = null;
         if ($action === 'update' && $file_id > 0) {
             $stmt = $pdo->prepare("SELECT file_path FROM registration_files WHERE id = ?");
             $stmt->execute([$file_id]);
             $old_file = $stmt->fetch(PDO::FETCH_ASSOC);
-            
-            if ($old_file) {
-                $old_file_path = "../../" . $old_file['file_path'];
-                error_log("Old file path to be replaced: " . $old_file_path);
+
+            if (!$old_file) {
+                throw new Exception("File to update not found");
             }
+            $old_file_path = realpath(dirname(__FILE__) . '/../../' . $old_file['file_path']);
+            error_log("Old file path to be replaced: " . ($old_file_path ?: 'not found'));
         }
-        
-        // Check if tmp_name exists and is a valid uploaded file
-        if (!is_uploaded_file($file['tmp_name'])) {
-            error_log("Not a valid uploaded file: " . $file['tmp_name']);
-            throw new Exception("ไม่พบไฟล์ที่อัพโหลดหรือไม่ใช่ไฟล์ที่อัพโหลดอย่างถูกต้อง");
+
+        // Move uploaded file
+        if (!move_uploaded_file($file['tmp_name'], $file_path)) {
+            error_log("Failed to move uploaded file to: " . $file_path);
+            throw new Exception("Failed to save uploaded file");
         }
-        
-        // Upload new file - with additional error checking
-        $upload_success = false;
-        
-        // Try to use move_uploaded_file first
-        if (move_uploaded_file($file['tmp_name'], $file_path)) {
-            error_log("File uploaded successfully using move_uploaded_file");
-            $upload_success = true;
-        } else {
-            error_log("move_uploaded_file failed, trying file_put_contents");
-            
-            // If move_uploaded_file fails, try with file_put_contents
-            if (is_readable($file['tmp_name'])) {
-                $content = file_get_contents($file['tmp_name']);
-                if ($content !== false && file_put_contents($file_path, $content) !== false) {
-                    error_log("File uploaded successfully using file_put_contents");
-                    $upload_success = true;
-                } else {
-                    error_log("file_put_contents failed");
-                }
-            } else {
-                error_log("Cannot read temporary file: " . $file['tmp_name']);
-            }
-        }
-        
-        if (!$upload_success) {
-            throw new Exception("ไม่สามารถอัพโหลดไฟล์ได้");
-        }
-        
-        // Check if the file was actually written
+
+        // Verify file was saved
         if (!file_exists($file_path)) {
-            error_log("File does not exist after upload attempt: " . $file_path);
-            throw new Exception("ไฟล์ไม่ถูกสร้างหลังจากอัพโหลด");
+            error_log("File not found after move: " . $file_path);
+            throw new Exception("File not created after upload");
         }
-        
-        // Update database
+
+        error_log("File uploaded successfully: " . $file_path);
+
+        // Update or insert database record
         if ($action === 'update' && $file_id > 0) {
             $stmt = $pdo->prepare("
                 UPDATE registration_files 
                 SET file_name = ?, file_path = ?, file_type = ?, file_size = ?, uploaded_at = NOW()
                 WHERE id = ?
             ");
-            $result = $stmt->execute([$original_name, $db_file_path, $file['type'], $file['size'], $file_id]);
+            $result = $stmt->execute([$file['name'], $db_file_path, $file['type'], $file['size'], $file_id]);
             error_log("Database update result: " . ($result ? "success" : "failed"));
         } else {
-            // Insert new file
             $stmt = $pdo->prepare("
                 INSERT INTO registration_files (registration_id, file_name, file_path, file_type, file_size)
                 VALUES (?, ?, ?, ?, ?)
             ");
-            $result = $stmt->execute([$registration_id, $original_name, $db_file_path, $file['type'], $file['size']]);
+            $result = $stmt->execute($registration_id, $file['name'], $db_file_path, $file['type'], $file['size']);
             error_log("Database insert result: " . ($result ? "success" : "failed"));
+            $file_id = $pdo->lastInsertId();
         }
-        
-        if ($result) {
-            // Delete old file if updating
-            if ($old_file_path && file_exists($old_file_path)) {
-                if (unlink($old_file_path)) {
-                    error_log("Old file deleted successfully: " . $old_file_path);
-                } else {
-                    error_log("Failed to delete old file: " . $old_file_path);
-                }
+
+        if (!$result) {
+            throw new Exception("Failed to save file record to database");
+        }
+
+        // Delete old file if updating
+        if ($old_file_path && file_exists($old_file_path)) {
+            if (unlink($old_file_path)) {
+                error_log("Old file deleted successfully: " . $old_file_path);
+            } else {
+                error_log("Failed to delete old file: " . $old_file_path);
             }
-            
-            $pdo->commit();
-            
-            $response['success'] = true;
-            $response['message'] = ($action === 'update') ? 'อัพเดทไฟล์เรียบร้อยแล้ว' : 'อัพโหลดไฟล์เรียบร้อยแล้ว';
-            $response['file_id'] = ($action === 'update') ? $file_id : $pdo->lastInsertId();
-            error_log("Operation successful: " . $response['message']);
-        } else {
-            throw new Exception("ไม่สามารถบันทึกข้อมูลไฟล์ได้");
         }
+
+        $pdo->commit();
+
+        $response['success'] = true;
+        $response['message'] = ($action === 'update') ? 'File updated successfully' : 'File uploaded successfully';
+        $response['file_id'] = $file_id;
+        $response['file_path'] = $db_file_path;
+        error_log("Operation successful: " . $response['message']);
     } catch (Exception $e) {
         $pdo->rollBack();
         error_log("Exception during " . $action . ": " . $e->getMessage());
-        // Delete the newly uploaded file if exists
+
+        // Delete uploaded file if it exists
         if (file_exists($file_path)) {
             if (unlink($file_path)) {
-                error_log("Temporary file deleted after exception: " . $file_path);
+                error_log("Cleaned up failed upload file: " . $file_path);
             } else {
-                error_log("Failed to delete temporary file after exception: " . $file_path);
+                error_log("Failed to clean up failed upload file: " . $file_path);
             }
         }
-        $response['message'] = 'เกิดข้อผิดพลาด: ' . $e->getMessage();
+
+        $response['message'] = 'Error: ' . $e->getMessage();
     }
 } else {
-    error_log("Invalid action requested: " . $action);
-    $response['message'] = 'คำสั่งไม่ถูกต้อง';
+    error_log("Invalid action: " . $action);
+    $response['message'] = 'Invalid action';
 }
 
-// ตรวจสอบว่ามีการส่ง return_id มาหรือไม่
-if (isset($_GET['return_id']) && is_numeric($_GET['return_id'])) {
+// Handle response (redirect or JSON)
+if (isset($_GET['return_id']) && is_numeric($_GET['return_id']) && $response['success'] && in_array($action, ['upload', 'update'])) {
     $return_id = intval($_GET['return_id']);
-    
-    // ถ้าเป็นการอัพโหลดหรืออัพเดทที่สำเร็จ ให้ redirect กลับไปหน้าเดิม
-    if (($action === 'upload' || $action === 'update') && $response['success']) {
-        error_log("Redirecting back to registration detail page with id: " . $return_id);
-        header("Location: ../registration_detail.php?id=$return_id&success=1");
-        exit;
-    }
+    error_log("Redirecting to registration_detail.php?id=" . $return_id);
+    header("Location: ../registration_detail.php?id=$return_id&success=1");
+    exit;
 }
 
-// Return response
+// Return JSON response
 header('Content-Type: application/json');
 error_log("Final response: " . json_encode($response));
 echo json_encode($response);
