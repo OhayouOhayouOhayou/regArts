@@ -1344,68 +1344,99 @@ function deleteFile(fileId, fileName) {
     $(document).ready(function() {
 
         $('#uploadForm').on('submit', function(e) {
-                e.preventDefault();
-                
-                let formData = new FormData(this);
-                
-                // ดีบักเพื่อดูข้อมูลที่ส่ง
-                console.log('Form data being sent:');
-                for (let pair of formData.entries()) {
-                    console.log(pair[0] + ': ' + pair[1]);
+    e.preventDefault();
+    
+    let formData = new FormData(this);
+    
+    // ดีบักเพื่อดูข้อมูลที่ส่ง
+    console.log('Form data being sent:');
+    for (let pair of formData.entries()) {
+        console.log(pair[0] + ': ' + pair[1]);
+    }
+    
+    // ตรวจสอบว่ามีไฟล์ที่จะอัพโหลดหรือไม่
+    const fileInput = $('#payment_file')[0];
+    if (fileInput.files.length === 0) {
+        Swal.fire({
+            icon: 'error',
+            title: 'กรุณาเลือกไฟล์',
+            text: 'คุณยังไม่ได้เลือกไฟล์ที่จะอัพโหลด'
+        });
+        return;
+    }
+    
+    console.log('File selected:', fileInput.files[0].name);
+    console.log('File size:', fileInput.files[0].size);
+    console.log('File type:', fileInput.files[0].type);
+    
+    // แสดง loading
+    Swal.fire({
+        title: 'กำลังอัพโหลด...',
+        allowOutsideClick: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
+    
+    $.ajax({
+        url: $(this).attr('action'),
+        type: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        // ลบ dataType: 'json' เพื่อให้ jQuery จัดการเอง
+        success: function(response) {
+            console.log('Raw response:', response);
+            
+            try {
+                // พยายามแปลง response เป็น JSON
+                if (typeof response === 'string') {
+                    response = JSON.parse(response);
                 }
                 
-                // แสดง loading
-                Swal.fire({
-                    title: 'กำลังอัพโหลด...',
-                    allowOutsideClick: false,
-                    didOpen: () => {
-                        Swal.showLoading();
-                    }
-                });
+                console.log('Parsed response:', response);
                 
-                $.ajax({
-                    url: $(this).attr('action'),
-                    type: 'POST',
-                    data: formData,
-                    processData: false,
-                    contentType: false,
-                    dataType: 'json',
-                    success: function(response) {
-                        console.log('Success response:', response);
-                        
-                        if (response.success) {
-                            Swal.fire({
-                                icon: 'success',
-                                title: 'อัพโหลดสำเร็จ',
-                                text: 'ไฟล์ถูกอัพโหลดเรียบร้อยแล้ว',
-                                confirmButtonText: 'ตกลง'
-                            }).then(() => {
-                                // Close modal and reload page
-                                $('#uploadModal').modal('hide');
-                                window.location.reload();
-                            });
-                        } else {
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'เกิดข้อผิดพลาด',
-                                text: response.message || 'ไม่สามารถอัพโหลดไฟล์ได้ กรุณาลองใหม่อีกครั้ง'
-                            });
-                        }
-                    },
-                    error: function(xhr, status, error) {
-                        console.log('Error details:');
-                        console.log('Status:', status);
-                        console.log('Error:', error);
-                        console.log('Response:', xhr.responseText);
-                        
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'เกิดข้อผิดพลาด',
-                            text: 'ไม่สามารถเชื่อมต่อกับระบบได้ กรุณาลองใหม่อีกครั้ง'
-                        });
-                    }
+                if (response.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'อัพโหลดสำเร็จ',
+                        text: 'ไฟล์ถูกอัพโหลดเรียบร้อยแล้ว',
+                        confirmButtonText: 'ตกลง'
+                    }).then(() => {
+                        // Close modal and reload page
+                        $('#uploadModal').modal('hide');
+                        window.location.reload();
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'เกิดข้อผิดพลาด',
+                        text: response.message || 'ไม่สามารถอัพโหลดไฟล์ได้ กรุณาลองใหม่อีกครั้ง'
+                    });
+                }
+            } catch (e) {
+                console.error('Error parsing response:', e);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'เกิดข้อผิดพลาด',
+                    text: 'การตอบกลับจากเซิร์ฟเวอร์ไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง'
                 });
+            }
+        },
+        error: function(xhr, status, error) {
+            console.log('Error details:');
+            console.log('Status:', status);
+            console.log('Error:', error);
+            console.log('Response:', xhr.responseText);
+            
+            Swal.fire({
+                icon: 'error',
+                title: 'เกิดข้อผิดพลาด',
+                text: 'ไม่สามารถเชื่อมต่อกับระบบได้ กรุณาลองใหม่อีกครั้ง'
             });
+        }
+    });
+});
     // Reset modal when hidden
     $('#uploadModal').on('hidden.bs.modal', function() {
         $('#uploadForm')[0].reset();
