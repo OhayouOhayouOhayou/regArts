@@ -1074,101 +1074,162 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                                     
                                             
         <div class="mb-3">
-    <label class="form-label">หลักฐานการชำระเงิน</label>
-    <div id="payment-gallery">
-        <!-- Current Registration's Files -->
-        <?php if (count($payment_files) > 0): ?>
-            <h6 class="text-primary mb-3"><i class="fas fa-user me-2"></i>หลักฐานการชำระเงินของคุณ</h6>
-            <?php foreach($payment_files as $file): ?>
-                <div class="file-preview mb-3 border border-primary">
-                    <?php if (strpos($file['file_type'], 'image') !== false): ?>
-                        <div class="gallery-item" data-src="../<?php echo $file['file_path']; ?>">
-                            <img src="../<?php echo $file['file_path']; ?>" alt="Payment proof" class="img-fluid mb-2">
+                <label class="form-label">หลักฐานการชำระเงิน</label>
+                <div id="payment-gallery">
+                    <!-- Current Registration's Files -->
+                    <?php if (count($payment_files) > 0): ?>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="text-primary mb-0"><i class="fas fa-user me-2"></i>หลักฐานการชำระเงินของคุณ</h6>
+                            <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal">
+                                <i class="fas fa-upload me-1"></i> อัพโหลดเอกสารใหม่
+                            </button>
                         </div>
-                    <?php elseif (strpos($file['file_type'], 'pdf') !== false): ?>
-                        <div class="file-preview-pdf mb-2">
-                            <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-primary">
-                                <i class="fas fa-file-pdf me-2"></i>
-                                เปิดไฟล์ PDF
-                            </a>
-                        </div>
+                        <?php foreach($payment_files as $file): ?>
+                            <div class="file-preview mb-3 border border-primary">
+                                <?php if (strpos($file['file_type'], 'image') !== false): ?>
+                                    <div class="gallery-item" data-src="../<?php echo $file['file_path']; ?>">
+                                        <img src="../<?php echo $file['file_path']; ?>" alt="Payment proof" class="img-fluid mb-2">
+                                    </div>
+                                <?php elseif (strpos($file['file_type'], 'pdf') !== false): ?>
+                                    <div class="file-preview-pdf mb-2">
+                                        <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-primary">
+                                            <i class="fas fa-file-pdf me-2"></i>
+                                            เปิดไฟล์ PDF
+                                        </a>
+                                    </div>
+                                <?php else: ?>
+                                    <div class="file-preview-pdf mb-2">
+                                        <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-primary">
+                                            <i class="fas fa-file me-2"></i>
+                                            เปิดไฟล์
+                                        </a>
+                                    </div>
+                                <?php endif; ?>
+                                
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <small class="text-muted">
+                                        <?php echo $file['file_name']; ?><br>
+                                        (<?php echo round($file['file_size']/1024, 2); ?> KB)
+                                    </small>
+                                    <div>
+                                        <a href="../<?php echo $file['file_path']; ?>" class="btn btn-sm btn-outline-secondary" download>
+                                            <i class="fas fa-download"></i>
+                                        </a>
+                                        <button type="button" class="btn btn-sm btn-outline-warning ms-1" 
+                                                onclick="updateFile(<?php echo $file['id']; ?>, '<?php echo $file['file_name']; ?>')">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger ms-1" 
+                                                onclick="deleteFile(<?php echo $file['id']; ?>, '<?php echo $file['file_name']; ?>')">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
                     <?php else: ?>
-                        <div class="file-preview-pdf mb-2">
-                            <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-primary">
-                                <i class="fas fa-file me-2"></i>
-                                เปิดไฟล์
-                            </a>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="text-primary mb-0"><i class="fas fa-user me-2"></i>หลักฐานการชำระเงินของคุณ</h6>
+                            <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal">
+                                <i class="fas fa-upload me-1"></i> อัพโหลดเอกสาร
+                            </button>
                         </div>
                     <?php endif; ?>
                     
-                    <div class="d-flex justify-content-between align-items-center">
-                        <small class="text-muted">
-                            <?php echo $file['file_name']; ?><br>
-                            (<?php echo round($file['file_size']/1024, 2); ?> KB)
-                        </small>
-                        <a href="../<?php echo $file['file_path']; ?>" class="btn btn-sm btn-outline-secondary" download>
-                            <i class="fas fa-download"></i>
-                        </a>
-                    </div>
-                </div>
-            <?php endforeach; ?>
-        <?php endif; ?>
-        
-        <!-- Group Members' Files -->
-        <?php if (count($group_payment_files) > 0): ?>
-            <h6 class="text-success mt-4 mb-3"><i class="fas fa-users me-2"></i>หลักฐานการชำระเงิน</h6>
-            <?php foreach($group_payment_files as $file): ?>
-                <div class="file-preview mb-3 border border-success">
-                    <div class="bg-light p-2 mb-2 rounded">
-                        <small class="text-success">
-                            <i class="fas fa-user me-1"></i> 
-                            <strong><?php echo $file['member_name']; ?></strong>
-                        </small>
-                    </div>
-                
-                    <?php if (strpos($file['file_type'], 'image') !== false): ?>
-                        <div class="gallery-item" data-src="../<?php echo $file['file_path']; ?>">
-                            <img src="../<?php echo $file['file_path']; ?>" alt="Payment proof" class="img-fluid mb-2">
-                        </div>
-                    <?php elseif (strpos($file['file_type'], 'pdf') !== false): ?>
-                        <div class="file-preview-pdf mb-2">
-                            <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-success">
-                                <i class="fas fa-file-pdf me-2"></i>
-                                เปิดไฟล์ PDF
-                            </a>
-                        </div>
-                    <?php else: ?>
-                        <div class="file-preview-pdf mb-2">
-                            <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-success">
-                                <i class="fas fa-file me-2"></i>
-                                เปิดไฟล์
-                            </a>
-                        </div>
-                    <?php endif; ?>
-                    
-                    <div class="d-flex justify-content-between align-items-center">
-                        <small class="text-muted">
-                            <?php echo $file['file_name']; ?><br>
-                            (<?php echo round($file['file_size']/1024, 2); ?> KB)
-                        </small>
-                        <a href="../<?php echo $file['file_path']; ?>" class="btn btn-sm btn-outline-secondary" download>
-                            <i class="fas fa-download"></i>
-                        </a>
-                    </div>
-                </div>
-            <?php endforeach; ?>
-        <?php endif; ?>
-        
-        <!-- No Files Message -->
-        <?php if (count($payment_files) == 0 && count($group_payment_files) == 0): ?>
-            <div class="alert alert-warning">
-                <i class="fas fa-exclamation-triangle me-2"></i>
-                ไม่พบหลักฐานการชำระเงินของคุณหรือสมาชิกในกลุ่มของคุณ
-            </div>
-        <?php endif; ?>
-    </div>
-</div>
+                    <!-- Group Members' Files -->
+                    <?php if (count($group_payment_files) > 0): ?>
+                        <h6 class="text-success mt-4 mb-3"><i class="fas fa-users me-2"></i>หลักฐานการชำระเงิน</h6>
+                        <?php foreach($group_payment_files as $file): ?>
+                            <div class="file-preview mb-3 border border-success">
+                                <div class="bg-light p-2 mb-2 rounded">
+                                    <small class="text-success">
+                                        <i class="fas fa-user me-1"></i> 
+                                        <strong><?php echo $file['member_name']; ?></strong>
+                                    </small>
+                                </div>
                             
+                                <?php if (strpos($file['file_type'], 'image') !== false): ?>
+                                    <div class="gallery-item" data-src="../<?php echo $file['file_path']; ?>">
+                                        <img src="../<?php echo $file['file_path']; ?>" alt="Payment proof" class="img-fluid mb-2">
+                                    </div>
+                                <?php elseif (strpos($file['file_type'], 'pdf') !== false): ?>
+                                    <div class="file-preview-pdf mb-2">
+                                        <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-success">
+                                            <i class="fas fa-file-pdf me-2"></i>
+                                            เปิดไฟล์ PDF
+                                        </a>
+                                    </div>
+                                <?php else: ?>
+                                    <div class="file-preview-pdf mb-2">
+                                        <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-success">
+                                            <i class="fas fa-file me-2"></i>
+                                            เปิดไฟล์
+                                        </a>
+                                    </div>
+                                <?php endif; ?>
+                                
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <small class="text-muted">
+                                        <?php echo $file['file_name']; ?><br>
+                                        (<?php echo round($file['file_size']/1024, 2); ?> KB)
+                                    </small>
+                                    <a href="../<?php echo $file['file_path']; ?>" class="btn btn-sm btn-outline-secondary" download>
+                                        <i class="fas fa-download"></i>
+                                    </a>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                    
+                    <!-- No Files Message -->
+                    <?php if (count($payment_files) == 0 && count($group_payment_files) == 0): ?>
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            ไม่พบหลักฐานการชำระเงินของคุณหรือสมาชิกในกลุ่มของคุณ
+                            <button type="button" class="btn btn-sm btn-warning ms-3" data-bs-toggle="modal" data-bs-target="#uploadModal">
+                                <i class="fas fa-upload me-1"></i> อัพโหลดเอกสาร
+                            </button>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <!-- Upload/Update Modal -->
+            <div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="uploadModalLabel">อัพโหลดหลักฐานการชำระเงิน</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <form id="uploadForm" action="api/update_payment_file.php" method="post" enctype="multipart/form-data">
+                            <div class="modal-body">
+                                <input type="hidden" name="registration_id" value="<?php echo $registration_id; ?>">
+                                <input type="hidden" name="file_id" id="file_id" value="0">
+                                <input type="hidden" name="action" id="fileAction" value="upload">
+                                
+                                <div class="mb-3">
+                                    <label for="payment_file" class="form-label">เลือกไฟล์</label>
+                                    <input type="file" class="form-control" id="payment_file" name="payment_file" required>
+                                    <div class="form-text">รองรับไฟล์: JPG, JPEG, PNG, PDF (ขนาดไม่เกิน 5MB)</div>
+                                </div>
+                                
+                                <div id="updateFileInfo" class="alert alert-info" style="display: none;">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    <span id="fileUpdateMessage"></span>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-upload me-1"></i>
+                                    <span id="submitBtnText">อัพโหลด</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
                             <!-- Actions -->
                             <div class="card">
                                 <div class="card-header">
@@ -1213,7 +1274,140 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
 
     <!-- JavaScript สำหรับโหลดข้อมูลเขต/อำเภอและตำบล -->
     <script>
+        function updateFile(fileId, fileName) {
+    // Reset form
+    $('#uploadForm')[0].reset();
+    
+    // Set form values for update
+    $('#file_id').val(fileId);
+    $('#fileAction').val('update');
+    $('#submitBtnText').text('อัพเดทเอกสาร');
+    $('#uploadModalLabel').text('อัพเดทหลักฐานการชำระเงิน');
+    
+    // Show file info
+    $('#fileUpdateMessage').text('กำลังแทนที่ไฟล์: ' + fileName);
+    $('#updateFileInfo').show();
+    
+    // Show modal
+    $('#uploadModal').modal('show');
+}
+
+function deleteFile(fileId, fileName) {
+    Swal.fire({
+        title: 'ยืนยันการลบไฟล์',
+        text: 'คุณต้องการลบไฟล์ "' + fileName + '" ใช่หรือไม่?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'ใช่, ลบไฟล์',
+        cancelButtonText: 'ยกเลิก',
+        confirmButtonColor: '#d33',
+        reverseButtons: true
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // Send delete request
+            $.ajax({
+                url: 'api/update_payment_file.php',
+                type: 'POST',
+                data: { 
+                    file_id: fileId,
+                    action: 'delete',
+                    registration_id: <?php echo $registration_id; ?>
+                },
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success) {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'ลบไฟล์สำเร็จ',
+                            text: 'ไฟล์ถูกลบเรียบร้อยแล้ว',
+                            confirmButtonText: 'ตกลง'
+                        }).then(() => {
+                            // Reload the page to show the updated file list
+                            window.location.reload();
+                        });
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'เกิดข้อผิดพลาด',
+                            text: response.message || 'ไม่สามารถลบไฟล์ได้ กรุณาลองใหม่อีกครั้ง'
+                        });
+                    }
+                },
+                error: function() {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'เกิดข้อผิดพลาด',
+                        text: 'ไม่สามารถเชื่อมต่อกับระบบได้ กรุณาลองใหม่อีกครั้ง'
+                    });
+                }
+            });
+        }
+    });
+}
     $(document).ready(function() {
+
+        $('#uploadForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        let formData = new FormData(this);
+        
+        // Show loading
+        Swal.fire({
+            title: 'กำลังอัพโหลด...',
+            allowOutsideClick: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
+        
+        $.ajax({
+            url: $(this).attr('action'),
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            dataType: 'json',
+            success: function(response) {
+                if (response.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'อัพโหลดสำเร็จ',
+                        text: 'ไฟล์ถูกอัพโหลดเรียบร้อยแล้ว',
+                        confirmButtonText: 'ตกลง'
+                    }).then(() => {
+                        // Close modal and reload page
+                        $('#uploadModal').modal('hide');
+                        window.location.reload();
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'เกิดข้อผิดพลาด',
+                        text: response.message || 'ไม่สามารถอัพโหลดไฟล์ได้ กรุณาลองใหม่อีกครั้ง'
+                    });
+                }
+            },
+            error: function() {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'เกิดข้อผิดพลาด',
+                    text: 'ไม่สามารถเชื่อมต่อกับระบบได้ กรุณาลองใหม่อีกครั้ง'
+                });
+            }
+        });
+    });
+    
+    // Reset modal when hidden
+    $('#uploadModal').on('hidden.bs.modal', function() {
+        $('#uploadForm')[0].reset();
+        $('#file_id').val(0);
+        $('#fileAction').val('upload');
+        $('#submitBtnText').text('อัพโหลด');
+        $('#uploadModalLabel').text('อัพโหลดหลักฐานการชำระเงิน');
+        $('#updateFileInfo').hide();
+    });
+
+    
         // แสดง/ซ่อน field คำนำหน้าอื่นๆ
         $('#title').change(function() {
             if ($(this).val() === 'อื่นๆ') {
