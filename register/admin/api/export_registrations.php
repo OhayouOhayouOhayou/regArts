@@ -70,7 +70,9 @@ if ($status === 'approved') {
 } else if ($status === 'pending') {
     $conditions[] = "r.is_approved = 0";
 } else if ($status === 'paid') {
-    $conditions[] = "r.payment_status = 'paid'";
+    $conditions[] = "r.payment_status = 'paid' AND r.is_approved = 0";
+} else if ($status === 'paid_approved') {
+    $conditions[] = "r.payment_status = 'paid' AND r.is_approved = 1";
 } else if ($status === 'not_paid') {
     $conditions[] = "r.payment_status = 'not_paid'";
 } else if ($status === 'paid_onsite') {
