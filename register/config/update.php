@@ -1,6 +1,6 @@
 <?php
 /**
- * Script to insert data into districts table
+ * Script to insert data into subdistricts table
  */
 
 $servername = "shared-mysql";  // ชื่อ container MySQL
@@ -19,13 +19,12 @@ if ($conn->connect_error) {
 echo "Connected to database successfully<br>";
 
 // เตรียมคำสั่ง SQL สำหรับการเพิ่มข้อมูล
-// ต้องระบุให้ถูกต้องตามโครงสร้างตาราง (ไม่รวม id ที่เป็น auto_increment)
-$sql = "INSERT INTO `districts` (code, name_in_thai, name_in_english, province_id) 
-        VALUES (460, 'โพนสว่าง', 'Phon Sawang', 31)";
+$sql = "INSERT INTO `subdistricts` (code, name_in_thai, name_in_english, latitude, longitude, district_id, zip_code) 
+        VALUES (430200, 'โพนสว่าง', 'Phon Sawang', 17.858, 102.700, 423, 43100)";
 
 // ดำเนินการ query
 if ($conn->query($sql) === TRUE) {
-    echo "เพิ่มข้อมูลลงในตาราง districts เรียบร้อยแล้ว";
+    echo "เพิ่มข้อมูลลงในตาราง subdistricts เรียบร้อยแล้ว";
 } else {
     echo "Error: " . $sql . "<br>" . $conn->error;
 }
