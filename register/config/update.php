@@ -20,7 +20,7 @@ echo "Connected to database successfully<br>";
 
 // เตรียมคำสั่ง SQL สำหรับการเพิ่มข้อมูล
 $sql = "INSERT INTO `subdistricts` (code, name_in_thai, name_in_english, latitude, longitude, district_id, zip_code) 
-        VALUES (430200, 'โพนสว่าง', 'Phon Sawang', 17.858, 102.700, 423, 43100)";
+        VALUES (610509, 'หลุมเข้า', 'Lom Kung', 17.858, 102.700, 423, 61130)";
 
 // ดำเนินการ query
 if ($conn->query($sql) === TRUE) {
