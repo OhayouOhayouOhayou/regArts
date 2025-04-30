@@ -26,16 +26,23 @@ $status = $_GET['status'] ?? '';
 $search = $_GET['search'] ?? '';
 
 // สร้าง SQL หลัก - ใช้ ANY_VALUE() เพื่อแก้ปัญหา GROUP BY
+
 $sql = "SELECT r.id, r.fullname, r.organization, r.position, r.phone, 
                r.email, r.line_id, r.payment_status, r.is_approved, 
-               r.payment_date, r.created_at, r.title ,
+               r.payment_date, r.created_at, r.title,
                ANY_VALUE(a.address) AS address, 
                ANY_VALUE(a.zipcode) AS zipcode,
                ANY_VALUE(p.name_in_thai) AS province_name, 
                ANY_VALUE(d.name_in_thai) AS district_name, 
                ANY_VALUE(s.name_in_thai) AS subdistrict_name,
                GROUP_CONCAT(DISTINCT CONCAT(rd.document_type, ':', rd.file_path) SEPARATOR '|') AS document_paths,
-               ANY_VALUE(rf.file_path) AS payment_slip_path
+               ANY_VALUE(rf.file_path) AS payment_slip_path,
+               CASE 
+                  WHEN r.payment_status = 'paid' AND r.is_approved = 1 THEN 'paid_approved'
+                  WHEN r.payment_status = 'paid' AND r.is_approved = 0 THEN 'paid_pending'
+                  WHEN r.payment_status = 'paid_onsite' THEN 'paid_onsite'
+                  ELSE 'not_paid'
+               END AS combined_status
         FROM registrations r 
         LEFT JOIN registration_addresses a ON r.id = a.registration_id AND a.address_type = 'invoice'
         LEFT JOIN provinces p ON a.province_id = p.id 
@@ -70,13 +77,13 @@ if ($status === 'approved') {
 } else if ($status === 'pending') {
     $conditions[] = "r.is_approved = 0";
 } else if ($status === 'paid') {
-    $conditions[] = "r.payment_status = 'paid' AND r.is_approved = 0";
+    $conditions[] = "LOWER(TRIM(r.payment_status)) = 'paid' AND r.is_approved = 0";
 } else if ($status === 'paid_approved') {
-    $conditions[] = "r.payment_status = 'paid' AND r.is_approved = 1";
+    $conditions[] = "LOWER(TRIM(r.payment_status)) = 'paid' AND r.is_approved = 1";
 } else if ($status === 'not_paid') {
-    $conditions[] = "r.payment_status = 'not_paid'";
+    $conditions[] = "(r.payment_status IS NULL OR LOWER(TRIM(r.payment_status)) IN ('', 'not_paid'))";
 } else if ($status === 'paid_onsite') {
-    $conditions[] = "r.payment_status = 'paid_onsite'";
+    $conditions[] = "LOWER(TRIM(r.payment_status)) = 'paid_onsite'";
 }
 if ($search) {
     $conditions[] = "(r.fullname LIKE :search OR r.email LIKE :search OR r.phone LIKE :search OR r.organization LIKE :search)";
