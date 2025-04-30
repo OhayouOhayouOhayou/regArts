@@ -152,10 +152,14 @@ try {
             $paymentSlip = $baseUrl . '/' . $row['payment_slip_path'];
         }
         
-        // แปลงสถานะการชำระเงิน
+       // แปลงสถานะการชำระเงิน
         $paymentStatus = 'ยังไม่ชำระ';
         if ($row['payment_status'] === 'paid') {
-            $paymentStatus = 'ชำระแล้ว';
+            if ($row['is_approved'] == 1) {
+                $paymentStatus = 'ชำระแล้ว (อนุมัติแล้ว)';
+            } else {
+                $paymentStatus = 'ชำระแล้ว (รอตรวจสอบจากเจ้าหน้าที่)';
+            }
         } elseif ($row['payment_status'] === 'paid_onsite') {
             $paymentStatus = 'อนุมัติ (ชำระเงินที่หน้างาน)';
         }
