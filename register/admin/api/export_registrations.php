@@ -72,18 +72,21 @@ if ($phone) {
     $conditions[] = "r.phone LIKE :phone";
     $params[':phone'] = "%$phone%";
 }
+
 if ($status === 'approved') {
     $conditions[] = "r.is_approved = 1";
 } else if ($status === 'pending') {
     $conditions[] = "r.is_approved = 0";
-} else if ($status === 'paid') {
-    $conditions[] = "LOWER(TRIM(r.payment_status)) = 'paid' AND r.is_approved = 0";
 } else if ($status === 'paid_approved') {
-    $conditions[] = "LOWER(TRIM(r.payment_status)) = 'paid' AND r.is_approved = 1";
-} else if ($status === 'not_paid') {
-    $conditions[] = "(r.payment_status IS NULL OR LOWER(TRIM(r.payment_status)) IN ('', 'not_paid'))";
+    $conditions[] = "r.payment_status = 'paid_approved'";
+} else if ($status === 'paid_pending') {
+    $conditions[] = "r.payment_status = 'paid' AND r.is_approved = 0";
+} else if ($status === 'paid') {
+    $conditions[] = "r.payment_status = 'paid'";
 } else if ($status === 'paid_onsite') {
-    $conditions[] = "LOWER(TRIM(r.payment_status)) = 'paid_onsite'";
+    $conditions[] = "r.payment_status = 'paid_onsite'";
+} else if ($status === 'not_paid') {
+    $conditions[] = "r.payment_status = 'not_paid'";
 }
 if ($search) {
     $conditions[] = "(r.fullname LIKE :search OR r.email LIKE :search OR r.phone LIKE :search OR r.organization LIKE :search)";
