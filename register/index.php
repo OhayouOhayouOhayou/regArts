@@ -577,7 +577,7 @@
                 </div>
 
                 <!-- Documents Section (Before Payment) -->
-                <div class="card">
+                <div class="card" style="display:none">
                     <div class="card-header">
                         <h3 class="card-title">
                             <i class="fas fa-file-alt me-2"></i>

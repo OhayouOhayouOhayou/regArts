@@ -699,7 +699,7 @@ foreach ($admin_stats_raw as $stat) {
                         $paid_pending_stmt = $pdo->prepare("
                             SELECT COUNT(*) as count 
                             FROM registrations 
-                            WHERE payment_status = 'paid' AND is_approved = 0
+                            WHERE payment_status = 'paid' AND (is_approved = 0 OR is_approved = 1)  
                         ");
                         $paid_pending_stmt->execute();
                         $paid_pending_result = $paid_pending_stmt->fetch(PDO::FETCH_ASSOC);
@@ -743,30 +743,7 @@ foreach ($admin_stats_raw as $stat) {
         </div>
     </div>
     
-    <!-- อัตราส่วนการชำระเงิน -->
-    <div class="col-md-3 mb-3">
-        <div class="card h-100">
-            <div class="card-body stat-card bg-chart">
-                <div class="stat-icon" style="background-color: var(--accent-color);">
-                    <i class="fas fa-percent"></i>
-                </div>
-                <div>
-                    <div class="stat-title">สัดส่วนการชำระเงิน</div>
-                    <div class="stat-value">
-                        <?php 
-                            if ($total_approved > 0) {
-                                $total_paid = $paid_approved_result['count'] + $paid_pending_result['count'] + $onsite_result['count'];
-                                echo round(($total_paid / $total_approved) * 100) . '%';
-                            } else {
-                                echo "0%";
-                            }
-                        ?>
-                    </div>
-                </div>
-                <div class="stat-desc">อัตราส่วนผู้ชำระเงินแล้ว</div>
-            </div>
-        </div>
-    </div>
+   
     
     <!-- จำนวนลงทะเบียนรวม -->
     <div class="col-md-3 mb-3">
