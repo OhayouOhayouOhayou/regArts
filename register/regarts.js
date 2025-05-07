@@ -117,7 +117,6 @@ function validatePhone(phone) {
 }
 
 // ======================= REGISTRATION STATUS FUNCTIONS =======================
-
 /**
  * Get timeline steps based on registration status
  * @param {string} paymentStatus - Payment status
@@ -125,6 +124,8 @@ function validatePhone(phone) {
  * @returns {Array} Array of timeline step objects
  */
 function getTimelineSteps(paymentStatus, isApproved) {
+    console.log("สถานะการชำระเงิน:", paymentStatus, "สถานะการอนุมัติ:", isApproved);
+    
     const timelineSteps = [
         {
             title: 'ลงทะเบียน',
@@ -152,16 +153,24 @@ function getTimelineSteps(paymentStatus, isApproved) {
         }
     ];
     
-    // Update status based on payment status
-    if (paymentStatus === 'paid') {
+    // แก้ไขเพิ่มเติมให้ตรวจสอบสถานะให้ละเอียดมากขึ้น
+    // ตรวจสอบสถานะการชำระเงินและการอนุมัติ
+    if (paymentStatus === 'paid_approved' || (paymentStatus === 'paid' && isApproved == 1)) {
+        // กรณีชำระเงินแล้วและได้รับการอนุมัติแล้ว
         timelineSteps[1].status = 'completed';
-        
-        if (isApproved) {
-            timelineSteps[2].status = 'completed';
-            timelineSteps[3].status = 'completed';
-        } else {
-            timelineSteps[2].status = 'current';
-        }
+        timelineSteps[2].status = 'completed';
+        timelineSteps[3].status = 'completed';
+    } else if (paymentStatus === 'paid' && isApproved == 0) {
+        // กรณีชำระเงินแล้วแต่ยังไม่ได้รับการอนุมัติ
+        timelineSteps[1].status = 'completed';
+        timelineSteps[2].status = 'current';
+    } else if (paymentStatus === 'paid_onsite') {
+        // กรณีชำระเงินหน้างาน
+        timelineSteps[1].status = 'current';
+        timelineSteps[1].description = 'ชำระเงินหน้างาน';
+    } else {
+        // กรณียังไม่ได้ชำระเงิน (not_paid)
+        timelineSteps[1].status = 'current';
     }
     
     return timelineSteps;
@@ -603,30 +612,38 @@ function displayRegistrationDetails(data) {
     registrantInfoDiv.className = 'form-section active';
     
     // Determine status display
-    let statusText = '';
-    let statusClass = '';
-    let actionHtml = '';
-    
-    switch(registration.payment_status) {
-        case 'not_paid':
-            statusText = 'รอชำระเงิน';
-            statusClass = 'text-warning';
-            actionHtml = createPaymentUploadForm(registration);
-            break;
-        case 'paid':
-            if (registration.is_approved) {
-                statusText = 'ลงทะเบียนเสร็จสมบูรณ์';
-                statusClass = 'text-success';
-            } else {
-                statusText = 'ชำระเงิน (อัพโหลดแล้วรอการตรวจสอบ)';
-                statusClass = 'text-primary';
-            }
-            break;
-        case 'paid_onsite':
-            statusText = 'ชำระเงินหน้างาน';
+let statusText = '';
+let statusClass = '';
+let actionHtml = '';
+
+switch(registration.payment_status) {
+    case 'not_paid':
+        statusText = 'รอชำระเงิน';
+        statusClass = 'text-warning';
+        actionHtml = createPaymentUploadForm(registration);
+        break;
+    case 'paid_approved':
+        statusText = 'ลงทะเบียนเสร็จสมบูรณ์';
+        statusClass = 'text-success';
+        break;
+    case 'paid':
+        if (registration.is_approved == 1) {
+            statusText = 'ชำระแล้ว (อนุมัติแล้ว)';
             statusClass = 'text-success';
-            break;
-    }
+        } else {
+            statusText = 'ชำระแล้ว (รอตรวจสอบจากเจ้าหน้าที่)';
+            statusClass = 'text-primary';
+        }
+        break;
+    case 'paid_onsite':
+        statusText = 'ชำระเงินหน้างาน';
+        statusClass = 'text-info';
+        break;
+    default:
+        statusText = 'รอชำระเงิน';
+        statusClass = 'text-warning';
+        actionHtml = createPaymentUploadForm(registration);
+}
     
     // Prepare main container content
     registrantInfoDiv.innerHTML = `
