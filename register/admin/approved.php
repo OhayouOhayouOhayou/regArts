@@ -672,7 +672,7 @@ foreach ($admin_stats_raw as $stat) {
                         $paid_approved_stmt = $pdo->prepare("
                             SELECT COUNT(*) as count 
                             FROM registrations 
-                            WHERE (payment_status = 'paid_approved' OR (payment_status = 'paid' AND is_approved = 1))
+                            WHERE (payment_status = 'paid_approved'  AND is_approved = 1)
                         ");
                         $paid_approved_stmt->execute();
                         $paid_approved_result = $paid_approved_stmt->fetch(PDO::FETCH_ASSOC);
@@ -711,11 +711,6 @@ foreach ($admin_stats_raw as $stat) {
             </div>
         </div>
     </div>
-    
-    
-
-<!-- แถวที่ 2 สถิติเพิ่มเติม -->
-<div class="row mb-4">
     <!-- สถานะการชำระเงิน (not_paid) -->
     <div class="col-md-3 mb-3">
         <div class="card h-100">
@@ -742,8 +737,10 @@ foreach ($admin_stats_raw as $stat) {
             </div>
         </div>
     </div>
-    
-   
+    </div> 
+
+<!-- แถวที่ 2 สถิติเพิ่มเติม -->
+<div class="row mb-4">
     
     <!-- จำนวนลงทะเบียนรวม -->
     <div class="col-md-3 mb-3">
