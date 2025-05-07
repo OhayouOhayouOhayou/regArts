@@ -636,81 +636,162 @@ foreach ($admin_stats_raw as $stat) {
                                 <i class="fas fa-search"></i>
                             </button>
                         </div>
-                        <button class="btn btn-success" onclick="exportToExcel()">
-                            <i class="fas fa-file-excel me-2"></i>
-                            ส่งออก Excel
-                        </button>
+                       
                     </div>
                 </div>
 
                 <!-- Statistics Row -->
-                <div class="row mb-4">
-                    <div class="col-md-3 mb-3">
-                        <div class="card h-100">
-                            <div class="card-body stat-card bg-approved">
-                                <div class="stat-icon" style="background-color: var(--success-color);">
-                                    <i class="fas fa-check-circle"></i>
-                                </div>
-                                <div>
-                                    <div class="stat-title">อนุมัติแล้ว</div>
-                                    <div class="stat-value"><?php echo $total_approved; ?></div>
-                                </div>
-                                <div class="stat-desc">จำนวนที่อนุมัติแล้วทั้งหมด</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3 mb-3">
-                        <div class="card h-100">
-                            <div class="card-body stat-card bg-paid">
-                                <div class="stat-icon" style="background-color: var(--success-color);">
-                                    <i class="fas fa-money-bill-wave"></i>
-                                </div>
-                                <div>
-                                    <div class="stat-title">ชำระเงินแล้ว</div>
-                                    <div class="stat-value"><?php echo $paid_count; ?></div>
-                                </div>
-                                <div class="stat-desc">จำนวนที่ชำระเงินแล้ว</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3 mb-3">
-                        <div class="card h-100">
-                            <div class="card-body stat-card bg-unpaid">
-                                <div class="stat-icon" style="background-color: var(--error-color);">
-                                    <i class="fas fa-exclamation-circle"></i>
-                                </div>
-                                <div>
-                                    <div class="stat-title">ยังไม่ชำระเงิน</div>
-                                    <div class="stat-value"><?php echo $not_paid_count; ?></div>
-                                </div>
-                                <div class="stat-desc">จำนวนที่ยังไม่ชำระเงิน</div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="col-md-3 mb-3">
-                        <div class="card h-100">
-                            <div class="card-body stat-card bg-chart">
-                                <div class="stat-icon" style="background-color: var(--accent-color);">
-                                    <i class="fas fa-percent"></i>
-                                </div>
-                                <div>
-                                    <div class="stat-title">สัดส่วนการชำระเงิน</div>
-                                    <div class="stat-value">
-                                        <?php 
-                                            if ($total_approved > 0) {
-                                                echo round(($paid_count / $total_approved) * 100) . '%';
-                                            } else {
-                                                echo "0%";
-                                            }
-                                        ?>
-                                    </div>
-                                </div>
-                                <div class="stat-desc">อัตราส่วนผู้ชำระเงินแล้ว</div>
-                            </div>
-                        </div>
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card h-100">
+            <div class="card-body stat-card bg-approved">
+                <div class="stat-icon" style="background-color: var(--success-color);">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <div>
+                    <div class="stat-title">อนุมัติแล้ว</div>
+                    <div class="stat-value"><?php echo $total_approved; ?></div>
+                </div>
+                <div class="stat-desc">จำนวนที่อนุมัติแล้วทั้งหมด</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- สถานะการชำระเงิน (paid_approved) -->
+    <div class="col-md-3 mb-3">
+        <div class="card h-100">
+            <div class="card-body stat-card bg-paid">
+                <div class="stat-icon" style="background-color: var(--success-color);">
+                    <i class="fas fa-money-check-alt"></i>
+                </div>
+                <div>
+                    <div class="stat-title">ชำระแล้ว (อนุมัติแล้ว)</div>
+                    <div class="stat-value">
+                    <?php
+                        // ใช้ PHP query เพื่อนับจำนวน
+                        $paid_approved_stmt = $pdo->prepare("
+                            SELECT COUNT(*) as count 
+                            FROM registrations 
+                            WHERE (payment_status = 'paid_approved' OR (payment_status = 'paid' AND is_approved = 1))
+                        ");
+                        $paid_approved_stmt->execute();
+                        $paid_approved_result = $paid_approved_stmt->fetch(PDO::FETCH_ASSOC);
+                        echo $paid_approved_result['count'];
+                    ?>
                     </div>
                 </div>
+                <div class="stat-desc">ชำระเงินและอนุมัติแล้ว</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- สถานะการชำระเงิน (paid - รอตรวจสอบ) -->
+    <div class="col-md-3 mb-3">
+        <div class="card h-100">
+            <div class="card-body stat-card" style="background-color: rgba(255, 193, 7, 0.1); color: #ffc107;">
+                <div class="stat-icon" style="background-color: #ffc107;">
+                    <i class="fas fa-hourglass-half"></i>
+                </div>
+                <div>
+                    <div class="stat-title">ชำระแล้ว (รอตรวจสอบ)</div>
+                    <div class="stat-value">
+                    <?php
+                        $paid_pending_stmt = $pdo->prepare("
+                            SELECT COUNT(*) as count 
+                            FROM registrations 
+                            WHERE payment_status = 'paid' AND is_approved = 0
+                        ");
+                        $paid_pending_stmt->execute();
+                        $paid_pending_result = $paid_pending_stmt->fetch(PDO::FETCH_ASSOC);
+                        echo $paid_pending_result['count'];
+                    ?>
+                    </div>
+                </div>
+                <div class="stat-desc">รอการตรวจสอบจากเจ้าหน้าที่</div>
+            </div>
+        </div>
+    </div>
+    
+    
+
+<!-- แถวที่ 2 สถิติเพิ่มเติม -->
+<div class="row mb-4">
+    <!-- สถานะการชำระเงิน (not_paid) -->
+    <div class="col-md-3 mb-3">
+        <div class="card h-100">
+            <div class="card-body stat-card bg-unpaid">
+                <div class="stat-icon" style="background-color: var(--error-color);">
+                    <i class="fas fa-exclamation-circle"></i>
+                </div>
+                <div>
+                    <div class="stat-title">ยังไม่ชำระเงิน</div>
+                    <div class="stat-value">
+                    <?php
+                        $not_paid_stmt = $pdo->prepare("
+                            SELECT COUNT(*) as count 
+                            FROM registrations 
+                            WHERE payment_status = 'not_paid'
+                        ");
+                        $not_paid_stmt->execute();
+                        $not_paid_result = $not_paid_stmt->fetch(PDO::FETCH_ASSOC);
+                        echo $not_paid_result['count'];
+                    ?>
+                    </div>
+                </div>
+                <div class="stat-desc">ยังไม่ได้ชำระเงิน</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- อัตราส่วนการชำระเงิน -->
+    <div class="col-md-3 mb-3">
+        <div class="card h-100">
+            <div class="card-body stat-card bg-chart">
+                <div class="stat-icon" style="background-color: var(--accent-color);">
+                    <i class="fas fa-percent"></i>
+                </div>
+                <div>
+                    <div class="stat-title">สัดส่วนการชำระเงิน</div>
+                    <div class="stat-value">
+                        <?php 
+                            if ($total_approved > 0) {
+                                $total_paid = $paid_approved_result['count'] + $paid_pending_result['count'] + $onsite_result['count'];
+                                echo round(($total_paid / $total_approved) * 100) . '%';
+                            } else {
+                                echo "0%";
+                            }
+                        ?>
+                    </div>
+                </div>
+                <div class="stat-desc">อัตราส่วนผู้ชำระเงินแล้ว</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- จำนวนลงทะเบียนรวม -->
+    <div class="col-md-3 mb-3">
+        <div class="card h-100">
+            <div class="card-body stat-card" style="background-color: rgba(108, 117, 125, 0.1); color: #6c757d;">
+                <div class="stat-icon" style="background-color: #6c757d;">
+                    <i class="fas fa-users"></i>
+                </div>
+                <div>
+                    <div class="stat-title">ลงทะเบียนทั้งหมด</div>
+                    <div class="stat-value">
+                    <?php
+                        $total_stmt = $pdo->prepare("SELECT COUNT(*) as count FROM registrations");
+                        $total_stmt->execute();
+                        $total_result = $total_stmt->fetch(PDO::FETCH_ASSOC);
+                        echo $total_result['count'];
+                    ?>
+                    </div>
+                </div>
+                <div class="stat-desc">จำนวนการลงทะเบียนทั้งหมด</div>
+            </div>
+        </div>
+    </div>
+    
+   
 
                 <!-- Charts and Stats Row -->
                 <div class="row mb-4">
