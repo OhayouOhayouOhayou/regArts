@@ -76,6 +76,7 @@ $registration_group = $registration['registration_group'];
 
 // Initialize array for group members' files
 $group_payment_files = [];
+$group_members = [];
 
 // If the current registration has a registration_group
 if (!empty($registration_group)) {
@@ -89,6 +90,16 @@ if (!empty($registration_group)) {
     ");
     $group_stmt->execute([$registration_group, $registration_id]);
     $group_members = $group_stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Get all members in the group regardless of payment status
+    $all_members_stmt = $pdo->prepare("
+        SELECT id, fullname, payment_status, is_approved
+        FROM registrations 
+        WHERE registration_group = ? 
+        AND id != ?
+    ");
+    $all_members_stmt->execute([$registration_group, $registration_id]);
+    $all_group_members = $all_members_stmt->fetchAll(PDO::FETCH_ASSOC);
     
     // If there are other registrations in the same group that have paid
     if (!empty($group_members)) {
@@ -128,7 +139,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         try {
             $payment_status = $_POST['payment_status'];
-            // Update registration table
+            $update_group = isset($_POST['update_group']) && $_POST['update_group'] == '1';
+            
+            // Update registration table for current registration
             $update_stmt = $pdo->prepare("
                 UPDATE registrations 
                 SET title = ?, 
@@ -147,7 +160,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $title_other = !empty($_POST['title_other']) ? $_POST['title_other'] : null;
             $fullname = $_POST['fullname'];
             $organization = $_POST['organization'];
-            $position = $_POST['position']; // เพิ่มตำแหน่ง
+            $position = $_POST['position'];
             $phone = $_POST['phone'];
             $email = $_POST['email'];
             $line_id = $_POST['line_id'];
@@ -157,14 +170,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $title_other,
                 $fullname,
                 $organization,
-                $position, // เพิ่มตำแหน่ง
+                $position,
                 $phone,
                 $email,
                 $line_id,
-                $payment_status, // ใช้ค่าที่แปลงแล้ว
+                $payment_status,
                 $registration_id
             ]);
             
+            // อัพเดตทั้งกลุ่มหรือไม่
+            $affected_rows = 0;
+            if ($update_group && !empty($registration['registration_group'])) {
+                $group_id = $registration['registration_group'];
+                
+                // บันทึกจำนวนที่อัพเดต
+                $group_update = $pdo->prepare("
+                    UPDATE registrations 
+                    SET payment_status = ?
+                    WHERE registration_group = ? AND id != ?
+                ");
+                $group_update->execute([$payment_status, $group_id, $registration_id]);
+                $affected_rows = $group_update->rowCount();
+                
+                // เพิ่มข้อความแจ้งว่าอัพเดตทั้งกลุ่มแล้ว
+                $success_message_group = "อัพเดตสถานะการชำระเงินให้กับสมาชิกในกลุ่มอีก {$affected_rows} คนเรียบร้อยแล้ว";
+            }
             
             // Update addresses
             foreach (['invoice', 'house', 'current'] as $address_type) {
@@ -202,7 +232,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $is_approved = ($_POST['is_approved'] == '1') ? 1 : 0;
                 $approved_at = ($is_approved) ? date('Y-m-d H:i:s') : null;
                 
-                // ถ้ามี session admin_id ให้ใช้ ถ้าไม่มีให้ใช้ค่า 1
                 $admin_id = isset($_SESSION['admin_id']) ? $_SESSION['admin_id'] : 1;
                 $approved_by = ($is_approved) ? $admin_id : null;
                 
@@ -226,9 +255,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->commit();
             
             $success_message = "บันทึกข้อมูลเรียบร้อยแล้ว";
+            if (isset($success_message_group)) {
+                $success_message .= "<br>" . $success_message_group;
+            }
             
             // Refresh data
-            header("Location: registration_detail.php?id=$registration_id&success=1");
+            header("Location: registration_detail.php?id=$registration_id&success=1" . (!empty($affected_rows) ? "&group_updated=1&count={$affected_rows}" : ""));
             exit;
             
         } catch (Exception $e) {
@@ -243,9 +275,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Check for success message from redirect
 if (isset($_GET['success']) && $_GET['success'] == '1') {
     $success_message = "บันทึกข้อมูลเรียบร้อยแล้ว";
+    
+    // ถ้ามีการอัพเดตทั้งกลุ่ม
+    if (isset($_GET['group_updated']) && $_GET['group_updated'] == '1') {
+        $count = isset($_GET['count']) ? intval($_GET['count']) : 0;
+        if ($count > 0) {
+            $success_message .= "<br>อัพเดตสถานะการชำระเงินให้กับสมาชิกในกลุ่มอีก {$count} คนเรียบร้อยแล้ว";
+        } else {
+            $success_message .= "<br>อัพเดตสถานะการชำระเงินให้กับสมาชิกในกลุ่มเรียบร้อยแล้ว";
+        }
+    }
 }
-
-
 ?>
 <!DOCTYPE html>
 <html lang="th">
@@ -261,6 +301,7 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/lightgallery/2.7.1/css/lightgallery.min.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
+        /* คงไว้ตามเดิม */
         :root {
             --primary-color: #1a237e;
             --primary-light: #534bae;
@@ -609,6 +650,20 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
         .gallery-item:hover {
             opacity: 0.9;
         }
+        
+        /* สไตล์เพิ่มเติมสำหรับแสดงสถานะสมาชิกกลุ่ม */
+        .group-members-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .group-member-item {
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            margin-bottom: 0.5rem;
+            background-color: rgba(0,0,0,0.02);
+        }
     </style>
 </head>
 <body>
@@ -682,7 +737,6 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                             <span>รายงาน</span>
                         </a>
                     </li>
-                  
                 </ul>
             </div>
 
@@ -720,9 +774,10 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
                 <?php endif; ?>
-
                 <form method="post" action="" id="registrationForm">
                     <input type="hidden" name="update_registration" value="1">
+                    <!-- เพิ่มฟิลด์เก็บข้อมูลว่าต้องการอัพเดตทั้งกลุ่มหรือไม่ -->
+                    <input type="hidden" name="update_group" id="updateGroupField" value="0">
                     <div class="row">
                         <!-- Left Column -->
                         <div class="col-lg-8">
@@ -1023,8 +1078,6 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                                         </div>
                                     </div>
                                     
-                                    
-                                    
                                     <?php if($registration['is_approved'] == 1 && $registration['payment_status'] == 'paid_approved'): ?>
                                     <div class="approval-timeline">
                                         <div class="timeline-point bg-success"></div>
@@ -1038,198 +1091,224 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                             </div>
                             
                            <!-- สถานะการชำระเงิน -->
-<div class="card">
-    <div class="card-header">
-        <h5 class="title">
-            <i class="fas fa-money-bill-wave"></i>
-            สถานะการชำระเงิน
-        </h5>
-    </div>
-    <div class="card-body">
-            <div class="mb-4 text-center p-3" style="background-color: rgba(0,0,0,0.03); border-radius: 0.5rem;">
-            <?php if($registration['payment_status'] == 'paid_approved'): ?>
-                <div class="mb-2"><i class="fas fa-check-circle fa-3x text-success"></i></div>
-                <h5 class="mb-1">ชำระแล้ว (อนุมัติแล้ว)</h5>
-            <?php elseif($registration['payment_status'] == 'paid'): ?>
-                <div class="mb-2"><i class="fas fa-clock fa-3x text-warning"></i></div>
-                <h5 class="mb-1">ชำระแล้ว (รอตรวจสอบจากเจ้าหน้าที่)</h5>
-            <?php elseif($registration['payment_status'] == 'paid_onsite'): ?>
-                <div class="mb-2"><i class="fas fa-money-bill fa-3x text-info"></i></div>
-                <h5 class="mb-1">ชำระเงินที่หน้างาน</h5>
-            <?php else: ?>
-                <div class="mb-2"><i class="fas fa-times-circle fa-3x text-danger"></i></div>
-                <h5 class="mb-1">ยังไม่ชำระ</h5>
-            <?php endif; ?>
-        </div>
-        
-        <div class="mb-3">
-            <label class="form-label">เปลี่ยนสถานะการชำระเงิน</label>
-            <select class="form-select" name="payment_status">
-                <option value="not_paid" <?php echo ($registration['payment_status'] == 'not_paid') ? 'selected' : ''; ?>>ยังไม่ชำระ</option>
-                <option value="paid" <?php echo ($registration['payment_status'] == 'paid') ? 'selected' : ''; ?>>ชำระแล้ว (รอตรวจสอบจากเจ้าหน้าที่)</option>
-                <option value="paid_approved" <?php echo ($registration['payment_status'] == 'paid_approved') ? 'selected' : ''; ?>>ชำระแล้ว (อนุมัติแล้ว)</option>
-              
-            </select>
-        </div>
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="title">
+                                        <i class="fas fa-money-bill-wave"></i>
+                                        สถานะการชำระเงิน
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-4 text-center p-3" style="background-color: rgba(0,0,0,0.03); border-radius: 0.5rem;">
+                                        <?php if($registration['payment_status'] == 'paid_approved'): ?>
+                                            <div class="mb-2"><i class="fas fa-check-circle fa-3x text-success"></i></div>
+                                            <h5 class="mb-1">ชำระแล้ว (อนุมัติแล้ว)</h5>
+                                        <?php elseif($registration['payment_status'] == 'paid'): ?>
+                                            <div class="mb-2"><i class="fas fa-clock fa-3x text-warning"></i></div>
+                                            <h5 class="mb-1">ชำระแล้ว (รอตรวจสอบจากเจ้าหน้าที่)</h5>
+                                        <?php elseif($registration['payment_status'] == 'paid_onsite'): ?>
+                                            <div class="mb-2"><i class="fas fa-money-bill fa-3x text-info"></i></div>
+                                            <h5 class="mb-1">ชำระเงินที่หน้างาน</h5>
+                                        <?php else: ?>
+                                            <div class="mb-2"><i class="fas fa-times-circle fa-3x text-danger"></i></div>
+                                            <h5 class="mb-1">ยังไม่ชำระ</h5>
+                                        <?php endif; ?>
+                                    </div>
                                     
+                                    <!-- แสดงข้อมูลกลุ่ม (ถ้ามี) -->
+                                    <?php if (!empty($registration_group) && count($all_group_members) > 0): ?>
+                                    <div class="mt-3 mb-3 p-3 bg-light rounded">
+                                        <div class="d-flex align-items-center mb-2">
+                                            <i class="fas fa-users text-primary me-2"></i>
+                                            <h6 class="mb-0">การลงทะเบียนแบบกลุ่ม (<?php echo count($all_group_members) + 1; ?> คน)</h6>
+                                        </div>
+                                        <p class="text-muted small mb-2">
+                                            เมื่อคุณเปลี่ยนสถานะการชำระเงิน ระบบจะถามว่าคุณต้องการอัพเดตสถานะ
+                                            ของสมาชิกทุกคนในกลุ่มด้วยหรือไม่
+                                        </p>
+                                        
+                                        <!-- แสดงรายชื่อสมาชิกในกลุ่มและสถานะ -->
+                                        <div class="mt-2">
+                                            <div class="group-member-item">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <div>
+                                                        <i class="fas fa-user me-2 text-primary"></i>
+                                                        <strong><?php echo $registration['fullname']; ?></strong>
+                                                        <span class="badge bg-secondary ms-2">ปัจจุบัน</span>
+                                                    </div>
+                                                    <div>
+                                                        <?php if($registration['payment_status'] == 'paid_approved'): ?>
+                                                            <span class="badge bg-success">ชำระแล้ว (อนุมัติแล้ว)</span>
+                                                        <?php elseif($registration['payment_status'] == 'paid'): ?>
+                                                            <span class="badge bg-warning text-dark">ชำระแล้ว (รอตรวจสอบ)</span>
+                                                        <?php elseif($registration['payment_status'] == 'paid_onsite'): ?>
+                                                            <span class="badge bg-info">ชำระเงินที่หน้างาน</span>
+                                                        <?php else: ?>
+                                                            <span class="badge bg-danger">ยังไม่ชำระ</span>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                </div>
+                                            </div>
                                             
-        <div class="mb-3">
-                <label class="form-label">หลักฐานการชำระเงิน</label>
-                <div id="payment-gallery">
-                    <!-- Current Registration's Files -->
-                    <?php if (count($payment_files) > 0): ?>
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h6 class="text-primary mb-0"><i class="fas fa-user me-2"></i>หลักฐานการชำระเงินของคุณ</h6>
-                            <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal">
-                                <i class="fas fa-upload me-1"></i> อัพโหลดเอกสารใหม่
-                            </button>
-                        </div>
-                        <?php foreach($payment_files as $file): ?>
-                            <div class="file-preview mb-3 border border-primary">
-                                <?php if (strpos($file['file_type'], 'image') !== false): ?>
-                                    <div class="gallery-item" data-src="../<?php echo $file['file_path']; ?>">
-                                        <img src="../<?php echo $file['file_path']; ?>" alt="Payment proof" class="img-fluid mb-2">
+                                            <?php foreach($all_group_members as $member): ?>
+                                                <div class="group-member-item">
+                                                    <div class="d-flex justify-content-between align-items-center">
+                                                        <div>
+                                                            <i class="fas fa-user me-2"></i>
+                                                            <?php echo $member['fullname']; ?>
+                                                        </div>
+                                                        <div>
+                                                            <?php if($member['payment_status'] == 'paid_approved'): ?>
+                                                                <span class="badge bg-success">ชำระแล้ว (อนุมัติแล้ว)</span>
+                                                            <?php elseif($member['payment_status'] == 'paid'): ?>
+                                                                <span class="badge bg-warning text-dark">ชำระแล้ว (รอตรวจสอบ)</span>
+                                                            <?php elseif($member['payment_status'] == 'paid_onsite'): ?>
+                                                                <span class="badge bg-info">ชำระเงินที่หน้างาน</span>
+                                                            <?php else: ?>
+                                                                <span class="badge bg-danger">ยังไม่ชำระ</span>
+                                                            <?php endif; ?>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
                                     </div>
-                                <?php elseif (strpos($file['file_type'], 'pdf') !== false): ?>
-                                    <div class="file-preview-pdf mb-2">
-                                        <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-primary">
-                                            <i class="fas fa-file-pdf me-2"></i>
-                                            เปิดไฟล์ PDF
-                                        </a>
+                                    <?php endif; ?>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label">เปลี่ยนสถานะการชำระเงิน</label>
+                                        <select class="form-select" name="payment_status">
+                                            <option value="not_paid" <?php echo ($registration['payment_status'] == 'not_paid') ? 'selected' : ''; ?>>ยังไม่ชำระ</option>
+                                            <option value="paid" <?php echo ($registration['payment_status'] == 'paid') ? 'selected' : ''; ?>>ชำระแล้ว (รอตรวจสอบจากเจ้าหน้าที่)</option>
+                                            <option value="paid_approved" <?php echo ($registration['payment_status'] == 'paid_approved') ? 'selected' : ''; ?>>ชำระแล้ว (อนุมัติแล้ว)</option>
+                                            <option value="paid_onsite" <?php echo ($registration['payment_status'] == 'paid_onsite') ? 'selected' : ''; ?>>ชำระเงินที่หน้างาน</option>
+                                        </select>
                                     </div>
-                                <?php else: ?>
-                                    <div class="file-preview-pdf mb-2">
-                                        <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-primary">
-                                            <i class="fas fa-file me-2"></i>
-                                            เปิดไฟล์
-                                        </a>
-                                    </div>
-                                <?php endif; ?>
-                                
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <small class="text-muted">
-                                        <?php echo $file['file_name']; ?><br>
-                                        (<?php echo round($file['file_size']/1024, 2); ?> KB)
-                                    </small>
-                                    <div>
-                                        <a href="../<?php echo $file['file_path']; ?>" class="btn btn-sm btn-outline-secondary" download>
-                                            <i class="fas fa-download"></i>
-                                        </a>
-                                        <button type="button" class="btn btn-sm btn-outline-warning ms-1" 
-                                                onclick="updateFile(<?php echo $file['id']; ?>, '<?php echo $file['file_name']; ?>')">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
-                                        <button type="button" class="btn btn-sm btn-outline-danger ms-1" 
-                                                onclick="deleteFile(<?php echo $file['id']; ?>, '<?php echo $file['file_name']; ?>')">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
+                                    
+                                    <!-- หลักฐานการชำระเงิน -->
+                                    <div class="mb-3">
+                                        <label class="form-label">หลักฐานการชำระเงิน</label>
+                                        <div id="payment-gallery">
+                                            <!-- Current Registration's Files -->
+                                            <?php if (count($payment_files) > 0): ?>
+                                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                                    <h6 class="text-primary mb-0"><i class="fas fa-user me-2"></i>หลักฐานการชำระเงินของคุณ</h6>
+                                                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal">
+                                                        <i class="fas fa-upload me-1"></i> อัพโหลดเอกสารใหม่
+                                                    </button>
+                                                </div>
+                                                <?php foreach($payment_files as $file): ?>
+                                                    <div class="file-preview mb-3 border border-primary">
+                                                        <?php if (strpos($file['file_type'], 'image') !== false): ?>
+                                                            <div class="gallery-item" data-src="../<?php echo $file['file_path']; ?>">
+                                                                <img src="../<?php echo $file['file_path']; ?>" alt="Payment proof" class="img-fluid mb-2">
+                                                            </div>
+                                                        <?php elseif (strpos($file['file_type'], 'pdf') !== false): ?>
+                                                            <div class="file-preview-pdf mb-2">
+                                                                <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-primary">
+                                                                    <i class="fas fa-file-pdf me-2"></i>
+                                                                    เปิดไฟล์ PDF
+                                                                </a>
+                                                            </div>
+                                                        <?php else: ?>
+                                                            <div class="file-preview-pdf mb-2">
+                                                                <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-primary">
+                                                                    <i class="fas fa-file me-2"></i>
+                                                                    เปิดไฟล์
+                                                                </a>
+                                                            </div>
+                                                        <?php endif; ?>
+                                                        
+                                                        <div class="d-flex justify-content-between align-items-center">
+                                                            <small class="text-muted">
+                                                                <?php echo $file['file_name']; ?><br>
+                                                                (<?php echo round($file['file_size']/1024, 2); ?> KB)
+                                                            </small>
+                                                            <div>
+                                                                <a href="../<?php echo $file['file_path']; ?>" class="btn btn-sm btn-outline-secondary" download>
+                                                                    <i class="fas fa-download"></i>
+                                                                </a>
+                                                                <button type="button" class="btn btn-sm btn-outline-warning ms-1" 
+                                                                        onclick="updateFile(<?php echo $file['id']; ?>, '<?php echo $file['file_name']; ?>')">
+                                                                    <i class="fas fa-edit"></i>
+                                                                </button>
+                                                                <button type="button" class="btn btn-sm btn-outline-danger ms-1" 
+                                                                        onclick="deleteFile(<?php echo $file['id']; ?>, '<?php echo $file['file_name']; ?>')">
+                                                                    <i class="fas fa-trash"></i>
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                            <?php else: ?>
+                                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                                    <h6 class="text-primary mb-0"><i class="fas fa-user me-2"></i>หลักฐานการชำระเงินของคุณ</h6>
+                                                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal">
+                                                        <i class="fas fa-upload me-1"></i> อัพโหลดเอกสาร
+                                                    </button>
+                                                </div>
+                                            <?php endif; ?>
+                                            
+                                            <!-- Group Members' Files -->
+                                            <?php if (count($group_payment_files) > 0): ?>
+                                                <h6 class="text-success mt-4 mb-3"><i class="fas fa-users me-2"></i>หลักฐานการชำระเงินของสมาชิกในกลุ่ม</h6>
+                                                <?php foreach($group_payment_files as $file): ?>
+                                                    <div class="file-preview mb-3 border border-success">
+                                                        <div class="bg-light p-2 mb-2 rounded">
+                                                            <small class="text-success">
+                                                                <i class="fas fa-user me-1"></i> 
+                                                                <strong><?php echo $file['member_name']; ?></strong>
+                                                            </small>
+                                                        </div>
+                                                    
+                                                        <?php if (strpos($file['file_type'], 'image') !== false): ?>
+                                                            <div class="gallery-item" data-src="../<?php echo $file['file_path']; ?>">
+                                                                <img src="../<?php echo $file['file_path']; ?>" alt="Payment proof" class="img-fluid mb-2">
+                                                            </div>
+                                                        <?php elseif (strpos($file['file_type'], 'pdf') !== false): ?>
+                                                            <div class="file-preview-pdf mb-2">
+                                                                <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-success">
+                                                                    <i class="fas fa-file-pdf me-2"></i>
+                                                                    เปิดไฟล์ PDF
+                                                                </a>
+                                                            </div>
+                                                        <?php else: ?>
+                                                            <div class="file-preview-pdf mb-2">
+                                                                <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-success">
+                                                                    <i class="fas fa-file me-2"></i>
+                                                                    เปิดไฟล์
+                                                                </a>
+                                                            </div>
+                                                        <?php endif; ?>
+                                                        
+                                                        <div class="d-flex justify-content-between align-items-center">
+                                                            <small class="text-muted">
+                                                                <?php echo $file['file_name']; ?><br>
+                                                                (<?php echo round($file['file_size']/1024, 2); ?> KB)
+                                                            </small>
+                                                            <a href="../<?php echo $file['file_path']; ?>" class="btn btn-sm btn-outline-secondary" download>
+                                                                <i class="fas fa-download"></i>
+                                                            </a>
+                                                        </div>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                            <?php endif; ?>
+                                            
+                                            <!-- No Files Message -->
+                                            <?php if (count($payment_files) == 0 && count($group_payment_files) == 0): ?>
+                                                <div class="alert alert-warning">
+                                                    <i class="fas fa-exclamation-triangle me-2"></i>
+                                                    ไม่พบหลักฐานการชำระเงินของคุณหรือสมาชิกในกลุ่มของคุณ
+                                                    <button type="button" class="btn btn-sm btn-warning ms-3" data-bs-toggle="modal" data-bs-target="#uploadModal">
+                                                        <i class="fas fa-upload me-1"></i> อัพโหลดเอกสาร
+                                                    </button>
+                                                </div>
+                                            <?php endif; ?>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h6 class="text-primary mb-0"><i class="fas fa-user me-2"></i>หลักฐานการชำระเงินของคุณ</h6>
-                            <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal">
-                                <i class="fas fa-upload me-1"></i> อัพโหลดเอกสาร
-                            </button>
-                        </div>
-                    <?php endif; ?>
-                    
-                    <!-- Group Members' Files -->
-                    <?php if (count($group_payment_files) > 0): ?>
-                        <h6 class="text-success mt-4 mb-3"><i class="fas fa-users me-2"></i>หลักฐานการชำระเงิน</h6>
-                        <?php foreach($group_payment_files as $file): ?>
-                            <div class="file-preview mb-3 border border-success">
-                                <div class="bg-light p-2 mb-2 rounded">
-                                    <small class="text-success">
-                                        <i class="fas fa-user me-1"></i> 
-                                        <strong><?php echo $file['member_name']; ?></strong>
-                                    </small>
-                                </div>
-                            
-                                <?php if (strpos($file['file_type'], 'image') !== false): ?>
-                                    <div class="gallery-item" data-src="../<?php echo $file['file_path']; ?>">
-                                        <img src="../<?php echo $file['file_path']; ?>" alt="Payment proof" class="img-fluid mb-2">
-                                    </div>
-                                <?php elseif (strpos($file['file_type'], 'pdf') !== false): ?>
-                                    <div class="file-preview-pdf mb-2">
-                                        <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-success">
-                                            <i class="fas fa-file-pdf me-2"></i>
-                                            เปิดไฟล์ PDF
-                                        </a>
-                                    </div>
-                                <?php else: ?>
-                                    <div class="file-preview-pdf mb-2">
-                                        <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-success">
-                                            <i class="fas fa-file me-2"></i>
-                                            เปิดไฟล์
-                                        </a>
-                                    </div>
-                                <?php endif; ?>
-                                
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <small class="text-muted">
-                                        <?php echo $file['file_name']; ?><br>
-                                        (<?php echo round($file['file_size']/1024, 2); ?> KB)
-                                    </small>
-                                    <a href="../<?php echo $file['file_path']; ?>" class="btn btn-sm btn-outline-secondary" download>
-                                        <i class="fas fa-download"></i>
-                                    </a>
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                    
-                    <!-- No Files Message -->
-                    <?php if (count($payment_files) == 0 && count($group_payment_files) == 0): ?>
-                        <div class="alert alert-warning">
-                            <i class="fas fa-exclamation-triangle me-2"></i>
-                            ไม่พบหลักฐานการชำระเงินของคุณหรือสมาชิกในกลุ่มของคุณ
-                            <button type="button" class="btn btn-sm btn-warning ms-3" data-bs-toggle="modal" data-bs-target="#uploadModal">
-                                <i class="fas fa-upload me-1"></i> อัพโหลดเอกสาร
-                            </button>
-                        </div>
-                    <?php endif; ?>
-                </div>
-            </div>
 
-           <!-- Upload/Update Modal -->
-<div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="uploadModalLabel">อัพโหลดหลักฐานการชำระเงิน</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form id="uploadForm" action="api/update_payment_file.php?return_id=<?php echo $registration_id; ?>" method="post" enctype="multipart/form-data">
-                <div class="modal-body">
-                    <input type="hidden" name="registration_id" value="<?php echo $registration_id; ?>">
-                    <input type="hidden" name="file_id" id="file_id" value="0">
-                    <input type="hidden" name="action" id="fileAction" value="upload">
-                    
-                    <div class="mb-3">
-                        <label for="payment_file" class="form-label">เลือกไฟล์</label>
-                        <input type="file" class="form-control" id="payment_file" name="payment_file">
-                        <div class="form-text">รองรับไฟล์: JPG, JPEG, PNG, PDF (ขนาดไม่เกิน 5MB)</div>
-                    </div>
-                    
-                    <div id="updateFileInfo" class="alert alert-info" style="display: none;">
-                        <i class="fas fa-info-circle me-2"></i>
-                        <span id="fileUpdateMessage"></span>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-upload me-1"></i>
-                        <span id="submitBtnText">อัพโหลด</span>
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
                             <!-- Actions -->
                             <div class="card">
                                 <div class="card-header">
@@ -1264,6 +1343,43 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
         </div>
     </div>
 
+    <!-- Upload/Update Modal -->
+    <div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="uploadModalLabel">อัพโหลดหลักฐานการชำระเงิน</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="uploadForm" action="api/update_payment_file.php?return_id=<?php echo $registration_id; ?>" method="post" enctype="multipart/form-data">
+                    <div class="modal-body">
+                        <input type="hidden" name="registration_id" value="<?php echo $registration_id; ?>">
+                        <input type="hidden" name="file_id" id="file_id" value="0">
+                        <input type="hidden" name="action" id="fileAction" value="upload">
+                        
+                        <div class="mb-3">
+                            <label for="payment_file" class="form-label">เลือกไฟล์</label>
+                            <input type="file" class="form-control" id="payment_file" name="payment_file">
+                            <div class="form-text">รองรับไฟล์: JPG, JPEG, PNG, PDF (ขนาดไม่เกิน 5MB)</div>
+                        </div>
+                        
+                        <div id="updateFileInfo" class="alert alert-info" style="display: none;">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <span id="fileUpdateMessage"></span>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-upload me-1"></i>
+                            <span id="submitBtnText">อัพโหลด</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <!-- JavaScript libraries -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -1272,7 +1388,7 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lightgallery/2.7.1/plugins/zoom/lg-zoom.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lightgallery/2.7.1/plugins/thumbnail/lg-thumbnail.min.js"></script>
 
-    <!-- JavaScript สำหรับโหลดข้อมูลเขต/อำเภอและตำบล -->
+    <!-- JavaScript สำหรับการจัดการฟอร์มและเหตุการณ์ -->
     <script>
       function updateFile(fileId, fileName) {
         // ตรวจสอบก่อนว่าฟอร์มมีอยู่จริง
@@ -1289,70 +1405,110 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
         $('#updateFileInfo').show();
         $('#uploadModal').modal('show');
     }
-function deleteFile(fileId, fileName) {
-    Swal.fire({
-        title: 'ยืนยันการลบไฟล์',
-        text: 'คุณต้องการลบไฟล์ "' + fileName + '" ใช่หรือไม่?',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'ใช่, ลบไฟล์',
-        cancelButtonText: 'ยกเลิก',
-        confirmButtonColor: '#d33',
-        reverseButtons: true
-    }).then((result) => {
-        if (result.isConfirmed) {
-            // Send delete request
-            $.ajax({
-                url: 'api/update_payment_file.php',
-                type: 'POST',
-                data: { 
-                    file_id: fileId,
-                    action: 'delete',
-                    registration_id: <?php echo $registration_id; ?>
-                },
-                dataType: 'json',
-                success: function(response) {
-                    if (response.success) {
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'ลบไฟล์สำเร็จ',
-                            text: 'ไฟล์ถูกลบเรียบร้อยแล้ว',
-                            confirmButtonText: 'ตกลง'
-                        }).then(() => {
-                            // Reload the page to show the updated file list
-                            window.location.reload();
-                        });
-                    } else {
+    
+    function deleteFile(fileId, fileName) {
+        Swal.fire({
+            title: 'ยืนยันการลบไฟล์',
+            text: 'คุณต้องการลบไฟล์ "' + fileName + '" ใช่หรือไม่?',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'ใช่, ลบไฟล์',
+            cancelButtonText: 'ยกเลิก',
+            confirmButtonColor: '#d33',
+            reverseButtons: true
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Send delete request
+                $.ajax({
+                    url: 'api/update_payment_file.php',
+                    type: 'POST',
+                    data: { 
+                        file_id: fileId,
+                        action: 'delete',
+                        registration_id: <?php echo $registration_id; ?>
+                    },
+                    dataType: 'json',
+                    success: function(response) {
+                        if (response.success) {
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'ลบไฟล์สำเร็จ',
+                                text: 'ไฟล์ถูกลบเรียบร้อยแล้ว',
+                                confirmButtonText: 'ตกลง'
+                            }).then(() => {
+                                // Reload the page to show the updated file list
+                                window.location.reload();
+                            });
+                        } else {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'เกิดข้อผิดพลาด',
+                                text: response.message || 'ไม่สามารถลบไฟล์ได้ กรุณาลองใหม่อีกครั้ง'
+                            });
+                        }
+                    },
+                    error: function() {
                         Swal.fire({
                             icon: 'error',
                             title: 'เกิดข้อผิดพลาด',
-                            text: response.message || 'ไม่สามารถลบไฟล์ได้ กรุณาลองใหม่อีกครั้ง'
+                            text: 'ไม่สามารถเชื่อมต่อกับระบบได้ กรุณาลองใหม่อีกครั้ง'
                         });
                     }
-                },
-                error: function() {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'เกิดข้อผิดพลาด',
-                        text: 'ไม่สามารถเชื่อมต่อกับระบบได้ กรุณาลองใหม่อีกครั้ง'
-                    });
-                }
-            });
-        }
-    });
-}
-    $(document).ready(function() {
-
-    $('#uploadModal').on('hidden.bs.modal', function() {
-        $('#uploadForm')[0].reset();
-        $('#file_id').val(0);
-        $('#fileAction').val('upload');
-        $('#submitBtnText').text('อัพโหลด');
-        $('#uploadModalLabel').text('อัพโหลดหลักฐานการชำระเงิน');
-        $('#updateFileInfo').hide();
-    });
-
+                });
+            }
+        });
+    }
     
+    $(document).ready(function() {
+        // รีเซ็ตฟอร์มเมื่อปิด Modal
+        $('#uploadModal').on('hidden.bs.modal', function() {
+            $('#uploadForm')[0].reset();
+            $('#file_id').val(0);
+            $('#fileAction').val('upload');
+            $('#submitBtnText').text('อัพโหลด');
+            $('#uploadModalLabel').text('อัพโหลดหลักฐานการชำระเงิน');
+            $('#updateFileInfo').hide();
+        });
+        
+        // เพิ่ม Event Listener สำหรับการกดปุ่มบันทึก
+        $("#registrationForm").on("submit", function(e) {
+            // ตรวจสอบว่ามีการเปลี่ยนแปลงสถานะการชำระเงินหรือไม่
+            const originalStatus = "<?php echo $registration['payment_status']; ?>";
+            const newStatus = $("select[name='payment_status']").val();
+            const hasGroup = "<?php echo !empty($registration_group) ? 'true' : 'false'; ?>" === 'true';
+            const groupMemberCount = <?php echo isset($all_group_members) ? count($all_group_members) + 1 : 1; ?>;
+            
+            // ตรวจสอบว่ามีกลุ่มและมีการเปลี่ยนสถานะการชำระเงิน
+            if (hasGroup && originalStatus !== newStatus && groupMemberCount > 1) {
+                e.preventDefault(); // หยุดการส่งฟอร์มชั่วคราว
+                
+                Swal.fire({
+                    title: 'ต้องการอัพเดตทั้งกลุ่ม?',
+                    html: `<p>คุณกำลังเปลี่ยนสถานะการชำระเงินจาก 
+                          <b>${getPaymentStatusText(originalStatus)}</b> เป็น 
+                          <b>${getPaymentStatusText(newStatus)}</b></p>
+                          <p>คุณต้องการอัพเดตสมาชิกทั้งหมดในกลุ่มนี้ด้วยหรือไม่?</p>
+                          <p class="text-primary"><i class="fas fa-users me-2"></i>มีสมาชิกทั้งหมด ${groupMemberCount} คนในกลุ่มนี้</p>`,
+                    icon: 'question',
+                    showDenyButton: true,
+                    confirmButtonText: 'ใช่, อัพเดตทั้งกลุ่ม',
+                    denyButtonText: 'อัพเดตเฉพาะรายการนี้',
+                    confirmButtonColor: '#4caf50',
+                    denyButtonColor: '#ff9800',
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        // อัพเดตทั้งกลุ่ม
+                        $("#updateGroupField").val("1");
+                    } else {
+                        // อัพเดตเฉพาะรายการนี้
+                        $("#updateGroupField").val("0");
+                    }
+                    // ส่งฟอร์ม
+                    $("#registrationForm").off('submit').submit();
+                });
+            }
+        });
+        
         // แสดง/ซ่อน field คำนำหน้าอื่นๆ
         $('#title').change(function() {
             if ($(this).val() === 'อื่นๆ') {
@@ -1421,6 +1577,21 @@ function deleteFile(fileId, fileName) {
             thumbnail: true
         });
     });
+
+    // ฟังก์ชันแปลงรหัสสถานะเป็นข้อความ
+    function getPaymentStatusText(status) {
+        switch(status) {
+            case 'paid_approved':
+                return 'ชำระแล้ว (อนุมัติแล้ว)';
+            case 'paid':
+                return 'ชำระแล้ว (รอตรวจสอบจากเจ้าหน้าที่)';
+            case 'paid_onsite':
+                return 'ชำระเงินที่หน้างาน';
+            case 'not_paid':
+            default:
+                return 'ยังไม่ชำระ';
+        }
+    }
 
     // เริ่มต้นโหลดข้อมูลที่อยู่
     function initializeAddressData() {
