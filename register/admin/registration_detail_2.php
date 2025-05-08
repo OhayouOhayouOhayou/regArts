@@ -1187,112 +1187,127 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                                     
                                     <!-- หลักฐานการชำระเงิน -->
                                     <div class="mb-3">
-                                        <label class="form-label">หลักฐานการชำระเงิน</label>
+                                        <div class="d-flex justify-content-between align-items-center mb-3">
+                                            <label class="form-label mb-0">หลักฐานการชำระเงิน</label>
+                                            <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal">
+                                                <i class="fas fa-upload me-1"></i> อัพโหลดเอกสาร
+                                            </button>
+                                        </div>
                                         <div id="payment-gallery">
                                             <!-- Current Registration's Files -->
                                             <?php if (count($payment_files) > 0): ?>
                                                 <div class="d-flex justify-content-between align-items-center mb-3">
                                                     <h6 class="text-primary mb-0"><i class="fas fa-user me-2"></i>หลักฐานการชำระเงินของคุณ</h6>
-                                                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal">
-                                                        <i class="fas fa-upload me-1"></i> อัพโหลดเอกสารใหม่
-                                                    </button>
                                                 </div>
-                                                <?php foreach($payment_files as $file): ?>
-                                                    <div class="file-preview mb-3 border border-primary">
-                                                        <?php if (strpos($file['file_type'], 'image') !== false): ?>
-                                                            <div class="gallery-item" data-src="../<?php echo $file['file_path']; ?>">
-                                                                <img src="../<?php echo $file['file_path']; ?>" alt="Payment proof" class="img-fluid mb-2">
-                                                            </div>
-                                                        <?php elseif (strpos($file['file_type'], 'pdf') !== false): ?>
-                                                            <div class="file-preview-pdf mb-2">
-                                                                <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-primary">
-                                                                    <i class="fas fa-file-pdf me-2"></i>
-                                                                    เปิดไฟล์ PDF
-                                                                </a>
-                                                            </div>
-                                                        <?php else: ?>
-                                                            <div class="file-preview-pdf mb-2">
-                                                                <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-primary">
-                                                                    <i class="fas fa-file me-2"></i>
-                                                                    เปิดไฟล์
-                                                                </a>
-                                                            </div>
-                                                        <?php endif; ?>
-                                                        
-                                                        <div class="d-flex justify-content-between align-items-center">
-                                                            <small class="text-muted">
-                                                                <?php echo $file['file_name']; ?><br>
-                                                                (<?php echo round($file['file_size']/1024, 2); ?> KB)
-                                                            </small>
-                                                            <div>
-                                                                <a href="../<?php echo $file['file_path']; ?>" class="btn btn-sm btn-outline-secondary" download>
-                                                                    <i class="fas fa-download"></i>
-                                                                </a>
-                                                                <button type="button" class="btn btn-sm btn-outline-warning ms-1" 
-                                                                        onclick="updateFile(<?php echo $file['id']; ?>, '<?php echo $file['file_name']; ?>')">
-                                                                    <i class="fas fa-edit"></i>
-                                                                </button>
-                                                                <button type="button" class="btn btn-sm btn-outline-danger ms-1" 
-                                                                        onclick="deleteFile(<?php echo $file['id']; ?>, '<?php echo $file['file_name']; ?>')">
-                                                                    <i class="fas fa-trash"></i>
-                                                                </button>
+                                                <div class="row">
+                                                    <?php foreach($payment_files as $file): ?>
+                                                        <div class="col-md-6">
+                                                            <div class="file-preview mb-3 border border-primary">
+                                                                <?php if (strpos($file['file_type'], 'image') !== false): ?>
+                                                                    <div class="gallery-item" data-src="../<?php echo $file['file_path']; ?>">
+                                                                        <img src="../<?php echo $file['file_path']; ?>" alt="Payment proof" class="img-fluid mb-2">
+                                                                    </div>
+                                                                <?php elseif (strpos($file['file_type'], 'pdf') !== false): ?>
+                                                                    <div class="file-preview-pdf mb-2">
+                                                                        <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-primary">
+                                                                            <i class="fas fa-file-pdf me-2"></i>
+                                                                            เปิดไฟล์ PDF
+                                                                        </a>
+                                                                    </div>
+                                                                <?php else: ?>
+                                                                    <div class="file-preview-pdf mb-2">
+                                                                        <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-primary">
+                                                                            <i class="fas fa-file me-2"></i>
+                                                                            เปิดไฟล์
+                                                                        </a>
+                                                                    </div>
+                                                                <?php endif; ?>
+                                                                
+                                                                <div class="d-flex justify-content-between align-items-center">
+                                                                    <small class="text-muted">
+                                                                        <?php echo $file['file_name']; ?><br>
+                                                                        (<?php echo round($file['file_size']/1024, 2); ?> KB)
+                                                                        <?php if(isset($file['uploaded_at'])): ?>
+                                                                        <br><span class="text-secondary">อัพโหลดเมื่อ: <?php echo date('d/m/Y H:i', strtotime($file['uploaded_at'])); ?></span>
+                                                                        <?php endif; ?>
+                                                                    </small>
+                                                                    <div>
+                                                                        <a href="../<?php echo $file['file_path']; ?>" class="btn btn-sm btn-outline-secondary" download>
+                                                                            <i class="fas fa-download"></i>
+                                                                        </a>
+                                                                        <button type="button" class="btn btn-sm btn-outline-warning ms-1" 
+                                                                                onclick="updateFile(<?php echo $file['id']; ?>, '<?php echo $file['file_name']; ?>')">
+                                                                            <i class="fas fa-edit"></i>
+                                                                        </button>
+                                                                        <button type="button" class="btn btn-sm btn-outline-danger ms-1" 
+                                                                                onclick="deleteFile(<?php echo $file['id']; ?>, '<?php echo $file['file_name']; ?>')">
+                                                                            <i class="fas fa-trash"></i>
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                <?php endforeach; ?>
+                                                    <?php endforeach; ?>
+                                                </div>
                                             <?php else: ?>
-                                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                                    <h6 class="text-primary mb-0"><i class="fas fa-user me-2"></i>หลักฐานการชำระเงินของคุณ</h6>
-                                                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal">
-                                                        <i class="fas fa-upload me-1"></i> อัพโหลดเอกสาร
-                                                    </button>
+                                                <div class="alert alert-info">
+                                                    <i class="fas fa-info-circle me-2"></i>
+                                                    ยังไม่มีหลักฐานการชำระเงิน กรุณาอัพโหลดเอกสาร
                                                 </div>
                                             <?php endif; ?>
                                             
                                             <!-- Group Members' Files -->
                                             <?php if (count($group_payment_files) > 0): ?>
                                                 <h6 class="text-success mt-4 mb-3"><i class="fas fa-users me-2"></i>หลักฐานการชำระเงินของสมาชิกในกลุ่ม</h6>
-                                                <?php foreach($group_payment_files as $file): ?>
-                                                    <div class="file-preview mb-3 border border-success">
-                                                        <div class="bg-light p-2 mb-2 rounded">
-                                                            <small class="text-success">
-                                                                <i class="fas fa-user me-1"></i> 
-                                                                <strong><?php echo $file['member_name']; ?></strong>
-                                                            </small>
+                                                <div class="row">
+                                                    <?php foreach($group_payment_files as $file): ?>
+                                                        <div class="col-md-6">
+                                                            <div class="file-preview mb-3 border border-success">
+                                                                <div class="bg-light p-2 mb-2 rounded">
+                                                                    <small class="text-success">
+                                                                        <i class="fas fa-user me-1"></i> 
+                                                                        <strong><?php echo $file['member_name']; ?></strong>
+                                                                    </small>
+                                                                </div>
+                                                            
+                                                                <?php if (strpos($file['file_type'], 'image') !== false): ?>
+                                                                    <div class="gallery-item" data-src="../<?php echo $file['file_path']; ?>">
+                                                                        <img src="../<?php echo $file['file_path']; ?>" alt="Payment proof" class="img-fluid mb-2">
+                                                                    </div>
+                                                                <?php elseif (strpos($file['file_type'], 'pdf') !== false): ?>
+                                                                    <div class="file-preview-pdf mb-2">
+                                                                        <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-success">
+                                                                            <i class="fas fa-file-pdf me-2"></i>
+                                                                            เปิดไฟล์ PDF
+                                                                        </a>
+                                                                    </div>
+                                                                <?php else: ?>
+                                                                    <div class="file-preview-pdf mb-2">
+                                                                        <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-success">
+                                                                            <i class="fas fa-file me-2"></i>
+                                                                            เปิดไฟล์
+                                                                        </a>
+                                                                    </div>
+                                                                <?php endif; ?>
+                                                                
+                                                                <div class="d-flex justify-content-between align-items-center">
+                                                                    <small class="text-muted">
+                                                                        <?php echo $file['file_name']; ?><br>
+                                                                        (<?php echo round($file['file_size']/1024, 2); ?> KB)
+                                                                        <?php if(isset($file['uploaded_at'])): ?>
+                                                                        <br><span class="text-secondary">อัพโหลดเมื่อ: <?php echo date('d/m/Y H:i', strtotime($file['uploaded_at'])); ?></span>
+                                                                        <?php endif; ?>
+                                                                    </small>
+                                                                    <a href="../<?php echo $file['file_path']; ?>" class="btn btn-sm btn-outline-secondary" download>
+                                                                        <i class="fas fa-download"></i>
+                                                                    </a>
+                                                                </div>
+                                                            </div>
                                                         </div>
-                                                    
-                                                        <?php if (strpos($file['file_type'], 'image') !== false): ?>
-                                                            <div class="gallery-item" data-src="../<?php echo $file['file_path']; ?>">
-                                                                <img src="../<?php echo $file['file_path']; ?>" alt="Payment proof" class="img-fluid mb-2">
-                                                            </div>
-                                                        <?php elseif (strpos($file['file_type'], 'pdf') !== false): ?>
-                                                            <div class="file-preview-pdf mb-2">
-                                                                <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-success">
-                                                                    <i class="fas fa-file-pdf me-2"></i>
-                                                                    เปิดไฟล์ PDF
-                                                                </a>
-                                                            </div>
-                                                        <?php else: ?>
-                                                            <div class="file-preview-pdf mb-2">
-                                                                <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-success">
-                                                                    <i class="fas fa-file me-2"></i>
-                                                                    เปิดไฟล์
-                                                                </a>
-                                                            </div>
-                                                        <?php endif; ?>
-                                                        
-                                                        <div class="d-flex justify-content-between align-items-center">
-                                                            <small class="text-muted">
-                                                                <?php echo $file['file_name']; ?><br>
-                                                                (<?php echo round($file['file_size']/1024, 2); ?> KB)
-                                                            </small>
-                                                            <a href="../<?php echo $file['file_path']; ?>" class="btn btn-sm btn-outline-secondary" download>
-                                                                <i class="fas fa-download"></i>
-                                                            </a>
-                                                        </div>
-                                                    </div>
-                                                <?php endforeach; ?>
+                                                    <?php endforeach; ?>
+                                                </div>
                                             <?php endif; ?>
+   
                                             
                                             <!-- No Files Message -->
                                             <?php if (count($payment_files) == 0 && count($group_payment_files) == 0): ?>
@@ -1329,10 +1344,7 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                                             ส่งอีเมลยืนยันการลงทะเบียน
                                         </button>
                                         
-                                        <button type="button" class="btn btn-outline-danger" onclick="deleteRegistration()">
-                                            <i class="fas fa-trash-alt me-2"></i>
-                                            ลบข้อมูลการลงทะเบียน
-                                        </button>
+                                     
                                     </div>
                                 </div>
                             </div>
