@@ -1329,10 +1329,7 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                                             ส่งอีเมลยืนยันการลงทะเบียน
                                         </button>
                                         
-                                        <button type="button" class="btn btn-outline-danger" onclick="deleteRegistration()">
-                                            <i class="fas fa-trash-alt me-2"></i>
-                                            ลบข้อมูลการลงทะเบียน
-                                        </button>
+                                        
                                     </div>
                                 </div>
                             </div>

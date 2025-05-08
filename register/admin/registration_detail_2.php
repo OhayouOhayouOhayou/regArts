@@ -63,10 +63,11 @@ $stmt = $pdo->prepare("
 $stmt->execute([$registration_id]);
 $documents = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Fetch payment files
+// Fetch payment files - เพิ่ม ORDER BY uploaded_at DESC เพื่อให้ไฟล์ล่าสุดขึ้นก่อน
 $stmt = $pdo->prepare("
     SELECT * FROM registration_files
     WHERE registration_id = ?
+    ORDER BY uploaded_at DESC
 ");
 $stmt->execute([$registration_id]);
 $payment_files = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -77,6 +78,7 @@ $registration_group = $registration['registration_group'];
 // Initialize array for group members' files
 $group_payment_files = [];
 $group_members = [];
+$all_group_members = [];
 
 // If the current registration has a registration_group
 if (!empty($registration_group)) {
@@ -109,12 +111,13 @@ if (!empty($registration_group)) {
         // Create placeholders for SQL query
         $placeholders = implode(',', array_fill(0, count($member_ids), '?'));
         
-        // Fetch all payment files for these members in one query
+        // Fetch all payment files for these members in one query - เพิ่ม ORDER BY rf.uploaded_at DESC
         $files_stmt = $pdo->prepare("
-            SELECT rf.*, r.fullname as member_name
+            SELECT rf.*, r.fullname as member_name, rf.uploaded_at
             FROM registration_files rf
             JOIN registrations r ON rf.registration_id = r.id
             WHERE rf.registration_id IN ($placeholders)
+            ORDER BY rf.uploaded_at DESC
         ");
         $files_stmt->execute($member_ids);
         $group_payment_files = $files_stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -301,7 +304,6 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/lightgallery/2.7.1/css/lightgallery.min.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
-        /* คงไว้ตามเดิม */
         :root {
             --primary-color: #1a237e;
             --primary-light: #534bae;
@@ -769,11 +771,12 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
 
                 <?php if (!empty($error_message)): ?>
                 <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                    <i class="fas fa-exclamation-circle me-2"></i>
+                <i class="fas fa-exclamation-circle me-2"></i>
                     <?php echo $error_message; ?>
                     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
                 <?php endif; ?>
+
                 <form method="post" action="" id="registrationForm">
                     <input type="hidden" name="update_registration" value="1">
                     <!-- เพิ่มฟิลด์เก็บข้อมูลว่าต้องการอัพเดตทั้งกลุ่มหรือไม่ -->
@@ -1185,7 +1188,7 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                                         </select>
                                     </div>
                                     
-                                    <!-- หลักฐานการชำระเงิน -->
+                                    <!-- หลักฐานการชำระเงิน - แก้ไขส่วนนี้ให้รองรับไฟล์หลายไฟล์ -->
                                     <div class="mb-3">
                                         <div class="d-flex justify-content-between align-items-center mb-3">
                                             <label class="form-label mb-0">หลักฐานการชำระเงิน</label>
@@ -1210,7 +1213,7 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                                                                 <?php elseif (strpos($file['file_type'], 'pdf') !== false): ?>
                                                                     <div class="file-preview-pdf mb-2">
                                                                         <a href="../<?php echo $file['file_path']; ?>" target="_blank" class="btn btn-outline-primary">
-                                                                            <i class="fas fa-file-pdf me-2"></i>
+                                                                        <i class="fas fa-file-pdf me-2"></i>
                                                                             เปิดไฟล์ PDF
                                                                         </a>
                                                                     </div>
@@ -1307,18 +1310,6 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                                                     <?php endforeach; ?>
                                                 </div>
                                             <?php endif; ?>
-   
-                                            
-                                            <!-- No Files Message -->
-                                            <?php if (count($payment_files) == 0 && count($group_payment_files) == 0): ?>
-                                                <div class="alert alert-warning">
-                                                    <i class="fas fa-exclamation-triangle me-2"></i>
-                                                    ไม่พบหลักฐานการชำระเงินของคุณหรือสมาชิกในกลุ่มของคุณ
-                                                    <button type="button" class="btn btn-sm btn-warning ms-3" data-bs-toggle="modal" data-bs-target="#uploadModal">
-                                                        <i class="fas fa-upload me-1"></i> อัพโหลดเอกสาร
-                                                    </button>
-                                                </div>
-                                            <?php endif; ?>
                                         </div>
                                     </div>
                                 </div>
@@ -1344,7 +1335,10 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                                             ส่งอีเมลยืนยันการลงทะเบียน
                                         </button>
                                         
-                                     
+                                        <button type="button" class="btn btn-outline-danger" onclick="deleteRegistration()">
+                                            <i class="fas fa-trash-alt me-2"></i>
+                                            ลบข้อมูลการลงทะเบียน
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -1379,6 +1373,11 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
                             <i class="fas fa-info-circle me-2"></i>
                             <span id="fileUpdateMessage"></span>
                         </div>
+                        
+                        <div id="uploadNewInfo" class="alert alert-primary">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <span>คุณสามารถอัพโหลดหลักฐานการชำระเงินได้หลายไฟล์ ทุกไฟล์จะถูกแสดงในรายการ</span>
+                        </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
@@ -1391,7 +1390,6 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
             </div>
         </div>
     </div>
-
     <!-- JavaScript libraries -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -1415,6 +1413,7 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
         $('#uploadModalLabel').text('อัพเดทหลักฐานการชำระเงิน');
         $('#fileUpdateMessage').text('กำลังแทนที่ไฟล์: ' + fileName);
         $('#updateFileInfo').show();
+        $('#uploadNewInfo').hide();
         $('#uploadModal').modal('show');
     }
     
@@ -1480,6 +1479,7 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
             $('#submitBtnText').text('อัพโหลด');
             $('#uploadModalLabel').text('อัพโหลดหลักฐานการชำระเงิน');
             $('#updateFileInfo').hide();
+            $('#uploadNewInfo').show();
         });
         
         // เพิ่ม Event Listener สำหรับการกดปุ่มบันทึก
@@ -1750,6 +1750,7 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
         });
     }
 
+    
     // ฟังก์ชันสำหรับส่งอีเมลยืนยันการลงทะเบียน
     function sendConfirmation() {
         let registrationId = <?php echo $registration_id; ?>;
