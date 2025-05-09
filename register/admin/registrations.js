@@ -159,7 +159,9 @@ async function applyFilters() {
                         <td><span class="status-badge ${getPaymentStatusClass(reg)} text-white">${getPaymentStatusText(reg)}</span></td>
                         <td>
                             <button class="btn btn-sm btn-primary me-1" onclick="viewRegistration(${reg.id})"><i class="fas fa-eye"></i></button>
-                           
+                            <button class="btn btn-danger btn-sm" onclick="deleteRegistration(${reg.id})" title="ลบ">
+                            <i class="fas fa-trash"></i>
+                            </button>
                         </td>
                     </tr>
                 `).join('') : 
@@ -340,7 +342,9 @@ async function loadPage(page) {
                         <td><span class="status-badge ${getPaymentStatusClass(reg)} text-white">${getPaymentStatusText(reg)}</span></td>
                         <td>
                             <button class="btn btn-sm btn-primary me-1" onclick="viewRegistration(${reg.id})"><i class="fas fa-eye"></i></button>
-                           
+                            <button class="btn btn-danger btn-sm" onclick="deleteRegistration(${reg.id})" title="ลบ">
+                                <i class="fas fa-trash"></i>
+                            </button>
                         </td>
                     </tr>
                 `).join('') : 
